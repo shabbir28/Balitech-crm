@@ -1,0 +1,69 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-[#F8FAFC] text-slate-800 antialiased selection:bg-brand-500 selection:text-white;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+}
+
+@layer components {
+  /* Premium Buttons */
+  .btn-primary {
+    @apply px-5 py-2.5 bg-gradient-to-r from-brand-600 to-brand-500 text-white font-semibold rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 transition-all duration-300 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2;
+    box-shadow: 0 4px 14px 0 rgba(59,130,246,0.39);
+  }
+  .btn-primary:hover {
+    --tw-gradient-from: #3b82f6;
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+    --tw-gradient-to: #60a5fa;
+    box-shadow: 0 6px 20px rgba(59,130,246,0.3);
+  }
+
+  .btn-secondary {
+    @apply px-5 py-2.5 bg-white text-slate-700 border border-slate-200 font-semibold rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-2;
+  }
+  .btn-secondary:hover {
+    @apply bg-slate-50 border-slate-300 text-slate-900;
+  }
+
+  /* Premium Cards */
+  .card {
+    @apply bg-white rounded-2xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-100 overflow-hidden hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-shadow duration-300;
+  }
+  
+  /* Glassmorphism Panel */
+  .glass-panel {
+    @apply bg-white/80 backdrop-blur-xl border border-white/50 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-3xl;
+  }
+
+  /* Refined Inputs */
+  .input-field {
+    @apply w-full px-4 py-3 bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 outline-none transition-all duration-200 placeholder:text-slate-400;
+  }
+}
+
+/* Elegant Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Chart Tooltip Customization */
+.recharts-tooltip-wrapper {
+  outline: none !important;
+}
