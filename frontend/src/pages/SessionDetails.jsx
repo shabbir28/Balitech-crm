@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../services/api';
 import { Settings, UserCircle, RefreshCcw, FileText, Calendar, Database, Clock, ChevronRight } from 'lucide-react';
@@ -8,19 +8,19 @@ const SessionDetails = () => {
     const [session, setSession] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    const fetchSession = () => {
+    const fetchSession = useCallback(() => {
         api.get(`/sessions/${id}`)
             .then(res => setSession(res.data))
             .catch(err => console.error(err))
             .finally(() => setLoading(false));
-    };
+    }, [id]);
 
     useEffect(() => {
         fetchSession();
         // Optional: Poll for job updates
         const interval = setInterval(fetchSession, 5000);
         return () => clearInterval(interval);
-    }, [id]);
+    }, [fetchSession]);
 
     if (loading) return <div className="p-8 text-center">Loading Session Details...</div>;
     if (!session) return <div className="p-8 text-center text-red-500">Session Not Found</div>;
@@ -92,7 +92,7 @@ const SessionDetails = () => {
                     <h3 className="text-orange-400 font-bold flex items-center mb-4 text-lg">
                         <Clock className="mr-2" /> Durations
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                         <div className="bg-[#363744] p-4 rounded-xl border border-gray-600">
                             <p className="text-orange-400 text-sm font-bold mb-1">Start Time</p>
                             <p className="text-sm text-white">{new Date(session.created_at).toLocaleString()}</p>
@@ -109,6 +109,13 @@ const SessionDetails = () => {
                             <p className="text-orange-400 text-sm font-bold mb-1">Created At</p>
                             <p className="text-sm text-white">{new Date(session.created_at).toLocaleString()}</p>
                         </div>
+                        <div className="bg-[#363744] p-4 rounded-xl border border-gray-600">
+                            <p className="text-orange-400 text-sm font-bold mb-1">Created By</p>
+                            <p className="text-sm text-white flex items-center">
+                                <UserCircle className="w-4 h-4 mr-1 text-gray-400" />
+                                {session.created_by_username || 'Unknown'}
+                            </p>
+                        </div>
                     </div>
                 </div>
 
@@ -120,9 +127,9 @@ const SessionDetails = () => {
                             <Link to={`/sessions/${id}/add-job`} className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-bold transition-colors shadow-lg">
                                 Add Job +
                             </Link>
-                            <button className="bg-orange-500 hover:bg-orange-600 opacity-50 cursor-not-allowed text-white px-4 py-2 rounded-lg font-bold transition-colors">
+                            <Link to={`/sessions/${id}/add-job?bulk=true`} className="bg-[#4E515C] hover:bg-[#5E616E] text-white px-4 py-2 rounded-lg font-bold transition-colors shadow-lg">
                                 Add Bulk Jobs +
-                            </button>
+                            </Link>
                         </div>
                     </div>
 

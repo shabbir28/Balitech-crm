@@ -74,7 +74,7 @@ const DownloadLeads = () => {
 
     return (
         <div className="max-w-2xl mx-auto space-y-6">
-            <h1 className="text-2xl font-bold text-gray-900">Download Leads</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Download Data</h1>
 
             <div className="card p-8">
                 <form onSubmit={handleDownload} className="space-y-6">

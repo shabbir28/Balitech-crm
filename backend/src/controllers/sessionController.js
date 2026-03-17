@@ -8,21 +8,16 @@ const createSession = async (req, res) => {
             return res.status(400).json({ message: 'Vendor ID and Campaign Type are required' });
         }
 
-        const validTypes = ['ACA', 'MEDICARE', 'MED ALERT', 'Final Expense'];
-        if (!validTypes.includes(campaign_type)) {
-            return res.status(400).json({ message: 'Invalid campaign type' });
-        }
-
         const vendorCheck = await db.query('SELECT vendor_id FROM vendors WHERE vendor_id = $1', [vendor_id]);
         if (vendorCheck.rows.length === 0) {
             return res.status(404).json({ message: 'Vendor not found' });
         }
 
         const result = await db.query(`
-            INSERT INTO upload_sessions (vendor_id, campaign_type)
-            VALUES ($1, $2)
+            INSERT INTO upload_sessions (vendor_id, campaign_type, created_by)
+            VALUES ($1, $2, $3)
             RETURNING *
-        `, [vendor_id, campaign_type]);
+        `, [vendor_id, campaign_type, req.user?.id || null]);
 
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -36,9 +31,10 @@ const getSession = async (req, res) => {
         const { id } = req.params;
 
         const sessionResult = await db.query(`
-            SELECT s.*, v.name as vendor_name, v.company as vendor_company
+            SELECT s.*, v.name as vendor_name, v.company as vendor_company, u.username as created_by_username
             FROM upload_sessions s
             JOIN vendors v ON s.vendor_id = v.vendor_id
+            LEFT JOIN users u ON s.created_by = u.id
             WHERE s.id = $1
         `, [id]);
 

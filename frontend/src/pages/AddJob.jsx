@@ -1,47 +1,69 @@
 import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { UploadCloud, CheckCircle, ArrowRight, Settings, UserCircle, Database, ChevronRight, FileX } from 'lucide-react';
 
 const AddJob = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
     
     const [step, setStep] = useState(1);
-    const [file, setFile] = useState(null);
+    const [files, setFiles] = useState([]);
     const [uploading, setUploading] = useState(false);
+    const [progress, setProgress] = useState(0);
     const [error, setError] = useState('');
     const [result, setResult] = useState(null);
 
+    const isBulk = new URLSearchParams(location.search).get('bulk') === 'true';
+
     const handleFileChange = (e) => {
-        const selected = e.target.files[0];
-        if (selected) {
-            setFile(selected);
+        const selected = Array.from(e.target.files);
+        if (selected.length > 0) {
+            setFiles(isBulk ? selected : [selected[0]]);
             setError('');
         }
     };
 
     const handleUpload = async () => {
-        if (!file) {
+        if (files.length === 0) {
             setError('Please select a file to import');
             return;
         }
 
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('session_id', id);
-
         setUploading(true);
         setError('');
         
+        let totalProcessed = 0;
+        let totalInserted = 0;
+        let totalDuplicates = 0;
+
         try {
-            const res = await api.post('/jobs', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+            for (let i = 0; i < files.length; i++) {
+                setProgress(Math.round(((i) / files.length) * 100));
+                
+                const formData = new FormData();
+                formData.append('file', files[i]);
+                formData.append('session_id', id);
+
+                const res = await api.post('/jobs', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+
+                totalProcessed += res.data.total_processed || 0;
+                totalInserted += res.data.inserted || 0;
+                totalDuplicates += res.data.duplicates_skipped || 0;
+            }
+            
+            setProgress(100);
+            setResult({
+                total_processed: totalProcessed,
+                inserted: totalInserted,
+                duplicates_skipped: totalDuplicates
             });
-            setResult(res.data);
             setStep(4); // Skip direct to end for now
         } catch (err) {
-            setError(err.response?.data?.message || 'Server error uploading file');
+            setError(err.response?.data?.message || 'Server error uploading file(s)');
         } finally {
             setUploading(false);
         }
@@ -71,7 +93,7 @@ const AddJob = () => {
                 </div>
             </div>
 
-            <div className="bg-[#EFEFEF] rounded-2xl min-h-[600px] shadow-xl relative overflow-hidden flex flex-col items-center pt-10">
+            <div className="bg-[#EFEFEF] rounded-2xl min-h-[400px] shadow-xl relative overflow-hidden flex flex-col items-center pt-10">
                 {/* Stepper */}
                 <div className="w-full max-w-4xl px-8 mb-12 relative z-10">
                     <div className="flex justify-between items-center relative">
@@ -113,6 +135,7 @@ const AddJob = () => {
                                     <input 
                                         type="file" 
                                         accept=".csv, .xls, .xlsx" 
+                                        multiple={isBulk}
                                         onChange={handleFileChange}
                                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                     />
@@ -125,13 +148,16 @@ const AddJob = () => {
                                     <p className="text-gray-400 text-sm mt-2">Maximum file size: 50MB</p>
                                 </div>
 
-                                {file && (
+                                {files.length > 0 && (
                                     <div className="mt-8">
                                         <h3 className="text-lg font-bold text-white mb-2">File Details:</h3>
-                                        <div className="space-y-1">
-                                            <p><span className="text-gray-400">Name:</span> {file.name}</p>
-                                            <p><span className="text-gray-400">Size:</span> {formatBytes(file.size)}</p>
-                                            <p><span className="text-gray-400">Type:</span> {file.type || 'text/csv'}</p>
+                                        <div className="space-y-1 bg-[#363744] p-4 rounded-lg max-h-48 overflow-y-auto">
+                                            {files.map((f, i) => (
+                                                <div key={i} className="flex justify-between border-b border-gray-600 last:border-0 py-1">
+                                                    <span className="text-gray-300 truncate text-sm max-w-[200px]">{f.name}</span>
+                                                    <span className="text-gray-400 text-sm whitespace-nowrap">{formatBytes(f.size)}</span>
+                                                </div>
+                                            ))}
                                         </div>
                                         
                                         <div className="bg-orange-900/40 border border-orange-500/50 p-4 rounded-lg mt-4 flex items-start">
@@ -142,13 +168,24 @@ const AddJob = () => {
                                             </div>
                                         </div>
 
-                                        <div className="mt-8 flex justify-end">
+                                        <div className="mt-8 flex flex-col items-end">
+                                            {uploading && isBulk && (
+                                                <div className="w-full mb-4">
+                                                    <div className="flex justify-between text-xs text-orange-400 mb-1">
+                                                        <span>Uploading {files.length} files...</span>
+                                                        <span>{progress}%</span>
+                                                    </div>
+                                                    <div className="w-full bg-gray-700 rounded-full h-2">
+                                                        <div className="bg-orange-500 h-2 rounded-full transition-all duration-300" style={{ width: `${progress}%` }}></div>
+                                                    </div>
+                                                </div>
+                                            )}
                                             <button 
                                                 onClick={handleUpload}
                                                 disabled={uploading}
                                                 className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-lg font-bold transition-colors shadow-lg flex items-center text-lg"
                                             >
-                                                {uploading ? 'Processing File...' : 'Start Import'} <ArrowRight className="ml-2 w-5 h-5" />
+                                                {uploading ? 'Processing File...' : isBulk ? 'Start Bulk Import' : 'Start Import'} <ArrowRight className="ml-2 w-5 h-5" />
                                             </button>
                                         </div>
                                     </div>

@@ -12,35 +12,43 @@ const createJob = async (req, res) => {
         if (!session_id) {
             return res.status(400).json({ message: 'Session ID is required' });
         }
-
+        console.log('--- CREATE JOB START ---');
+        console.log('Session ID:', session_id);
+        
         // Fetch session to get vendor_id
         const sessionCheck = await db.query('SELECT * FROM upload_sessions WHERE id = $1', [session_id]);
         if (sessionCheck.rows.length === 0) {
+            console.log('Session not found');
             return res.status(404).json({ message: 'Session not found' });
         }
         const session = sessionCheck.rows[0];
+        console.log('Session Vendor ID:', session.vendor_id);
 
         // Create initial job record
+        console.log('Inserting into upload_jobs...');
         const jobResult = await db.query(`
             INSERT INTO upload_jobs (session_id, file_name, file_size, import_type, start_time, status)
             VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, 'Processing')
             RETURNING *
         `, [session_id, req.file.originalname, req.file.size, req.file.mimetype === 'text/csv' ? 'CSV' : 'Excel']);
         const job = jobResult.rows[0];
+        console.log('Job created with ID:', job.id);
 
         // Process file
-        // The processFileBuffer automatically removes fully empty rows. 
-        // We will pass the buffer to it.
+        console.log('Starting file processing...', req.file.mimetype);
         const records = await processFileBuffer(req.file.buffer, req.file.mimetype, req.file.originalname);
+        console.log('File processing complete, records:', records.length);
         
-        // Remove empty rows specifically (though fileProcessor does this, we double check as requested)
+        // Remove empty rows specifically
         const validRecords = records.filter(r => r.name || r.phone || r.email);
 
         if (validRecords.length === 0) {
+            console.log('No valid records found in file');
             await db.query(`UPDATE upload_jobs SET status = 'Failed', error_message = 'No valid records found', end_time = CURRENT_TIMESTAMP WHERE id = $1`, [job.id]);
             return res.status(400).json({ message: 'No valid records found in file (all empty or invalid format)' });
         }
 
+        console.log('Starting DB transaction for', validRecords.length, 'records');
         const client = await db.getClient();
         let insertedCount = 0;
         let duplicateCount = 0;
@@ -103,6 +111,7 @@ const createJob = async (req, res) => {
             });
 
         } catch (err) {
+            console.error('Inner Job Processing Error:', err);
             await client.query('ROLLBACK');
             await db.query(`UPDATE upload_jobs SET status = 'Failed', error_message = $1, end_time = CURRENT_TIMESTAMP WHERE id = $2`, [err.message, job.id]);
             throw err;
@@ -111,8 +120,12 @@ const createJob = async (req, res) => {
         }
 
     } catch (err) {
-        console.error('Job Create Error:', err);
-        res.status(500).json({ message: 'Server error during job processing' });
+        console.error('Job Create Error (Full Stack):', err);
+        res.status(500).json({ 
+            message: 'Server error during job processing', 
+            error: err.message,
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
     }
 };
 

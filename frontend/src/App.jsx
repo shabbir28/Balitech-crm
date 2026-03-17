@@ -12,6 +12,10 @@ import LeadsTable from './pages/LeadsTable';
 import DownloadLeads from './pages/DownloadLeads';
 import Logs from './pages/Logs';
 import Dashboard from './pages/Dashboard';
+import Users from './pages/Users';
+import AddUser from './pages/AddUser';
+import Campaigns from './pages/Campaigns';
+import AddCampaign from './pages/AddCampaign';
 
 const ProtectedRoute = ({ children, roles }) => {
     const { user, loading } = useContext(AuthContext);
@@ -20,14 +24,18 @@ const ProtectedRoute = ({ children, roles }) => {
     if (loading) return <div className="flex h-screen items-center justify-center">Loading...</div>;
     if (!user) return <Navigate to="/login" replace />;
     
-    // Perform case-insensitive check and prevent infinite loops
     const userRole = user.role?.toLowerCase();
     const normalizedRoles = roles?.map(r => r.toLowerCase());
 
     if (roles && !normalizedRoles.includes(userRole)) {
-        const fallbackPath = userRole === 'admin' ? '/' : '/download';
+        // Role-specific fallback to prevent infinite loops
+        const fallbacks = {
+            super_admin: '/',
+            admin: '/',
+            data_entry: '/vendors',
+        };
+        const fallbackPath = fallbacks[userRole] || '/login';
         if (location.pathname === fallbackPath) {
-            // Already at fallback but still unauthorized (e.g., unknown role)
             return <Navigate to="/login" replace />;
         }
         return <Navigate to={fallbackPath} replace />;
@@ -41,19 +49,32 @@ const AppRoutes = () => {
         <Routes>
             <Route path="/login" element={<Login />} />
             
-            {/* Admin only routes */}
-            <Route path="/" element={<ProtectedRoute roles={['admin']}><Dashboard /></ProtectedRoute>} />
-            <Route path="/vendors" element={<ProtectedRoute roles={['admin']}><Vendors /></ProtectedRoute>} />
-            <Route path="/upload" element={<ProtectedRoute roles={['admin']}><UploadLeads /></ProtectedRoute>} />
-            <Route path="/sessions/:id" element={<ProtectedRoute roles={['admin']}><SessionDetails /></ProtectedRoute>} />
-            <Route path="/sessions/:id/add-job" element={<ProtectedRoute roles={['admin']}><AddJob /></ProtectedRoute>} />
-            <Route path="/leads" element={<ProtectedRoute roles={['admin']}><LeadsTable /></ProtectedRoute>} />
-            <Route path="/logs" element={<ProtectedRoute roles={['admin']}><Logs /></ProtectedRoute>} />
-            
-            {/* Download leads available to Agent and Admin */}
-            <Route path="/download" element={<ProtectedRoute roles={['admin', 'agent']}><DownloadLeads /></ProtectedRoute>} />
-            
-            
+            {/* Super Admin + Admin routes */}
+            <Route path="/" element={<ProtectedRoute roles={['super_admin', 'admin']}><Dashboard /></ProtectedRoute>} />
+            <Route path="/leads" element={<ProtectedRoute roles={['super_admin', 'admin']}><LeadsTable /></ProtectedRoute>} />
+            <Route path="/logs" element={<ProtectedRoute roles={['super_admin', 'admin']}><Logs /></ProtectedRoute>} />
+            <Route path="/sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin']}><SessionDetails /></ProtectedRoute>} />
+            <Route path="/sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin']}><AddJob /></ProtectedRoute>} />
+
+            {/* Vendors - super_admin, admin, data_entry */}
+            <Route path="/vendors" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><Vendors /></ProtectedRoute>} />
+
+            {/* Upload - super_admin, admin, data_entry */}
+            <Route path="/upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><UploadLeads /></ProtectedRoute>} />
+
+            {/* Download - super_admin, admin */}
+            <Route path="/download" element={<ProtectedRoute roles={['super_admin', 'admin']}><DownloadLeads /></ProtectedRoute>} />
+
+            {/* Users management - super_admin only */}
+            <Route path="/users" element={<ProtectedRoute roles={['super_admin']}><Users /></ProtectedRoute>} />
+            <Route path="/users/add" element={<ProtectedRoute roles={['super_admin']}><AddUser /></ProtectedRoute>} />
+            <Route path="/users/edit/:id" element={<ProtectedRoute roles={['super_admin']}><AddUser editMode /></ProtectedRoute>} />
+
+            {/* Campaigns - super_admin, admin */}
+            <Route path="/campaigns" element={<ProtectedRoute roles={['super_admin', 'admin']}><Campaigns /></ProtectedRoute>} />
+            <Route path="/campaigns/add" element={<ProtectedRoute roles={['super_admin', 'admin']}><AddCampaign /></ProtectedRoute>} />
+            <Route path="/campaigns/edit/:id" element={<ProtectedRoute roles={['super_admin', 'admin']}><AddCampaign editMode /></ProtectedRoute>} />
+
             {/* Catch all */}
             <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -71,3 +92,4 @@ const App = () => {
 };
 
 export default App;
+

@@ -4,7 +4,7 @@ const { createSession, getSession } = require('../controllers/sessionController'
 const auth = require('../middleware/auth');
 const authorizeRole = require('../middleware/role');
 
-router.post('/', auth, authorizeRole(['admin']), createSession);
-router.get('/:id', auth, authorizeRole(['admin']), getSession);
+router.post('/', auth, authorizeRole(['super_admin', 'admin']), createSession);
+router.get('/:id', auth, authorizeRole(['super_admin', 'admin']), getSession);
 
 module.exports = router;

@@ -5,7 +5,7 @@ const db = require('../config/db');
 const login = async (req, res) => {
     const { username, password } = req.body;
     try {
-        const { rows } = await db.query('SELECT * FROM users WHERE username = $1', [username]);
+        const { rows } = await db.query('SELECT * FROM users WHERE (username = $1 OR email = $1) AND status != $2', [username, 'inactive']);
         if (rows.length === 0) {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
@@ -28,7 +28,13 @@ const login = async (req, res) => {
             user: {
                 id: user.id,
                 username: user.username,
-                role: user.role
+                first_name: user.first_name,
+                last_name: user.last_name,
+                email: user.email,
+                phone: user.phone,
+                profile_picture: user.profile_picture,
+                role: user.role,
+                status: user.status
             }
         });
     } catch (err) {

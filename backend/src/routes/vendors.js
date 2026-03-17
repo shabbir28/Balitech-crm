@@ -7,12 +7,14 @@ const authorizeRole = require('../middleware/role');
 // All vendor routes require authentication
 router.use(auth);
 
-// Both Admin and Agent need to get vendors to download leads
-router.get('/', authorizeRole(['admin', 'agent']), getVendors);
+// super_admin, admin, data_entry can view vendors (data_entry needs it for vendor add)
+router.get('/', authorizeRole(['super_admin', 'admin', 'data_entry']), getVendors);
 
-// Only admins can create, update, delete vendors
-router.post('/', authorizeRole(['admin']), createVendor);
-router.put('/:id', authorizeRole(['admin']), updateVendor);
-router.delete('/:id', authorizeRole(['admin']), deleteVendor);
+// super_admin, admin, and data_entry can create vendors
+router.post('/', authorizeRole(['super_admin', 'admin', 'data_entry']), createVendor);
+
+// Only super_admin and admin can update/delete vendors
+router.put('/:id', authorizeRole(['super_admin', 'admin']), updateVendor);
+router.delete('/:id', authorizeRole(['super_admin', 'admin']), deleteVendor);
 
 module.exports = router;

@@ -12,10 +12,14 @@ const UploadLeads = () => {
     const [error, setError] = useState('');
     const navigate = useNavigate();
 
-    const CAMPAIGN_TYPES = ['ACA', 'MEDICARE', 'MED ALERT', 'FINAL EXPENSE'];
+    const [campaigns, setCampaigns] = useState([]);
 
     useEffect(() => {
         api.get('/vendors').then(res => setVendors(res.data)).catch(console.error);
+        api.get('/campaigns').then(res => {
+            // Only show active campaigns for uploading leads
+            setCampaigns(res.data.filter(c => c.status === 'Active'));
+        }).catch(console.error);
     }, []);
 
     const handleNextStep = () => {
@@ -37,9 +41,12 @@ const UploadLeads = () => {
         setError('');
 
         try {
+            const selectedCampaignObj = campaigns.find(c => c.campaign_id === campaignType);
+            const campaignName = selectedCampaignObj ? selectedCampaignObj.name : campaignType;
+
             const res = await api.post('/sessions', {
                 vendor_id: selectedVendor,
-                campaign_type: campaignType === 'FINAL EXPENSE' ? 'Final Expense' : campaignType
+                campaign_type: campaignName
             });
             navigate(`/sessions/${res.data.id}`);
         } catch (err) {
@@ -53,7 +60,7 @@ const UploadLeads = () => {
         <div className="min-h-screen bg-[#60636f] text-gray-200 font-sans">
             
             {/* Top Light Section */}
-            <div className="bg-[#f0f1f3] pt-12 pb-8 flex justify-center">
+            <div className="bg-[#f2f4f7] pt-8 pb-8 flex justify-center border-b border-gray-300">
                 {/* Stepper */}
                 <div className="w-full max-w-3xl relative mt-4">
                     <div className="flex justify-between items-center relative z-10 px-12">
@@ -84,17 +91,17 @@ const UploadLeads = () => {
             </div>
 
             {/* Content Section */}
-            <div className="flex flex-col items-center pt-24 pb-24 px-6 bg-[#60636f]">
-                <div className="w-full max-w-2xl">
+            <div className="flex flex-col items-center pt-16 pb-20 px-4 bg-[#60636f]">
+                <div className="w-full max-w-lg">
                     
                     {step === 1 && (
-                        <div className="animate-fade-in flex flex-col items-center">
-                            <h2 className="text-3xl font-bold text-white mb-2 tracking-wide">Select Vendor Source</h2>
+                        <div className="animate-fade-in flex flex-col items-center text-center">
+                            <h2 className="text-2xl font-bold text-white mb-2 tracking-wide">Select Vendor Source</h2>
                             <p className="text-gray-300 mb-10 text-sm">Choose the vendor this data was acquired from to begin the upload session.</p>
                             
-                            <div className="w-full relative group mb-8">
+                            <div className="w-full relative group mb-6">
                                 <select 
-                                    className="w-full bg-[#4E515C] border border-[#5E616E] text-white rounded-xl py-6 px-6 appearance-none focus:outline-none focus:border-orange-500 transition-colors text-lg font-bold shadow-md cursor-pointer hover:bg-[#555864]"
+                                    className="w-full bg-[#4E515C] border border-[#5E616E] text-white rounded-lg py-4 px-5 appearance-none focus:outline-none focus:border-orange-500 transition-colors font-medium shadow-sm cursor-pointer hover:bg-[#555864]"
                                     value={selectedVendor}
                                     onChange={(e) => {
                                         setSelectedVendor(e.target.value);
@@ -131,29 +138,33 @@ const UploadLeads = () => {
                     )}
 
                     {step === 2 && (
-                        <div className="animate-fade-in flex flex-col items-center">
-                            <h2 className="text-3xl font-bold text-white mb-2 tracking-wide">Select Campaign Type</h2>
-                            <p className="text-gray-300 mb-12 text-sm">Categorize this upload session to ensure proper data routing.</p>
+                        <div className="animate-fade-in flex flex-col items-center text-center">
+                            <h2 className="text-2xl font-bold text-white mb-2 tracking-wide">Select Campaign Type</h2>
+                            <p className="text-gray-300 mb-8 text-sm">Categorize this upload session to ensure proper data routing.</p>
                             
                             {/* Exact identical grid layout from the picture */}
                             <div className="grid grid-cols-2 gap-4 w-full mb-16">
-                                {CAMPAIGN_TYPES.map(type => (
+                                {campaigns.length > 0 ? campaigns.map(campaign => (
                                     <button
-                                        key={type}
+                                        key={campaign.campaign_id}
                                         type="button"
                                         onClick={() => {
-                                            setCampaignType(type);
+                                            setCampaignType(campaign.campaign_id);
                                             setError('');
                                         }}
-                                        className={`py-8 px-4 rounded-xl text-center font-bold text-lg tracking-wide transition-all shadow-md ${
-                                            campaignType === type 
+                                        className={`py-5 px-4 rounded-xl text-center font-bold tracking-wide transition-all shadow-md ${
+                                            campaignType === campaign.campaign_id 
                                                 ? 'bg-[#f57c00] text-white ring-2 ring-orange-400 ring-offset-2 ring-offset-[#60636f]' 
                                                 : 'bg-[#4E515C] text-gray-200 hover:bg-[#555864]'
                                         }`}
                                     >
-                                        {type}
+                                        {campaign.name}
                                     </button>
-                                ))}
+                                )) : (
+                                    <div className="col-span-2 text-center text-gray-400 py-8">
+                                        No active campaigns found. Please add a campaign first.
+                                    </div>
+                                )}
                             </div>
 
                             {error && (
@@ -165,14 +176,14 @@ const UploadLeads = () => {
                             <div className="w-full flex justify-between items-center mt-4">
                                 <button 
                                     onClick={() => setStep(1)}
-                                    className="bg-[#3A3C45] hover:bg-[#434550] text-gray-200 px-8 py-3 rounded-lg font-bold transition-colors shadow-lg flex items-center"
+                                    className="bg-[#3A3C45] hover:bg-[#434550] text-gray-200 px-6 py-2.5 rounded-lg font-bold transition-colors shadow-sm flex items-center"
                                 >
                                     <ArrowLeft className="mr-2 w-5 h-5" /> Back
                                 </button>
                                 <button 
                                     onClick={handleCreateSession}
                                     disabled={creating}
-                                    className={`${creating ? 'bg-orange-400 cursor-not-allowed' : 'bg-[#f57c00] hover:bg-orange-600'} text-white px-8 py-3 rounded-lg font-bold transition-colors shadow-lg flex items-center`}
+                                    className={`${creating ? 'bg-orange-400 cursor-not-allowed' : 'bg-[#f57c00] hover:bg-orange-600'} text-white px-6 py-2.5 rounded-lg font-bold transition-colors shadow-sm flex items-center`}
                                 >
                                     {creating ? 'Creating...' : 'Create Session'} <ArrowRight className="ml-2 w-5 h-5" />
                                 </button>

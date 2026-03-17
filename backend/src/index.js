@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 require('dotenv').config();
 
 const authRoutes = require('./routes/auth');
@@ -9,11 +10,14 @@ const dashboardRoutes = require('./routes/dashboard');
 const downloadRoutes = require('./routes/download');
 const sessionRoutes = require('./routes/sessions');
 const jobRoutes = require('./routes/jobs');
+const userRoutes = require('./routes/users');
+const campaignRoutes = require('./routes/campaigns');
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/vendors', vendorRoutes);
@@ -22,6 +26,8 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/download', downloadRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/jobs', jobRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/campaigns', campaignRoutes);
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });

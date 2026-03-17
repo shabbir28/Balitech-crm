@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const { processFileBuffer } = require('../utils/fileProcessor');
 const { parsePhone } = require('../utils/phoneParser');
+const { getAreaCodesForStateSearch } = require('../utils/areaCodes');
 
 // POST /api/leads/upload
 const uploadLeads = async (req, res) => {
@@ -34,9 +35,6 @@ const uploadLeads = async (req, res) => {
         try {
             await client.query('BEGIN');
 
-            // Bulk insert strategy. For millions of rows, we'd use pg-copy-streams.
-            // For standard chunked uploads, batching parameterization works well.
-            // BATCH_SIZE = 1000 to avoid query parameter limit (65535)
             const BATCH_SIZE = 1000;
             
             for (let i = 0; i < records.length; i += BATCH_SIZE) {
@@ -49,30 +47,30 @@ const uploadLeads = async (req, res) => {
                 batch.forEach(record => {
                     const { phone, countryCode, areaCode } = parsePhone(record.phone);
                     
-                    if (!phone) return; // Skip invalid phones
+                    if (!phone) return;
 
-                    valueStrings.push(`($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3}, $${paramIndex+4}, $${paramIndex+5})`);
+                    valueStrings.push(`($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3}, $${paramIndex+4}, $${paramIndex+5}, $${paramIndex+6})`);
                     values.push(
                         record.name || null,
                         phone,
                         record.email || null,
                         countryCode,
                         areaCode,
-                        vendor_id
+                        vendor_id,
+                        record.disposition || null
                     );
-                    paramIndex += 6;
+                    paramIndex += 7;
                 });
 
                 if (values.length > 0) {
                     const query = `
-                        INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id)
+                        INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition)
                         VALUES ${valueStrings.join(',')}
                         ON CONFLICT (phone) DO NOTHING
                         RETURNING id
                     `;
                     const result = await client.query(query, values);
                     insertedCount += result.rowCount;
-                    // Duplicates = total attempted minus actually inserted
                     duplicateCount += (batch.length - result.rowCount);
                 }
             }
@@ -102,7 +100,7 @@ const uploadLeads = async (req, res) => {
 // GET /api/leads
 const getLeads = async (req, res) => {
     try {
-        const { page = 1, limit = 50, vendor_id, status } = req.query;
+        const { page = 1, limit = 50, vendor_id, status, search, disposition } = req.query;
         const offset = (page - 1) * limit;
 
         let query = 'SELECT * FROM leads WHERE 1=1';
@@ -115,6 +113,35 @@ const getLeads = async (req, res) => {
         if (status) {
             params.push(status);
             query += ` AND status = $${params.length}`;
+        }
+        if (disposition) {
+            params.push(`%${disposition}%`);
+            query += ` AND disposition ILIKE $${params.length}`;
+        }
+
+        if (search) {
+            const searchTerm = `%${search}%`;
+            const possibleAreaCodes = getAreaCodesForStateSearch(search);
+            
+            // Build the dynamic area code clause if matches were found
+            let areaCodeClause = '';
+            if (possibleAreaCodes.length > 0) {
+                const placeholders = possibleAreaCodes.map((_, i) => `$${params.length + 2 + i}`).join(',');
+                areaCodeClause = ` OR area_code IN (${placeholders})`;
+            }
+
+            params.push(searchTerm); // For name, phone, email
+
+            query += ` AND (
+                name ILIKE $${params.length} 
+                OR phone ILIKE $${params.length} 
+                OR email ILIKE $${params.length}
+                ${areaCodeClause}
+            )`;
+
+            if (possibleAreaCodes.length > 0) {
+                params.push(...possibleAreaCodes);
+            }
         }
 
         const countQuery = query.replace('SELECT *', 'SELECT COUNT(*)');

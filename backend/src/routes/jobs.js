@@ -5,6 +5,6 @@ const upload = require('../middleware/upload');
 const auth = require('../middleware/auth');
 const authorizeRole = require('../middleware/role');
 
-router.post('/', auth, authorizeRole(['admin']), upload.single('file'), createJob);
+router.post('/', auth, authorizeRole(['super_admin', 'admin']), upload.single('file'), createJob);
 
 module.exports = router;
