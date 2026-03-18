@@ -6,12 +6,14 @@ import Layout from './components/Layout';
 
 import Vendors from './pages/Vendors';
 import UploadLeads from './pages/UploadLeads';
+import SessionsList from './pages/SessionsList';
 import SessionDetails from './pages/SessionDetails';
 import AddJob from './pages/AddJob';
 import LeadsTable from './pages/LeadsTable';
 import DownloadLeads from './pages/DownloadLeads';
 import Logs from './pages/Logs';
 import Dashboard from './pages/Dashboard';
+import Dnc from './pages/Dnc';
 import Users from './pages/Users';
 import AddUser from './pages/AddUser';
 import Campaigns from './pages/Campaigns';
@@ -53,8 +55,10 @@ const AppRoutes = () => {
             <Route path="/" element={<ProtectedRoute roles={['super_admin', 'admin']}><Dashboard /></ProtectedRoute>} />
             <Route path="/leads" element={<ProtectedRoute roles={['super_admin', 'admin']}><LeadsTable /></ProtectedRoute>} />
             <Route path="/logs" element={<ProtectedRoute roles={['super_admin', 'admin']}><Logs /></ProtectedRoute>} />
+            <Route path="/sessions" element={<ProtectedRoute roles={['super_admin', 'admin']}><SessionsList /></ProtectedRoute>} />
             <Route path="/sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin']}><SessionDetails /></ProtectedRoute>} />
             <Route path="/sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin']}><AddJob /></ProtectedRoute>} />
+            <Route path="/dnc" element={<ProtectedRoute roles={['super_admin', 'admin']}><Dnc /></ProtectedRoute>} />
 
             {/* Vendors - super_admin, admin, data_entry */}
             <Route path="/vendors" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><Vendors /></ProtectedRoute>} />

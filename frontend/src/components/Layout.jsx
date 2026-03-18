@@ -12,7 +12,9 @@ import {
     ScrollText,
     UserCog,
     Store,
-    Megaphone
+    Megaphone,
+    Database as DatabaseIcon,
+    PhoneOff
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
@@ -74,6 +76,12 @@ const Layout = ({ children }) => {
                                 </NavLink>
                                 <NavLink to="/upload" className={getClassName}>
                                     <UploadCloud className="h-5 w-5 flex-shrink-0" /> Upload Data
+                                </NavLink>
+                                <NavLink to="/sessions" className={getClassName}>
+                                    <DatabaseIcon className="h-5 w-5 flex-shrink-0" /> Session List
+                                </NavLink>
+                                <NavLink to="/dnc" className={getClassName}>
+                                    <PhoneOff className="h-5 w-5 flex-shrink-0" /> DNC
                                 </NavLink>
                                 <NavLink to="/leads" className={getClassName}>
                                     <List className="h-5 w-5 flex-shrink-0" /> All Data

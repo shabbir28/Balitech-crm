@@ -12,6 +12,7 @@ const sessionRoutes = require('./routes/sessions');
 const jobRoutes = require('./routes/jobs');
 const userRoutes = require('./routes/users');
 const campaignRoutes = require('./routes/campaigns');
+const dncRoutes = require('./routes/dnc');
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use('/api/sessions', sessionRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/campaigns', campaignRoutes);
+app.use('/api/dnc', dncRoutes);
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });

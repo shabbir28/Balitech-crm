@@ -1,47 +1,27 @@
-/**
- * Extracts phone information.
- * Simple implementation for demonstration. Needs more robust logic for standard parsing.
- * Assuming format like +[countryode] [areacode] [number] or simple numbers
- */
-const parsePhone = (rawPhone) => {
-    if (!rawPhone) return { phone: null, countryCode: null, areaCode: null };
-    
-    // Clean all non-digit and non-plus characters
-    let cleaned = rawPhone.toString().replace(/[^\d+]/g, '');
-    
-    // If no plus, assume US standard for now or just take raw as phone
-    // Real implementation would use Google's libphonenumber or similar
-    let countryCode = null;
-    let areaCode = null;
+const normalizeUsDigits = (raw) => {
+  if (raw === null || raw === undefined) return null;
+  const digits = String(raw).replace(/\D/g, "");
+  if (!digits) return null;
 
-    if (cleaned.startsWith('+')) {
-        // e.g. +1234567890 (US) or +44... (UK)
-        // Simplification: assume +1
-        if (cleaned.startsWith('+1')) {
-            countryCode = '1';
-            if (cleaned.length >= 5) {
-                areaCode = cleaned.substring(2, 5);
-            }
-        } else {
-            // General extraction (take first 2-3 digits as country code, then next 2-3 as area)
-            // Highly inaccurate for all global numbers without proper library
-            const match = cleaned.match(/^\+(\d{1,3})(\d{1,3})/);
-            if (match) {
-                countryCode = match[1];
-                areaCode = match[2];
-            }
-        }
-    } else if (cleaned.length === 10) {
-       // Assume US 10-digit number
-       countryCode = '1';
-       areaCode = cleaned.substring(0, 3);
-    }
+  // Common cases
+  if (digits.length === 10) return digits;
+  if (digits.length === 11 && digits.startsWith("1")) return digits.slice(1);
 
-    return {
-        phone: cleaned,
-        countryCode: countryCode || 'Unknown',
-        areaCode: areaCode || 'Unknown'
-    };
+  // Excel/VICIdial exports sometimes carry extra digits; last 10 is usually the real NANP number
+  if (digits.length > 11) return digits.slice(-10);
+
+  return null;
 };
 
-module.exports = { parsePhone };
+const parsePhone = (rawPhone) => {
+  const us10 = normalizeUsDigits(rawPhone);
+  if (!us10) return { phone: null, countryCode: null, areaCode: null };
+
+  return {
+    phone: us10,
+    countryCode: "1",
+    areaCode: us10.substring(0, 3),
+  };
+};
+
+module.exports = { parsePhone, normalizeUsDigits };

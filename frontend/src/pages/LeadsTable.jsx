@@ -93,11 +93,9 @@ const LeadsTable = () => {
                         }}
                     >
                         <option value="">All Dispositions</option>
-                        <option value="Interested">Interested</option>
-                        <option value="Not Interested">Not Interested</option>
-                        <option value="Callback">Callback</option>
-                        <option value="Do Not Call">Do Not Call</option>
-                        <option value="Wrong Number">Wrong Number</option>
+                        {['PDROP', 'AB', 'ADC', 'A', 'AA', 'RAXFER', 'NP', 'DC', 'DNQ', 'N', 'BN', 'LRERR', 'NI', 'NA', 'LH', 'R1', 'BDNC', 'CALLBK'].map(d => (
+                            <option key={d} value={d}>{d}</option>
+                        ))}
                     </select>
 
                     <button 
@@ -165,7 +163,7 @@ const LeadsTable = () => {
                                 </div>
                                 <div style={{ overflow: 'hidden' }}>
                                     <p style={{ color: '#fff', fontWeight: 600, fontSize: 14, margin: '0 0 2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                        {lead.name || 'Unknown'}
+                                        {lead.name ? lead.name : '\u00A0'}
                                     </p>
                                 </div>
                             </div>
@@ -186,7 +184,14 @@ const LeadsTable = () => {
                                     display: 'inline-flex', padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700,
                                     background: 'rgba(255,255,255,0.05)', color: '#d1d5db', border: '1px solid rgba(255,255,255,0.1)'
                                 }}>
-                                    {lead.area_code || '—'}
+                                    {(() => {
+                                        if (lead.area_code && lead.area_code !== 'Unknown') return lead.area_code;
+                                        // Fallback extraction
+                                        const clean = lead.phone.replace(/\D/g, '');
+                                        if (clean.length === 11 && clean.startsWith('1')) return clean.substring(1, 4);
+                                        if (clean.length === 10) return clean.substring(0, 3);
+                                        return lead.area_code || '—';
+                                    })()}
                                 </span>
                             </div>
 
@@ -196,7 +201,15 @@ const LeadsTable = () => {
                                     display: 'inline-flex', padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 800,
                                     background: 'rgba(99,102,241,0.15)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.3)'
                                 }}>
-                                    {getAreaCodeState(lead.area_code)}
+                                    {(() => {
+                                        let code = lead.area_code;
+                                        if (!code || code === 'Unknown') {
+                                            const clean = lead.phone.replace(/\D/g, '');
+                                            if (clean.length === 11 && clean.startsWith('1')) code = clean.substring(1, 4);
+                                            else if (clean.length === 10) code = clean.substring(0, 3);
+                                        }
+                                        return getAreaCodeState(code);
+                                    })()}
                                 </span>
                             </div>
 

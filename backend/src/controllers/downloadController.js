@@ -40,6 +40,10 @@ const downloadLeads = async (req, res) => {
                 SELECT id 
                 FROM leads 
                 WHERE ${whereClause} 
+                  AND NOT EXISTS (
+                    SELECT 1 FROM dnc_numbers d
+                    WHERE d.phone = leads.phone
+                  )
                 ORDER BY uploaded_at ASC
                 FOR UPDATE SKIP LOCKED
                 LIMIT $${paramIdx}
@@ -48,7 +52,7 @@ const downloadLeads = async (req, res) => {
             SET status = 'downloaded', downloaded_at = CURRENT_TIMESTAMP
             FROM selected_leads sl
             WHERE l.id = sl.id
-            RETURNING l.name, l.phone, l.email, l.country_code, l.area_code
+            RETURNING l.name, l.phone, l.email, l.country_code, l.area_code, l.disposition
         `;
 
         params.push(quantity);
@@ -76,7 +80,7 @@ const downloadLeads = async (req, res) => {
         await client.query('COMMIT');
 
         // Generate CSV
-        const fields = ['name', 'phone', 'email', 'country_code', 'area_code'];
+        const fields = ['name', 'phone', 'email', 'country_code', 'area_code', 'disposition'];
         const json2csvParser = new Parser({ fields });
         const csv = json2csvParser.parse(result.rows);
 

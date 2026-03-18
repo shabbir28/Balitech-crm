@@ -36,7 +36,11 @@ const AddJob = () => {
         
         let totalProcessed = 0;
         let totalInserted = 0;
+        let totalUpdated = 0;
         let totalDuplicates = 0;
+        let totalDncSkipped = 0;
+        let totalDncBla = 0;
+        let totalDncSale = 0;
 
         try {
             for (let i = 0; i < files.length; i++) {
@@ -52,14 +56,22 @@ const AddJob = () => {
 
                 totalProcessed += res.data.total_processed || 0;
                 totalInserted += res.data.inserted || 0;
+                totalUpdated += res.data.updated || 0;
                 totalDuplicates += res.data.duplicates_skipped || 0;
+                totalDncSkipped += res.data.dnc_skipped || 0;
+                totalDncBla += res.data.dnc_skipped_bla || 0;
+                totalDncSale += res.data.dnc_skipped_sale || 0;
             }
             
             setProgress(100);
             setResult({
                 total_processed: totalProcessed,
                 inserted: totalInserted,
-                duplicates_skipped: totalDuplicates
+                updated: totalUpdated,
+                duplicates_skipped: totalDuplicates,
+                dnc_skipped: totalDncSkipped,
+                dnc_skipped_bla: totalDncBla,
+                dnc_skipped_sale: totalDncSale,
             });
             setStep(4); // Skip direct to end for now
         } catch (err) {
@@ -222,9 +234,23 @@ const AddJob = () => {
                                         <span className="text-gray-400">Successfully Inserted:</span>
                                         <span className="font-bold text-green-400">{result.inserted}</span>
                                     </li>
+                                    <li className="flex justify-between border-b border-gray-600 pb-2">
+                                        <span className="text-gray-400">Updated Existing:</span>
+                                        <span className="font-bold text-blue-400">{result.updated || 0}</span>
+                                    </li>
+                                    <li className="flex justify-between border-b border-gray-600 pb-2">
+                                        <span className="text-gray-400">DNC Skipped (Total):</span>
+                                        <span className="font-bold text-purple-400">{result.dnc_skipped || 0}</span>
+                                    </li>
+                                    <li className="flex justify-between pb-2">
+                                        <span className="text-gray-400">DNC BLA / SALE:</span>
+                                        <span className="font-bold text-purple-400">
+                                            {(result.dnc_skipped_bla || 0)} / {(result.dnc_skipped_sale || 0)}
+                                        </span>
+                                    </li>
                                     <li className="flex justify-between pb-2">
                                         <span className="text-gray-400">Duplicates Skipped:</span>
-                                        <span className="font-bold text-yellow-400">{result.duplicates_skipped}</span>
+                                        <span className="font-bold text-yellow-400">{result.duplicates_skipped || 0}</span>
                                     </li>
                                 </ul>
                                 <div className="mt-4 pt-4 border-t border-gray-600 text-sm text-center text-gray-400">

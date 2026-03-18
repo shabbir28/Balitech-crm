@@ -51,7 +51,11 @@ const createJob = async (req, res) => {
         console.log('Starting DB transaction for', validRecords.length, 'records');
         const client = await db.getClient();
         let insertedCount = 0;
+        let updatedCount = 0;
         let duplicateCount = 0;
+        let dncSkipped = 0;
+        let dncSkippedBla = 0;
+        let dncSkippedSale = 0;
 
         try {
             await client.query('BEGIN');
@@ -64,33 +68,77 @@ const createJob = async (req, res) => {
                 const values = [];
                 let paramIndex = 1;
 
-                batch.forEach(record => {
+                // De-dupe within a single INSERT statement, otherwise Postgres throws:
+                // "ON CONFLICT DO UPDATE command cannot affect row a second time"
+                const deduped = new Map(); // phone -> record
+                batch.forEach((record) => {
                     const { phone, countryCode, areaCode } = parsePhone(record.phone);
                     
                     if (!phone) return; // Skip invalid phones
 
-                    valueStrings.push(`($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3}, $${paramIndex+4}, $${paramIndex+5})`);
+                    deduped.set(phone, {
+                      ...record,
+                      phone,
+                      countryCode,
+                      areaCode,
+                    });
+                });
+
+                const uniqueRecords = Array.from(deduped.values());
+                const uniquePhones = uniqueRecords.map((r) => r.phone);
+
+                // Skip DNC numbers
+                if (uniquePhones.length > 0) {
+                  const dncRes = await client.query(
+                    "SELECT phone, dnc_type FROM dnc_numbers WHERE phone = ANY($1::text[])",
+                    [uniquePhones],
+                  );
+                  const dncSet = new Set(dncRes.rows.map((r) => r.phone));
+                  for (const row of dncRes.rows) {
+                    if (row.dnc_type === 'BLA') dncSkippedBla += 1;
+                    if (row.dnc_type === 'SALE') dncSkippedSale += 1;
+                  }
+
+                  const filtered = uniqueRecords.filter((r) => !dncSet.has(r.phone));
+                  dncSkipped += uniqueRecords.length - filtered.length;
+
+                  filtered.forEach(record => {
+
+                    valueStrings.push(`($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3}, $${paramIndex+4}, $${paramIndex+5}, $${paramIndex+6})`);
                     values.push(
                         record.name || null,
-                        phone,
+                        record.phone,
                         record.email || null,
-                        countryCode,
-                        areaCode,
-                        session.vendor_id
+                        record.countryCode,
+                        record.areaCode,
+                        session.vendor_id,
+                        record.disposition || null
                     );
-                    paramIndex += 6;
-                });
+                    paramIndex += 7;
+                  });
+                }
 
                 if (values.length > 0) {
                     const query = `
-                        INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id)
+                        INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition)
                         VALUES ${valueStrings.join(',')}
-                        ON CONFLICT (phone) DO NOTHING
-                        RETURNING id
+                        ON CONFLICT (phone) DO UPDATE
+                        SET disposition = CASE
+                          WHEN EXCLUDED.disposition IS NOT NULL AND EXCLUDED.disposition <> '' THEN EXCLUDED.disposition
+                          ELSE leads.disposition
+                        END
+                        RETURNING (xmax = 0) AS inserted
                     `;
                     const result = await client.query(query, values);
-                    insertedCount += result.rowCount;
-                    duplicateCount += (batch.length - result.rowCount);
+                    const insertedInBatch = result.rows.reduce(
+                      (acc, r) => acc + (r.inserted ? 1 : 0),
+                      0
+                    );
+                    insertedCount += insertedInBatch;
+                    updatedCount += result.rowCount - insertedInBatch;
+
+                    const attempted = valueStrings.length;
+                    duplicateCount += (attempted - result.rowCount);
                 }
             }
 
@@ -107,6 +155,10 @@ const createJob = async (req, res) => {
                 message: 'Job processed successfully',
                 total_processed: validRecords.length,
                 inserted: insertedCount,
+                updated: updatedCount,
+                dnc_skipped: dncSkipped,
+                dnc_skipped_bla: dncSkippedBla,
+                dnc_skipped_sale: dncSkippedSale,
                 duplicates_skipped: duplicateCount
             });
 
