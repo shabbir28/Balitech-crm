@@ -2,10 +2,13 @@ const db = require("../config/db");
 const { normalizeUsDigits } = require("../utils/phoneParser");
 const { processFileBuffer } = require("../utils/fileProcessor");
 
-const VALID_TYPES = new Set(["BLA", "SALE"]);
+const VALID_TYPES = new Set(["DNC", "SALE"]);
 
 const normalizeType = (value) => {
   const t = String(value || "").trim().toUpperCase();
+  // BLA to DNC mapping for backward compatibility if needed, 
+  // but since we migrated DB, we just ensure we use DNC.
+  if (t === 'BLA') return 'DNC';
   return VALID_TYPES.has(t) ? t : null;
 };
 
@@ -69,7 +72,7 @@ const addDnc = async (req, res) => {
     const { phone, type, source, notes } = req.body || {};
     const dncType = normalizeType(type);
     if (!dncType) {
-      return res.status(400).json({ message: "Valid type is required (BLA/SALE)" });
+      return res.status(400).json({ message: "Valid type is required (DNC/SALE)" });
     }
 
     const normalized = normalizeUsDigits(phone);
@@ -104,7 +107,7 @@ const importDnc = async (req, res) => {
 
     const dncType = normalizeType(req.body?.type);
     if (!dncType) {
-      return res.status(400).json({ message: "Valid type is required (BLA/SALE)" });
+      return res.status(400).json({ message: "Valid type is required (DNC/SALE)" });
     }
 
     const records = await processFileBuffer(

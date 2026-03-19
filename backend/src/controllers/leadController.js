@@ -103,7 +103,7 @@ const uploadLeads = async (req, res) => {
         total_processed: records.length,
         inserted: insertedCount,
         updated: updatedCount,
-        duplicates_skipped: duplicateCount,
+        duplicates_skipped: records.length - insertedCount,
       });
     } catch (err) {
       await client.query("ROLLBACK");

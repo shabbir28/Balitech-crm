@@ -54,7 +54,7 @@ const createJob = async (req, res) => {
         let updatedCount = 0;
         let duplicateCount = 0;
         let dncSkipped = 0;
-        let dncSkippedBla = 0;
+        let dncSkippedDnc = 0;
         let dncSkippedSale = 0;
 
         try {
@@ -95,7 +95,7 @@ const createJob = async (req, res) => {
                   );
                   const dncSet = new Set(dncRes.rows.map((r) => r.phone));
                   for (const row of dncRes.rows) {
-                    if (row.dnc_type === 'BLA') dncSkippedBla += 1;
+                    if (row.dnc_type === 'DNC') dncSkippedDnc += 1;
                     if (row.dnc_type === 'SALE') dncSkippedSale += 1;
                   }
 
@@ -157,9 +157,9 @@ const createJob = async (req, res) => {
                 inserted: insertedCount,
                 updated: updatedCount,
                 dnc_skipped: dncSkipped,
-                dnc_skipped_bla: dncSkippedBla,
+                dnc_skipped_dnc: dncSkippedDnc,
                 dnc_skipped_sale: dncSkippedSale,
-                duplicates_skipped: duplicateCount
+                duplicates_skipped: validRecords.length - insertedCount - dncSkipped
             });
 
         } catch (err) {

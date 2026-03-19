@@ -39,7 +39,7 @@ const AddJob = () => {
         let totalUpdated = 0;
         let totalDuplicates = 0;
         let totalDncSkipped = 0;
-        let totalDncBla = 0;
+        let totalDncDnc = 0;
         let totalDncSale = 0;
 
         try {
@@ -59,7 +59,7 @@ const AddJob = () => {
                 totalUpdated += res.data.updated || 0;
                 totalDuplicates += res.data.duplicates_skipped || 0;
                 totalDncSkipped += res.data.dnc_skipped || 0;
-                totalDncBla += res.data.dnc_skipped_bla || 0;
+                totalDncDnc += res.data.dnc_skipped_dnc || 0;
                 totalDncSale += res.data.dnc_skipped_sale || 0;
             }
             
@@ -70,7 +70,7 @@ const AddJob = () => {
                 updated: totalUpdated,
                 duplicates_skipped: totalDuplicates,
                 dnc_skipped: totalDncSkipped,
-                dnc_skipped_bla: totalDncBla,
+                dnc_skipped_dnc: totalDncDnc,
                 dnc_skipped_sale: totalDncSale,
             });
             setStep(4); // Skip direct to end for now
@@ -235,22 +235,18 @@ const AddJob = () => {
                                         <span className="font-bold text-green-400">{result.inserted}</span>
                                     </li>
                                     <li className="flex justify-between border-b border-gray-600 pb-2">
-                                        <span className="text-gray-400">Updated Existing:</span>
-                                        <span className="font-bold text-blue-400">{result.updated || 0}</span>
+                                        <span className="text-gray-400">Duplicates Skipped:</span>
+                                        <span className="font-bold text-yellow-400">{(result.duplicates_skipped || 0)}</span>
                                     </li>
                                     <li className="flex justify-between border-b border-gray-600 pb-2">
                                         <span className="text-gray-400">DNC Skipped (Total):</span>
                                         <span className="font-bold text-purple-400">{result.dnc_skipped || 0}</span>
                                     </li>
                                     <li className="flex justify-between pb-2">
-                                        <span className="text-gray-400">DNC BLA / SALE:</span>
+                                        <span className="text-gray-400">DNC / SALE:</span>
                                         <span className="font-bold text-purple-400">
-                                            {(result.dnc_skipped_bla || 0)} / {(result.dnc_skipped_sale || 0)}
+                                            {(result.dnc_skipped_dnc || 0)} / {(result.dnc_skipped_sale || 0)}
                                         </span>
-                                    </li>
-                                    <li className="flex justify-between pb-2">
-                                        <span className="text-gray-400">Duplicates Skipped:</span>
-                                        <span className="font-bold text-yellow-400">{result.duplicates_skipped || 0}</span>
                                     </li>
                                 </ul>
                                 <div className="mt-4 pt-4 border-t border-gray-600 text-sm text-center text-gray-400">
