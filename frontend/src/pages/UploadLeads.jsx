@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 
@@ -11,6 +11,7 @@ const UploadLeads = () => {
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState('');
     const navigate = useNavigate();
+    const location = useLocation();
 
     const [campaigns, setCampaigns] = useState([]);
 
@@ -21,6 +22,10 @@ const UploadLeads = () => {
             setCampaigns(res.data.filter(c => c.status === 'Active'));
         }).catch(console.error);
     }, []);
+
+    const isCompareMode =
+        location.pathname === '/compare' ||
+        new URLSearchParams(location.search).get('compare') === 'true';
 
     const handleNextStep = () => {
         if (!selectedVendor) {
@@ -48,7 +53,11 @@ const UploadLeads = () => {
                 vendor_id: selectedVendor,
                 campaign_type: campaignName
             });
-            navigate(`/sessions/${res.data.id}`);
+            if (isCompareMode) {
+                navigate(`/sessions/${res.data.id}/add-job?mode=compare`);
+            } else {
+                navigate(`/sessions/${res.data.id}`);
+            }
         } catch (err) {
             setError(err.response?.data?.message || 'Server error creating session');
         } finally {

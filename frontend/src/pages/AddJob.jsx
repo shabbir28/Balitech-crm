@@ -10,10 +10,12 @@ const AddJob = () => {
     
     const [step, setStep] = useState(1);
     const [files, setFiles] = useState([]);
+    const [comparing, setComparing] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [progress, setProgress] = useState(0);
     const [error, setError] = useState('');
     const [result, setResult] = useState(null);
+    const [compareResult, setCompareResult] = useState(null);
 
     const isBulk = new URLSearchParams(location.search).get('bulk') === 'true';
 
@@ -22,25 +24,34 @@ const AddJob = () => {
         if (selected.length > 0) {
             setFiles(isBulk ? selected : [selected[0]]);
             setError('');
+            setCompareResult(null);
+            setResult(null);
+            setStep(1);
         }
     };
 
-    const handleUpload = async () => {
+    const handleCompare = async () => {
         if (files.length === 0) {
-            setError('Please select a file to import');
+            setError('Please select a file to compare');
             return;
         }
 
-        setUploading(true);
+        setComparing(true);
         setError('');
-        
-        let totalProcessed = 0;
-        let totalInserted = 0;
-        let totalUpdated = 0;
-        let totalDuplicates = 0;
-        let totalDncSkipped = 0;
-        let totalDncDnc = 0;
-        let totalDncSale = 0;
+        setCompareResult(null);
+        setResult(null);
+
+        const aggregate = {
+            total_processed: 0,
+            total_unique_phones: 0,
+            duplicates_in_file: 0,
+            fresh_count: 0,
+            existing_count: 0,
+            dnc_skipped: 0,
+            dnc_skipped_dnc: 0,
+            dnc_skipped_sale: 0,
+            fresh_sample: [],
+        };
 
         try {
             for (let i = 0; i < files.length; i++) {
@@ -50,32 +61,90 @@ const AddJob = () => {
                 formData.append('file', files[i]);
                 formData.append('session_id', id);
 
-                const res = await api.post('/jobs', formData, {
+                const res = await api.post('/jobs/compare', formData, {
                     headers: { 'Content-Type': 'multipart/form-data' }
                 });
 
-                totalProcessed += res.data.total_processed || 0;
-                totalInserted += res.data.inserted || 0;
-                totalUpdated += res.data.updated || 0;
-                totalDuplicates += res.data.duplicates_skipped || 0;
-                totalDncSkipped += res.data.dnc_skipped || 0;
-                totalDncDnc += res.data.dnc_skipped_dnc || 0;
-                totalDncSale += res.data.dnc_skipped_sale || 0;
+                aggregate.total_processed += res.data.total_processed || 0;
+                aggregate.total_unique_phones += res.data.total_unique_phones || 0;
+                aggregate.duplicates_in_file += res.data.duplicates_in_file || 0;
+                aggregate.fresh_count += res.data.fresh_count || 0;
+                aggregate.existing_count += res.data.existing_count || 0;
+                aggregate.dnc_skipped += res.data.dnc_skipped || 0;
+                aggregate.dnc_skipped_dnc += res.data.dnc_skipped_dnc || 0;
+                aggregate.dnc_skipped_sale += res.data.dnc_skipped_sale || 0;
+
+                if (Array.isArray(res.data.fresh_sample)) {
+                    aggregate.fresh_sample.push(...res.data.fresh_sample);
+                    aggregate.fresh_sample = aggregate.fresh_sample.slice(0, 25);
+                }
             }
             
             setProgress(100);
-            setResult({
-                total_processed: totalProcessed,
-                inserted: totalInserted,
-                updated: totalUpdated,
-                duplicates_skipped: totalDuplicates,
-                dnc_skipped: totalDncSkipped,
-                dnc_skipped_dnc: totalDncDnc,
-                dnc_skipped_sale: totalDncSale,
-            });
-            setStep(4); // Skip direct to end for now
+            setCompareResult(aggregate);
+            setStep(3); // Preview step
         } catch (err) {
-            setError(err.response?.data?.message || 'Server error uploading file(s)');
+            setError(err.response?.data?.message || 'Server error comparing file(s)');
+        } finally {
+            setComparing(false);
+        }
+    };
+
+    const handleUploadFresh = async () => {
+        if (files.length === 0) {
+            setError('Please select a file to upload fresh numbers');
+            return;
+        }
+
+        setUploading(true);
+        setError('');
+        setResult(null);
+
+        const aggregate = {
+            total_processed: 0,
+            total_unique_phones: 0,
+            duplicates_in_file: 0,
+            fresh_count: 0,
+            existing_count: 0,
+            dnc_skipped: 0,
+            dnc_skipped_dnc: 0,
+            dnc_skipped_sale: 0,
+            inserted: 0,
+            updated: 0,
+            duplicates_skipped: 0,
+        };
+
+        try {
+            for (let i = 0; i < files.length; i++) {
+                setProgress(Math.round(((i) / files.length) * 100));
+
+                const formData = new FormData();
+                formData.append('file', files[i]);
+                formData.append('session_id', id);
+
+                const res = await api.post('/jobs/upload-fresh', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+
+                aggregate.total_processed += res.data.total_processed || 0;
+                aggregate.total_unique_phones += res.data.total_unique_phones || 0;
+                aggregate.duplicates_in_file += res.data.duplicates_in_file || 0;
+                aggregate.fresh_count += res.data.fresh_count || 0;
+                aggregate.existing_count += res.data.existing_count || 0;
+                aggregate.dnc_skipped += res.data.dnc_skipped || 0;
+                aggregate.dnc_skipped_dnc += res.data.dnc_skipped_dnc || 0;
+                aggregate.dnc_skipped_sale += res.data.dnc_skipped_sale || 0;
+
+                aggregate.inserted += res.data.inserted || 0;
+                aggregate.updated += res.data.updated || 0;
+                aggregate.duplicates_skipped += res.data.duplicates_skipped || 0;
+            }
+
+            setProgress(100);
+            setResult(aggregate);
+            setStep(4); // Import step finished
+        } catch (err) {
+            setError(err.response?.data?.message || 'Server error uploading fresh file(s)');
         } finally {
             setUploading(false);
         }
@@ -181,10 +250,10 @@ const AddJob = () => {
                                         </div>
 
                                         <div className="mt-8 flex flex-col items-end">
-                                            {uploading && isBulk && (
+                                            {comparing && isBulk && (
                                                 <div className="w-full mb-4">
                                                     <div className="flex justify-between text-xs text-orange-400 mb-1">
-                                                        <span>Uploading {files.length} files...</span>
+                                                        <span>Comparing {files.length} files...</span>
                                                         <span>{progress}%</span>
                                                     </div>
                                                     <div className="w-full bg-gray-700 rounded-full h-2">
@@ -193,11 +262,11 @@ const AddJob = () => {
                                                 </div>
                                             )}
                                             <button 
-                                                onClick={handleUpload}
-                                                disabled={uploading}
+                                                onClick={handleCompare}
+                                                disabled={comparing}
                                                 className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-lg font-bold transition-colors shadow-lg flex items-center text-lg"
                                             >
-                                                {uploading ? 'Processing File...' : isBulk ? 'Start Bulk Import' : 'Start Import'} <ArrowRight className="ml-2 w-5 h-5" />
+                                                {comparing ? 'Comparing...' : isBulk ? 'Start Bulk Compare' : 'Start Compare'} <ArrowRight className="ml-2 w-5 h-5" />
                                             </button>
                                         </div>
                                     </div>
@@ -220,10 +289,84 @@ const AddJob = () => {
                         </div>
                     )}
                     
+                    {step === 3 && compareResult && (
+                        <div className="w-full max-w-3xl mx-auto text-center pt-6 pb-6">
+                            <div className="mx-auto bg-[#52525E] rounded-2xl p-6 text-left">
+                                <h2 className="text-2xl font-bold text-white mb-2">Preview (Fresh vs Existing)</h2>
+                                <p className="text-gray-300 text-sm mb-6">
+                                    Fresh numbers will be uploaded to CRM. DNC/Sale numbers and already-existing numbers will be skipped.
+                                </p>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                    <div className="bg-[#363744] p-4 rounded-xl border border-gray-600">
+                                        <p className="text-orange-400 text-sm font-bold mb-1">Fresh Numbers</p>
+                                        <p className="text-2xl font-extrabold text-white">{compareResult.fresh_count}</p>
+                                    </div>
+                                    <div className="bg-[#363744] p-4 rounded-xl border border-gray-600">
+                                        <p className="text-orange-400 text-sm font-bold mb-1">Already Present</p>
+                                        <p className="text-2xl font-extrabold text-white">{compareResult.existing_count}</p>
+                                    </div>
+                                    <div className="bg-[#363744] p-4 rounded-xl border border-gray-600">
+                                        <p className="text-purple-400 text-sm font-bold mb-1">DNC Skipped Total</p>
+                                        <p className="text-2xl font-extrabold text-white">{compareResult.dnc_skipped}</p>
+                                    </div>
+                                    <div className="bg-[#363744] p-4 rounded-xl border border-gray-600">
+                                        <p className="text-purple-400 text-sm font-bold mb-1">DNC / SALE</p>
+                                        <p className="text-xl font-extrabold text-white">
+                                            {compareResult.dnc_skipped_dnc} / {compareResult.dnc_skipped_sale}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {Array.isArray(compareResult.fresh_sample) && compareResult.fresh_sample.length > 0 && (
+                                    <div className="mb-6">
+                                        <p className="text-gray-200 font-bold text-sm mb-2">Fresh Sample (up to 25):</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {compareResult.fresh_sample.map((x, idx) => (
+                                                <span key={`${x.phone}-${idx}`} className="bg-gray-900 text-gray-200 text-xs font-mono px-2 py-1 rounded-lg border border-gray-700">
+                                                    {x.phone}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="flex items-center justify-between gap-4 mt-4">
+                                    <button
+                                        onClick={() => setStep(1)}
+                                        disabled={uploading}
+                                        className="bg-[#3A3C45] hover:bg-[#434550] text-gray-200 px-6 py-2.5 rounded-lg font-bold transition-colors shadow-sm flex items-center"
+                                    >
+                                        <ArrowRight className="mr-2 w-5 h-5 rotate-180" /> Back
+                                    </button>
+                                    <button
+                                        onClick={handleUploadFresh}
+                                        disabled={uploading}
+                                        className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-lg font-bold transition-colors shadow-lg flex items-center text-lg"
+                                    >
+                                        {uploading ? 'Uploading Fresh...' : 'Upload Fresh Numbers'} <ArrowRight className="ml-2 w-5 h-5" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {uploading && isBulk && (
+                                <div className="mt-6">
+                                    <div className="flex justify-between text-xs text-orange-400 mb-1">
+                                        <span>Uploading {files.length} files...</span>
+                                        <span>{progress}%</span>
+                                    </div>
+                                    <div className="w-full bg-gray-700 rounded-full h-2">
+                                        <div className="bg-orange-500 h-2 rounded-full transition-all duration-300" style={{ width: `${progress}%` }}></div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {step === 4 && result && (
                         <div className="w-full max-w-md mx-auto text-center py-10">
                             <CheckCircle className="w-24 h-24 text-green-500 mx-auto mb-6" />
-                            <h2 className="text-3xl font-bold text-white mb-4">Import Successful!</h2>
+                            <h2 className="text-3xl font-bold text-white mb-4">Fresh Upload Successful!</h2>
                             <div className="bg-[#52525E] rounded-xl p-6 text-left mb-8">
                                 <ul className="space-y-3">
                                     <li className="flex justify-between border-b border-gray-600 pb-2">
@@ -231,12 +374,16 @@ const AddJob = () => {
                                         <span className="font-bold text-white">{result.total_processed}</span>
                                     </li>
                                     <li className="flex justify-between border-b border-gray-600 pb-2">
-                                        <span className="text-gray-400">Successfully Inserted:</span>
+                                        <span className="text-gray-400">Fresh Numbers Uploaded:</span>
                                         <span className="font-bold text-green-400">{result.inserted}</span>
                                     </li>
                                     <li className="flex justify-between border-b border-gray-600 pb-2">
-                                        <span className="text-gray-400">Duplicates Skipped:</span>
-                                        <span className="font-bold text-yellow-400">{(result.duplicates_skipped || 0)}</span>
+                                        <span className="text-gray-400">Fresh Total (Before Upload):</span>
+                                        <span className="font-bold text-white">{result.fresh_count}</span>
+                                    </li>
+                                    <li className="flex justify-between border-b border-gray-600 pb-2">
+                                        <span className="text-gray-400">Already Present Skipped:</span>
+                                        <span className="font-bold text-yellow-400">{result.existing_count || 0}</span>
                                     </li>
                                     <li className="flex justify-between border-b border-gray-600 pb-2">
                                         <span className="text-gray-400">DNC Skipped (Total):</span>
@@ -250,7 +397,7 @@ const AddJob = () => {
                                     </li>
                                 </ul>
                                 <div className="mt-4 pt-4 border-t border-gray-600 text-sm text-center text-gray-400">
-                                    Note: Completely empty rows in the excel/csv file were automatically ignored during this process.
+                                    Note: Fresh count is computed using current CRM data at upload time.
                                 </div>
                             </div>
                             <button 

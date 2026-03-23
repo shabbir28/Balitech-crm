@@ -83,7 +83,7 @@ const Layout = ({ children }) => {
                                     </NavLink>
                                     <NavLink to="/vendors" className={getClassName}>
                                         <Store className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
-                                        <span>Vendor Directory</span>
+                                        <span>Vendors</span>
                                     </NavLink>
                                     <NavLink to="/campaigns" className={getClassName}>
                                         <Megaphone className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
@@ -91,11 +91,15 @@ const Layout = ({ children }) => {
                                     </NavLink>
                                     <NavLink to="/upload" className={getClassName}>
                                         <UploadCloud className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
-                                        <span>Data Ingestion</span>
+                                        <span>Upload Data</span>
+                                    </NavLink>
+                                    <NavLink to="/compare" className={getClassName}>
+                                        <Search className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
+                                        <span>Compare</span>
                                     </NavLink>
                                     <NavLink to="/sessions" className={getClassName}>
                                         <DatabaseIcon className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
-                                        <span>Session Registry</span>
+                                        <span>Sessions</span>
                                     </NavLink>
                                 </div>
                                 
@@ -103,19 +107,19 @@ const Layout = ({ children }) => {
                                     <p className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Operations</p>
                                     <NavLink to="/leads" className={getClassName}>
                                         <List className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
-                                        <span>Global Leads</span>
+                                        <span>All Data</span>
                                     </NavLink>
                                     <NavLink to="/dnc" className={getClassName}>
                                         <PhoneOff className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
-                                        <span>DNC Database</span>
+                                        <span>DNC</span>
                                     </NavLink>
                                     <NavLink to="/download" className={getClassName}>
                                         <Download className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
-                                        <span>Export Engine</span>
+                                        <span>Download Data</span>
                                     </NavLink>
                                     <NavLink to="/logs" className={getClassName}>
                                         <ScrollText className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
-                                        <span>Audit Tracking</span>
+                                        <span>Logs</span>
                                     </NavLink>
                                 </div>
                                 
@@ -124,7 +128,7 @@ const Layout = ({ children }) => {
                                         <p className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">System</p>
                                         <NavLink to="/users" className={getClassName}>
                                             <UserCog className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
-                                            <span>Access Control</span>
+                                            <span>Users</span>
                                         </NavLink>
                                     </div>
                                 )}
@@ -136,11 +140,11 @@ const Layout = ({ children }) => {
                                 <p className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Tasks</p>
                                 <NavLink to="/vendors" className={getClassName}>
                                     <Store className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
-                                    <span>Vendor Directory</span>
+                                    <span>Vendors</span>
                                 </NavLink>
                                 <NavLink to="/upload" className={getClassName}>
                                     <UploadCloud className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
-                                    <span>Data Ingestion</span>
+                                    <span>Upload Data</span>
                                 </NavLink>
                             </div>
                         )}

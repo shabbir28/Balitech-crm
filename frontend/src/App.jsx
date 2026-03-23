@@ -66,6 +66,9 @@ const AppRoutes = () => {
             {/* Upload - super_admin, admin, data_entry */}
             <Route path="/upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><UploadLeads /></ProtectedRoute>} />
 
+            {/* Compare - super_admin, admin */}
+            <Route path="/compare" element={<ProtectedRoute roles={['super_admin', 'admin']}><UploadLeads /></ProtectedRoute>} />
+
             {/* Download - super_admin, admin */}
             <Route path="/download" element={<ProtectedRoute roles={['super_admin', 'admin']}><DownloadLeads /></ProtectedRoute>} />
 
