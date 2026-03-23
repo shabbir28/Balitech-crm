@@ -14,6 +14,11 @@ const userRoutes = require('./routes/users');
 const campaignRoutes = require('./routes/campaigns');
 const dncRoutes = require('./routes/dnc');
 
+if (!process.env.JWT_SECRET) {
+    console.error('FATAL ERROR: JWT_SECRET is not defined in .env file.');
+    process.exit(1);
+}
+
 const app = express();
 
 app.use(cors());

@@ -64,6 +64,11 @@ const CustomTooltip = ({ active, payload, label }) => {
 const Dashboard = () => {
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [isReady, setIsReady] = useState(false);
+
+    useEffect(() => {
+        setIsReady(true);
+    }, []);
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -122,7 +127,8 @@ const Dashboard = () => {
                 </div>
                 
                 <div className="h-[250px] md:h-[300px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
+                    {isReady && (
+                        <ResponsiveContainer width="99%" height="100%" minWidth={1} debounce={1}>
                         <AreaChart data={dailyActivity} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                             <defs>
                                 <linearGradient id="colorBrand" x1="0" y1="0" x2="0" y2="1">
@@ -159,7 +165,8 @@ const Dashboard = () => {
                                 activeDot={{ r: 6, fill: '#0a0a0a', stroke: '#3b82f6', strokeWidth: 3 }} 
                             />
                         </AreaChart>
-                    </ResponsiveContainer>
+                        </ResponsiveContainer>
+                    )}
                 </div>
             </div>
 
@@ -172,31 +179,33 @@ const Dashboard = () => {
                         <p className="text-[13px] text-slate-400 font-medium">Data partitioned by registered provider.</p>
                     </div>
                     <div className="h-[250px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={vendorDistribution} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                                <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
-                                <XAxis 
-                                    dataKey="name" 
-                                    axisLine={false} 
-                                    tickLine={false}
-                                    tick={{ fill: '#64748b', fontSize: 12, fontWeight: 500 }} 
-                                    dy={10} 
-                                />
-                                <YAxis 
-                                    axisLine={false} 
-                                    tickLine={false} 
-                                    tick={{ fill: '#64748b', fontSize: 12, fontWeight: 500 }}
-                                    tickFormatter={(val) => val >= 1000 ? `${(val/1000).toFixed(1)}k` : val}
-                                    dx={-10}
-                                />
-                                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.02)' }} />
-                                <Bar dataKey="count" name="Records" radius={[6, 6, 6, 6]} maxBarSize={48}>
-                                    {vendorDistribution?.map((_, i) => (
-                                        <Cell key={`cell-${i}`} fill={PIE_COLORS[i % PIE_COLORS.length]} fillOpacity={0.9} className="hover:fill-opacity-100 transition-opacity cursor-pointer" />
-                                    ))}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
+                        {isReady && (
+                            <ResponsiveContainer width="99%" height="100%" minWidth={1} debounce={1}>
+                                <BarChart data={vendorDistribution} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                                    <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
+                                    <XAxis 
+                                        dataKey="name" 
+                                        axisLine={false} 
+                                        tickLine={false}
+                                        tick={{ fill: '#64748b', fontSize: 12, fontWeight: 500 }} 
+                                        dy={10} 
+                                    />
+                                    <YAxis 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{ fill: '#64748b', fontSize: 12, fontWeight: 500 }}
+                                        tickFormatter={(val) => val >= 1000 ? `${(val/1000).toFixed(1)}k` : val}
+                                        dx={-10}
+                                    />
+                                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.02)' }} />
+                                    <Bar dataKey="count" name="Records" radius={[6, 6, 6, 6]} maxBarSize={48}>
+                                        {vendorDistribution?.map((_, i) => (
+                                            <Cell key={`cell-${i}`} fill={PIE_COLORS[i % PIE_COLORS.length]} fillOpacity={0.9} className="hover:fill-opacity-100 transition-opacity cursor-pointer" />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        )}
                     </div>
                 </div>
 
@@ -211,25 +220,27 @@ const Dashboard = () => {
                     </div>
                     
                     <div className="flex-1 min-h-[220px] relative flex items-center justify-center">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie 
-                                    data={countryDistribution} 
-                                    innerRadius={65} 
-                                    outerRadius={90}
-                                    paddingAngle={4} 
-                                    dataKey="count" 
-                                    nameKey="country_code" 
-                                    stroke="none"
-                                    cornerRadius={6}
-                                >
-                                    {countryDistribution?.map((_, i) => (
-                                        <Cell key={`pie-cell-${i}`} fill={PIE_COLORS[i % PIE_COLORS.length]} className="hover:opacity-80 transition-opacity outline-none cursor-pointer" />
-                                    ))}
-                                </Pie>
-                                <Tooltip content={<CustomTooltip />} />
-                            </PieChart>
-                        </ResponsiveContainer>
+                        {isReady && (
+                            <ResponsiveContainer width="99%" height="100%" minWidth={1} debounce={1}>
+                                <PieChart>
+                                    <Pie 
+                                        data={countryDistribution} 
+                                        innerRadius={65} 
+                                        outerRadius={90}
+                                        paddingAngle={4} 
+                                        dataKey="count" 
+                                        nameKey="country_code" 
+                                        stroke="none"
+                                        cornerRadius={6}
+                                    >
+                                        {countryDistribution?.map((_, i) => (
+                                            <Cell key={`pie-cell-${i}`} fill={PIE_COLORS[i % PIE_COLORS.length]} className="hover:opacity-80 transition-opacity outline-none cursor-pointer" />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip content={<CustomTooltip />} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        )}
                         
                         {/* Center text */}
                         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-1">

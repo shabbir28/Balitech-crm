@@ -260,14 +260,19 @@ const compareJob = async (req, res) => {
         const phonesNotDnc = uniquePhones.filter(p => !dncSet.has(p));
         const existingSet = new Set();
 
+        const existingBreakdown = {};
         for (const chunk of chunkArray(phonesNotDnc, 5000)) {
             const existingRes = await db.query(
-                "SELECT phone FROM leads WHERE phone = ANY($1::text[])",
+                "SELECT phone, COALESCE(campaign_type, 'Unknown Campaign') as vendor_name FROM leads WHERE phone = ANY($1::text[])",
                 [chunk]
             );
 
             for (const row of existingRes.rows) {
-                existingSet.add(row.phone);
+                if (!existingSet.has(row.phone)) {
+                    existingSet.add(row.phone);
+                    const vName = row.vendor_name || 'Unknown Campaign';
+                    existingBreakdown[vName] = (existingBreakdown[vName] || 0) + 1;
+                }
             }
         }
 
@@ -301,6 +306,7 @@ const compareJob = async (req, res) => {
             dnc_skipped_dnc: dncSkippedDnc,
             dnc_skipped_sale: dncSkippedSale,
             fresh_sample: freshSample,
+            existing_breakdown: existingBreakdown,
         });
     } catch (err) {
         console.error('Compare Job Error:', err);
@@ -401,15 +407,20 @@ const uploadFreshJob = async (req, res) => {
             const dncSkipped = dncSet.size;
             const phonesNotDnc = uniquePhones.filter(p => !dncSet.has(p));
 
+            const existingBreakdown = {};
             // Existing leads lookup (only for non-DNC phones)
             for (const chunk of chunkArray(phonesNotDnc, 5000)) {
                 const existingRes = await client.query(
-                    "SELECT phone FROM leads WHERE phone = ANY($1::text[])",
+                    "SELECT phone, COALESCE(campaign_type, 'Unknown Campaign') as vendor_name FROM leads WHERE phone = ANY($1::text[])",
                     [chunk]
                 );
 
                 for (const row of existingRes.rows) {
-                    existingSet.add(row.phone);
+                    if (!existingSet.has(row.phone)) {
+                        existingSet.add(row.phone);
+                        const vName = row.vendor_name || 'Unknown Campaign';
+                        existingBreakdown[vName] = (existingBreakdown[vName] || 0) + 1;
+                    }
                 }
             }
 
@@ -431,7 +442,7 @@ const uploadFreshJob = async (req, res) => {
                 let paramIndex = 1;
 
                 for (const record of batch) {
-                    valueStrings.push(`($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6})`);
+                    valueStrings.push(`($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7})`);
                     values.push(
                         record.name || null,
                         record.phone,
@@ -439,13 +450,14 @@ const uploadFreshJob = async (req, res) => {
                         record.countryCode,
                         record.areaCode,
                         session.vendor_id,
-                        record.disposition || null
+                        record.disposition || null,
+                        campaignTypeStr
                     );
-                    paramIndex += 7;
+                    paramIndex += 8;
                 }
 
                 const query = `
-                    INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition)
+                    INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, campaign_type)
                     VALUES ${valueStrings.join(',')}
                     ON CONFLICT (phone) DO NOTHING
                     RETURNING phone
@@ -478,6 +490,7 @@ const uploadFreshJob = async (req, res) => {
                 inserted: insertedCount,
                 updated: 0,
                 duplicates_skipped: freshCount - insertedCount,
+                existing_breakdown: existingBreakdown,
             });
         } catch (err) {
             console.error('Inner Fresh Upload Error:', err);

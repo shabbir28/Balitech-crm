@@ -51,6 +51,7 @@ const AddJob = () => {
             dnc_skipped_dnc: 0,
             dnc_skipped_sale: 0,
             fresh_sample: [],
+            existing_breakdown: {},
         };
 
         try {
@@ -73,6 +74,12 @@ const AddJob = () => {
                 aggregate.dnc_skipped += res.data.dnc_skipped || 0;
                 aggregate.dnc_skipped_dnc += res.data.dnc_skipped_dnc || 0;
                 aggregate.dnc_skipped_sale += res.data.dnc_skipped_sale || 0;
+
+                if (res.data.existing_breakdown) {
+                    for (const [vendorName, count] of Object.entries(res.data.existing_breakdown)) {
+                        aggregate.existing_breakdown[vendorName] = (aggregate.existing_breakdown[vendorName] || 0) + count;
+                    }
+                }
 
                 if (Array.isArray(res.data.fresh_sample)) {
                     aggregate.fresh_sample.push(...res.data.fresh_sample);
@@ -112,6 +119,7 @@ const AddJob = () => {
             inserted: 0,
             updated: 0,
             duplicates_skipped: 0,
+            existing_breakdown: {},
         };
 
         try {
@@ -138,6 +146,12 @@ const AddJob = () => {
                 aggregate.inserted += res.data.inserted || 0;
                 aggregate.updated += res.data.updated || 0;
                 aggregate.duplicates_skipped += res.data.duplicates_skipped || 0;
+
+                if (res.data.existing_breakdown) {
+                    for (const [vendorName, count] of Object.entries(res.data.existing_breakdown)) {
+                        aggregate.existing_breakdown[vendorName] = (aggregate.existing_breakdown[vendorName] || 0) + count;
+                    }
+                }
             }
 
             setProgress(100);
@@ -297,14 +311,32 @@ const AddJob = () => {
                                     Fresh numbers will be uploaded to CRM. DNC/Sale numbers and already-existing numbers will be skipped.
                                 </p>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-6">
                                     <div className="bg-[#363744] p-4 rounded-xl border border-gray-600">
-                                        <p className="text-orange-400 text-sm font-bold mb-1">Fresh Numbers</p>
-                                        <p className="text-2xl font-extrabold text-white">{compareResult.fresh_count}</p>
+                                        <p className="text-gray-400 text-sm font-bold mb-1">Total Valid Rows</p>
+                                        <p className="text-2xl font-extrabold text-white">{compareResult.total_processed}</p>
                                     </div>
                                     <div className="bg-[#363744] p-4 rounded-xl border border-gray-600">
-                                        <p className="text-orange-400 text-sm font-bold mb-1">Already Present</p>
+                                        <p className="text-red-400 text-sm font-bold mb-1">Invalid/Dupes Skipped</p>
+                                        <p className="text-2xl font-extrabold text-white">{compareResult.duplicates_in_file}</p>
+                                    </div>
+                                    <div className="bg-[#363744] p-4 rounded-xl border border-gray-600">
+                                        <p className="text-green-400 text-sm font-bold mb-1">Fresh Numbers</p>
+                                        <p className="text-2xl font-extrabold text-white">{compareResult.fresh_count}</p>
+                                    </div>
+                                    <div className="bg-[#363744] p-4 rounded-xl border border-gray-600 flex flex-col">
+                                        <p className="text-yellow-400 text-sm font-bold mb-1">Already Present</p>
                                         <p className="text-2xl font-extrabold text-white">{compareResult.existing_count}</p>
+                                        {compareResult.existing_breakdown && Object.keys(compareResult.existing_breakdown).length > 0 && (
+                                            <div className="mt-2 text-xs border-t border-gray-600 pt-2 flex-grow overflow-y-auto max-h-24">
+                                                {Object.entries(compareResult.existing_breakdown).map(([campaign, count]) => (
+                                                    <div key={campaign} className="flex justify-between text-gray-300 py-0.5">
+                                                        <span className="truncate pr-2" title={campaign}>{campaign}:</span>
+                                                        <span className="font-mono">{count}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="bg-[#363744] p-4 rounded-xl border border-gray-600">
                                         <p className="text-purple-400 text-sm font-bold mb-1">DNC Skipped Total</p>
@@ -374,6 +406,10 @@ const AddJob = () => {
                                         <span className="font-bold text-white">{result.total_processed}</span>
                                     </li>
                                     <li className="flex justify-between border-b border-gray-600 pb-2">
+                                        <span className="text-gray-400">Invalid / Dupes Skipped:</span>
+                                        <span className="font-bold text-red-400">{result.duplicates_in_file || 0}</span>
+                                    </li>
+                                    <li className="flex justify-between border-b border-gray-600 pb-2">
                                         <span className="text-gray-400">Fresh Numbers Uploaded:</span>
                                         <span className="font-bold text-green-400">{result.inserted}</span>
                                     </li>
@@ -383,7 +419,19 @@ const AddJob = () => {
                                     </li>
                                     <li className="flex justify-between border-b border-gray-600 pb-2">
                                         <span className="text-gray-400">Already Present Skipped:</span>
-                                        <span className="font-bold text-yellow-400">{result.existing_count || 0}</span>
+                                        <div className="text-right">
+                                            <span className="font-bold text-yellow-400">{result.existing_count || 0}</span>
+                                            {result.existing_breakdown && Object.keys(result.existing_breakdown).length > 0 && (
+                                                <div className="mt-1 text-xs text-gray-400">
+                                                    {Object.entries(result.existing_breakdown).map(([campaign, count]) => (
+                                                        <div key={campaign} className="flex justify-end gap-2 py-0.5">
+                                                            <span className="truncate max-w-[150px]" title={campaign}>{campaign}:</span>
+                                                            <span className="text-gray-300 font-mono">{count}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
                                     </li>
                                     <li className="flex justify-between border-b border-gray-600 pb-2">
                                         <span className="text-gray-400">DNC Skipped (Total):</span>

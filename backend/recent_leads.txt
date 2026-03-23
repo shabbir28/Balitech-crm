@@ -1,6 +1,0 @@
---- RECENT 5 LEADS ---
-ID: 642 | NAME: Outbound Auto Dial | PHONE: 2314257766 | EMAIL: null | DISP: null
-ID: 643 | NAME: Outbound Auto Dial | PHONE: 6626644983 | EMAIL: null | DISP: null
-ID: 640 | NAME: Outbound Auto Dial | PHONE: 7405830131 | EMAIL: null | DISP: null
-ID: 641 | NAME: Outbound Auto Dial | PHONE: 7862666914 | EMAIL: null | DISP: null
-ID: 644 | NAME: Outbound Auto Dial | PHONE: 8593466891 | EMAIL: null | DISP: null
