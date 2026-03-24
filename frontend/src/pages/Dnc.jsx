@@ -9,6 +9,8 @@ const Dnc = () => {
   const [loading, setLoading] = useState(true);
 
   const [importFile, setImportFile] = useState(null);
+  const [campaigns, setCampaigns] = useState([]);
+  const [selectedCampaign, setSelectedCampaign] = useState('');
 
   const queryString = useMemo(() => {
     return `/dnc?page=1&limit=50&type=${encodeURIComponent(type)}&search=${encodeURIComponent(
@@ -32,6 +34,12 @@ const Dnc = () => {
     fetchList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryString]);
+
+  useEffect(() => {
+    api.get('/campaigns')
+      .then(res => setCampaigns(res.data.filter(c => c.status === 'Active')))
+      .catch(e => console.error('Failed to load campaigns', e));
+  }, []);
 
 
   const deleteRow = async (id) => {
@@ -142,6 +150,26 @@ const Dnc = () => {
           marginBottom: 14,
         }}
       >
+        {/* Campaign Selector */}
+        <div style={{ gridColumn: '1 / -1', background: '#13151e', borderRadius: 14, border: '1px solid rgba(255,255,255,0.06)', padding: 14 }}>
+          <div style={{ color: '#9ca3af', fontSize: 13, fontWeight: 800, marginBottom: 8 }}>
+            Select Campaign <span style={{color: '#f59e0b'}}>*</span> (Required for upload)
+          </div>
+          <select
+            value={selectedCampaign}
+            onChange={(e) => setSelectedCampaign(e.target.value)}
+            style={{
+              background: '#0f1117', border: '1px solid rgba(255,255,255,0.1)', color: '#fff',
+              borderRadius: 8, padding: '10px 14px', fontSize: 13, width: '100%', outline: 'none', cursor: 'pointer'
+            }}
+          >
+            <option value="">-- Choose Campaign --</option>
+            {campaigns.map(c => (
+              <option key={c.campaign_id} value={c.campaign_id}>{c.name}</option>
+            ))}
+          </select>
+        </div>
+
         {/* Card 1: Import SALE */}
         <div
           style={{
@@ -163,9 +191,10 @@ const Dnc = () => {
             <button
               onClick={() => {
                 const form = new FormData();
-                if (!importFile) return;
+                if (!importFile || !selectedCampaign) return;
                 form.append('file', importFile);
                 form.append('type', 'SALE');
+                form.append('campaign_id', selectedCampaign);
                 api.post('/dnc/import', form, {
                   headers: { 'Content-Type': 'multipart/form-data' },
                 }).then(() => {
@@ -173,16 +202,16 @@ const Dnc = () => {
                   fetchList();
                 });
               }}
-              disabled={!importFile}
+              disabled={!importFile || !selectedCampaign}
               style={{
-                background: importFile ? '#f59e0b' : 'rgba(255,255,255,0.08)',
-                color: importFile ? '#111' : '#6b7280',
+                background: (importFile && selectedCampaign) ? '#f59e0b' : 'rgba(255,255,255,0.08)',
+                color: (importFile && selectedCampaign) ? '#111' : '#6b7280',
                 border: 'none',
                 borderRadius: 10,
                 padding: '10px 14px',
                 fontSize: 13,
                 fontWeight: 800,
-                cursor: importFile ? 'pointer' : 'not-allowed',
+                cursor: (importFile && selectedCampaign) ? 'pointer' : 'not-allowed',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 8,
@@ -215,9 +244,10 @@ const Dnc = () => {
             <button
               onClick={() => {
                 const form = new FormData();
-                if (!importFile) return;
+                if (!importFile || !selectedCampaign) return;
                 form.append('file', importFile);
                 form.append('type', 'DNC');
+                form.append('campaign_id', selectedCampaign);
                 api.post('/dnc/import', form, {
                   headers: { 'Content-Type': 'multipart/form-data' },
                 }).then(() => {
@@ -225,16 +255,16 @@ const Dnc = () => {
                   fetchList();
                 });
               }}
-              disabled={!importFile}
+              disabled={!importFile || !selectedCampaign}
               style={{
-                background: importFile ? '#f59e0b' : 'rgba(255,255,255,0.08)',
-                color: importFile ? '#111' : '#6b7280',
+                background: (importFile && selectedCampaign) ? '#f59e0b' : 'rgba(255,255,255,0.08)',
+                color: (importFile && selectedCampaign) ? '#111' : '#6b7280',
                 border: 'none',
                 borderRadius: 10,
                 padding: '10px 14px',
                 fontSize: 13,
                 fontWeight: 800,
-                cursor: importFile ? 'pointer' : 'not-allowed',
+                cursor: (importFile && selectedCampaign) ? 'pointer' : 'not-allowed',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 8,
@@ -258,13 +288,13 @@ const Dnc = () => {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: '180px 80px 220px 170px 120px',
+            gridTemplateColumns: '150px 80px 170px 160px 140px 100px',
             padding: '14px 18px',
             borderBottom: '1px solid rgba(255,255,255,0.06)',
             background: 'rgba(0,0,0,0.25)',
           }}
         >
-          {['Phone', 'Type', 'Source', 'Created At', 'Action'].map((h) => (
+          {['Phone', 'Type', 'Campaign', 'Source', 'Created At', 'Action'].map((h) => (
             <span
               key={h}
               style={{
@@ -294,7 +324,7 @@ const Dnc = () => {
               key={r.id}
               style={{
                 display: 'grid',
-                gridTemplateColumns: '180px 80px 220px 170px 120px',
+                gridTemplateColumns: '150px 80px 170px 160px 140px 100px',
                 padding: '12px 18px',
                 borderBottom: i < rows.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
                 alignItems: 'center',
@@ -305,6 +335,9 @@ const Dnc = () => {
               <div style={{ fontFamily: 'monospace' }}>{r.phone}</div>
               <div style={{ fontWeight: 800, color: r.dnc_type === 'DNC' ? '#fbbf24' : '#93c5fd' }}>
                 {r.dnc_type}
+              </div>
+              <div style={{ color: '#e5e7eb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {r.campaign_name || '—'}
               </div>
               <div style={{ color: '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {r.source || '—'}

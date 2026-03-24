@@ -31,12 +31,10 @@ const Login = () => {
             <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-blue-500/10 rounded-full blur-[120px] pointer-events-none" />
 
             <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
-                <div className="flex justify-center">
-                    <div className="bg-white p-4 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex items-center justify-center">
-                        <Database size={40} className="text-brand-600" strokeWidth={1.5} />
-                    </div>
+                <div className="flex justify-center mb-6 mt-4">
+                    <img src="/assets/logo.png" alt="BaliTech Logo" className="h-28 w-auto object-contain drop-shadow-[0_10px_35px_rgba(245,158,11,0.25)] select-none" />
                 </div>
-                <h2 className="mt-8 text-center text-4xl font-extrabold text-slate-900 tracking-tight">
+                <h2 className="text-center text-4xl font-extrabold text-slate-900 tracking-tight">
                     Welcome Back
                 </h2>
                 <p className="mt-3 text-center text-base text-slate-500">

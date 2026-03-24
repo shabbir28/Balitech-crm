@@ -4,7 +4,9 @@ import { AuthContext } from '../context/AuthContext';
 import { 
     LayoutDashboard, Users, UploadCloud, Download, List, LogOut,
     Database, ScrollText, UserCog, Store, Megaphone, 
-    Database as DatabaseIcon, PhoneOff, Search, ChevronRight, Menu, X
+    Database as DatabaseIcon, PhoneOff, Search, ChevronRight, Menu, X,
+    LayoutTemplate, Building2, Target, FolderUp, Scale, Layers, 
+    FileStack, ShieldBan, FolderDown, TerminalSquare, UserCheck
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
@@ -46,7 +48,7 @@ const Layout = ({ children }) => {
         : 'Overview';
 
     return (
-        <div className="min-h-screen flex bg-[#030303] text-white selection:bg-brand-500/30 selection:text-white font-sans antialiased">
+        <div className="min-h-screen flex bg-[#151521] text-white selection:bg-brand-500/30 selection:text-white font-sans antialiased">
             {/* Mobile Menu Overlay */}
             {isMobileMenuOpen && (
                 <div 
@@ -56,18 +58,11 @@ const Layout = ({ children }) => {
             )}
 
             {/* Premium Sidebar */}
-            <aside className={`fixed top-0 bottom-0 left-0 w-[260px] bg-[#0a0a0a]/95 backdrop-blur-2xl border-r border-white/10 flex flex-col z-50 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+            <aside className={`fixed top-0 bottom-0 left-0 w-[260px] bg-[#1e1e2d] border-r border-[#ffffff0a] flex flex-col z-50 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
                 {/* Logo Bar */}
-                <div className="h-16 flex items-center px-6 border-b border-white/5 shrink-0 relative overflow-hidden">
+                <div className="h-20 flex items-center px-1 border-b border-white/5 shrink-0 relative overflow-hidden justify-center bg-black/10">
                     <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-                    <div className="flex items-center gap-3">
-                        <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.3)] border border-brand-400/50">
-                            <Database className="h-4 w-4 text-white" />
-                        </div>
-                        <span className="font-bold text-sm tracking-tight text-white flex items-center">
-                            Balitech<span className="text-brand-400">CRM</span>
-                        </span>
-                    </div>
+                    <img src="/assets/logo.png" alt="BaliTech Logo" className="h-16 w-auto max-w-[90%] object-contain drop-shadow-xl select-none" />
                 </div>
 
                 {/* Navigation Menu */}
@@ -78,27 +73,27 @@ const Layout = ({ children }) => {
                                 <div>
                                     <p className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Platform</p>
                                     <NavLink to="/" className={getClassName} end>
-                                        <LayoutDashboard className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
+                                        <LayoutTemplate className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
                                         <span>Dashboard</span>
                                     </NavLink>
                                     <NavLink to="/vendors" className={getClassName}>
-                                        <Store className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
+                                        <Building2 className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
                                         <span>Vendors</span>
                                     </NavLink>
                                     <NavLink to="/campaigns" className={getClassName}>
-                                        <Megaphone className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
+                                        <Target className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
                                         <span>Campaigns</span>
                                     </NavLink>
                                     <NavLink to="/upload" className={getClassName}>
-                                        <UploadCloud className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
+                                        <FolderUp className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
                                         <span>Upload Data</span>
                                     </NavLink>
                                     <NavLink to="/compare" className={getClassName}>
-                                        <Search className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
+                                        <Scale className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
                                         <span>Compare</span>
                                     </NavLink>
                                     <NavLink to="/sessions" className={getClassName}>
-                                        <DatabaseIcon className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
+                                        <Layers className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
                                         <span>Sessions</span>
                                     </NavLink>
                                 </div>
@@ -106,19 +101,19 @@ const Layout = ({ children }) => {
                                 <div>
                                     <p className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Operations</p>
                                     <NavLink to="/leads" className={getClassName}>
-                                        <List className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
+                                        <FileStack className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
                                         <span>All Data</span>
                                     </NavLink>
                                     <NavLink to="/dnc" className={getClassName}>
-                                        <PhoneOff className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
+                                        <ShieldBan className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
                                         <span>DNC</span>
                                     </NavLink>
                                     <NavLink to="/download" className={getClassName}>
-                                        <Download className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
+                                        <FolderDown className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
                                         <span>Download Data</span>
                                     </NavLink>
                                     <NavLink to="/logs" className={getClassName}>
-                                        <ScrollText className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
+                                        <TerminalSquare className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
                                         <span>Logs</span>
                                     </NavLink>
                                 </div>
@@ -127,7 +122,7 @@ const Layout = ({ children }) => {
                                     <div>
                                         <p className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">System</p>
                                         <NavLink to="/users" className={getClassName}>
-                                            <UserCog className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
+                                            <UserCheck className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
                                             <span>Users</span>
                                         </NavLink>
                                     </div>
@@ -139,11 +134,11 @@ const Layout = ({ children }) => {
                             <div>
                                 <p className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Tasks</p>
                                 <NavLink to="/vendors" className={getClassName}>
-                                    <Store className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
+                                    <Building2 className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
                                     <span>Vendors</span>
                                 </NavLink>
                                 <NavLink to="/upload" className={getClassName}>
-                                    <UploadCloud className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
+                                    <FolderUp className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
                                     <span>Upload Data</span>
                                 </NavLink>
                             </div>
@@ -152,7 +147,7 @@ const Layout = ({ children }) => {
                 </nav>
 
                 {/* Bottom User Area */}
-                <div className="p-4 border-t border-white/5 bg-[#050505]">
+                <div className="p-4 border-t border-[#ffffff0a] bg-[#1a1a26]">
                     <div className="flex items-center gap-3 bg-white/[0.02] p-2 rounded-xl border border-white/5 hover:bg-white/[0.04] transition-colors">
                         <div className="h-9 w-9 rounded-lg bg-slate-800 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
                             {profilePic ? (
@@ -179,7 +174,7 @@ const Layout = ({ children }) => {
             {/* Main Canvas Area */}
             <div className={`flex-1 flex flex-col min-h-screen transition-all duration-300 md:ml-[260px]`}>
                 {/* Premium Header */}
-                <header className="h-16 border-b border-white/10 bg-[#0a0a0a]/80 backdrop-blur-2xl flex items-center px-4 md:px-8 justify-between sticky top-0 z-30">
+                <header className="h-16 border-b border-[#ffffff0a] bg-[#1e1e2d] flex items-center px-4 md:px-8 justify-between sticky top-0 z-30">
                     <div className="flex items-center gap-3">
                         <button 
                             className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 md:hidden transition-colors"
@@ -218,7 +213,7 @@ const Layout = ({ children }) => {
                     </div>
                 </header>
 
-                <main className="flex-1 p-4 md:p-8 bg-[#030303] relative">
+                <main className="flex-1 p-4 md:p-8 bg-[#151521] relative">
                     <div className="absolute top-0 left-0 w-full h-[300px] bg-gradient-to-b from-brand-500/5 to-transparent pointer-events-none" />
                     <div className="max-w-[1600px] mx-auto relative z-10 space-y-8">
                         {children}

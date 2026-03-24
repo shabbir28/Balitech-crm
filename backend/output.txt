@@ -1,0 +1,2 @@
+LEADS: id, name, phone, email, country_code, area_code, vendor_id, status, uploaded_at, downloaded_at, campaign, job_id, campaign_type, disposition
+CAMPAIGNS: campaign_id, name, start_date, comments, attachment_url, attachment_name, status, created_at, updated_at

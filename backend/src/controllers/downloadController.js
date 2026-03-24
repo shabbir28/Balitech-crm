@@ -1,11 +1,12 @@
 const db = require('../config/db');
 const { Parser } = require('json2csv');
+const { areaCodesMap } = require('../utils/areaCodes');
 
 // POST /api/leads/download
 const downloadLeads = async (req, res) => {
     const client = await db.getClient();
     try {
-        const { country_code, area_code, vendor_id, quantity } = req.body;
+        const { vendor_id, quantity, states, campaign_id } = req.body;
         
         if (!quantity || quantity <= 0) {
             return res.status(400).json({ message: 'Valid quantity is required' });
@@ -18,17 +19,37 @@ const downloadLeads = async (req, res) => {
         const params = [];
         let paramIdx = 1;
 
-        if (country_code) {
-            filters.push(`country_code = $${paramIdx++}`);
-            params.push(country_code);
-        }
-        if (area_code) {
-            filters.push(`area_code = $${paramIdx++}`);
-            params.push(area_code);
-        }
         if (vendor_id) {
             filters.push(`vendor_id = $${paramIdx++}`);
             params.push(vendor_id);
+        }
+
+        if (campaign_id) {
+            const campRes = await client.query('SELECT name FROM campaigns WHERE campaign_id = $1', [campaign_id]);
+            if (campRes.rows.length > 0) {
+                const cName = campRes.rows[0].name;
+                filters.push(`(campaign = $${paramIdx} OR campaign_type = $${paramIdx + 1})`);
+                params.push(campaign_id, cName);
+                paramIdx += 2;
+            } else {
+                filters.push(`1 = 0`);
+            }
+        }
+
+        if (states && Array.isArray(states) && states.length > 0) {
+            const matchingCodes = [];
+            for (const [code, state] of Object.entries(areaCodesMap)) {
+                if (states.includes(state)) {
+                    matchingCodes.push(code);
+                }
+            }
+            if (matchingCodes.length > 0) {
+                const placeholders = matchingCodes.map(() => `$${paramIdx++}`).join(',');
+                filters.push(`area_code IN (${placeholders})`);
+                params.push(...matchingCodes);
+            } else {
+                filters.push(`1 = 0`);
+            }
         }
 
         const whereClause = filters.join(' AND ');
@@ -72,8 +93,8 @@ const downloadLeads = async (req, res) => {
         await client.query(logQuery, [
             req.user.id,
             vendor_id || null,
-            country_code || null,
-            area_code || null,
+            null, // Removed country code
+            null, // Removed area code
             result.rows.length
         ]);
 

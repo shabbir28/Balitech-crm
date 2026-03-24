@@ -35,9 +35,10 @@ const listDnc = async (req, res) => {
     }
 
     const dataQuery = `
-      SELECT d.*, u.username AS created_by_username
+      SELECT d.*, u.username AS created_by_username, c.name AS campaign_name
       FROM dnc_numbers d
       LEFT JOIN users u ON d.created_by = u.id
+      LEFT JOIN campaigns c ON d.campaign_id = c.campaign_id
       ${where}
       ORDER BY d.created_at DESC
       LIMIT $${params.length + 1}
@@ -69,7 +70,7 @@ const listDnc = async (req, res) => {
 // POST /api/dnc
 const addDnc = async (req, res) => {
   try {
-    const { phone, type, source, notes } = req.body || {};
+    const { phone, type, source, notes, campaign_id } = req.body || {};
     const dncType = normalizeType(type);
     if (!dncType) {
       return res.status(400).json({ message: "Valid type is required (DNC/SALE)" });
@@ -82,15 +83,16 @@ const addDnc = async (req, res) => {
 
     const result = await db.query(
       `
-        INSERT INTO dnc_numbers (phone, dnc_type, source, notes, created_by)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO dnc_numbers (phone, dnc_type, source, notes, created_by, campaign_id)
+        VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (phone) DO UPDATE
         SET dnc_type = EXCLUDED.dnc_type,
             source = COALESCE(EXCLUDED.source, dnc_numbers.source),
-            notes = COALESCE(EXCLUDED.notes, dnc_numbers.notes)
+            notes = COALESCE(EXCLUDED.notes, dnc_numbers.notes),
+            campaign_id = COALESCE(EXCLUDED.campaign_id, dnc_numbers.campaign_id)
         RETURNING *;
       `,
-      [normalized, dncType, source || null, notes || null, req.user?.id || null],
+      [normalized, dncType, source || null, notes || null, req.user?.id || null, campaign_id || null],
     );
 
     res.status(201).json(result.rows[0]);
@@ -106,6 +108,8 @@ const importDnc = async (req, res) => {
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
     const dncType = normalizeType(req.body?.type);
+    const campaignId = req.body?.campaign_id || null;
+
     if (!dncType) {
       return res.status(400).json({ message: "Valid type is required (DNC/SALE)" });
     }
@@ -136,16 +140,17 @@ const importDnc = async (req, res) => {
       const values = [];
       let idx = 1;
       for (const p of chunk) {
-        valueStrings.push(`($${idx}, $${idx + 1}, $${idx + 2})`);
-        values.push(p, dncType, req.user?.id || null);
-        idx += 3;
+        valueStrings.push(`($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3})`);
+        values.push(p, dncType, req.user?.id || null, campaignId);
+        idx += 4;
       }
 
       const q = `
-        INSERT INTO dnc_numbers (phone, dnc_type, created_by)
+        INSERT INTO dnc_numbers (phone, dnc_type, created_by, campaign_id)
         VALUES ${valueStrings.join(",")}
         ON CONFLICT (phone) DO UPDATE
-        SET dnc_type = EXCLUDED.dnc_type
+        SET dnc_type = EXCLUDED.dnc_type,
+            campaign_id = COALESCE(EXCLUDED.campaign_id, dnc_numbers.campaign_id)
         RETURNING phone;
       `;
       const r = await db.query(q, values);

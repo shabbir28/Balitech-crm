@@ -451,7 +451,7 @@ const uploadFreshJob = async (req, res) => {
                         record.areaCode,
                         session.vendor_id,
                         record.disposition || null,
-                        campaignTypeStr
+                        session.campaign_type
                     );
                     paramIndex += 8;
                 }

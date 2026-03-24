@@ -1,277 +1,291 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { 
-    AreaChart, Area, BarChart, Bar, XAxis, YAxis, 
-    CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell 
+import {
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+    ResponsiveContainer, PieChart, Pie, Cell, RadialBarChart, RadialBar, Legend
 } from 'recharts';
-import { ArrowUpRight, Database, Users, Activity, CheckCircle, BarChart3, Globe } from 'lucide-react';
+import {
+    Users, Download, Database, ShieldBan, Target, Layers,
+    CheckCircle2, Clock, ArrowUpRight, TrendingUp, TrendingDown,
+    Building2, FolderUp, Zap, AlertCircle
+} from 'lucide-react';
 
-// Premium Color Palette
-const PIE_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'];
+const COLORS = ['#f97316', '#3b82f6', '#a855f7', '#10b981', '#ec4899', '#06b6d4', '#f59e0b'];
 
-const StatCard = ({ icon, label, value, trend, color }) => {
+/* ── Tooltip ───────────────────────────────────────────── */
+const Tip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
     return (
-        <div className="group bg-[#0a0a0a] border border-white/10 rounded-2xl p-6 flex flex-col justify-between hover:border-white/20 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)] relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-300" style={{ background: `linear-gradient(90deg, transparent, ${color}, transparent)` }} />
-            
-            <div className="flex items-center justify-between mb-6">
-                <div className="h-12 w-12 rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110" style={{ background: `${color}15`, border: `1px solid ${color}30` }}>
-                    {React.createElement(icon, { size: 22, style: { color }, strokeWidth: 2 })}
+        <div style={{ background: 'rgba(10,10,20,0.97)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: '12px 18px', boxShadow: '0 20px 60px rgba(0,0,0,0.7)', backdropFilter: 'blur(20px)', minWidth: 150 }}>
+            {label && <p style={{ color: '#6b7280', fontSize: 11, fontWeight: 700, marginBottom: 8, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{label}</p>}
+            {payload.map((e, i) => (
+                <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap: 20, marginTop: i ? 6 : 0 }}>
+                    <span style={{ display:'flex', alignItems:'center', gap: 7, fontSize: 12, color: '#d1d5db', fontWeight: 600 }}>
+                        <span style={{ width: 8, height: 8, borderRadius:'50%', background: e.color, flexShrink: 0 }} />
+                        {e.name}
+                    </span>
+                    <span style={{ fontSize: 13, color: '#fff', fontWeight: 800, fontVariantNumeric:'tabular-nums' }}>{e.value?.toLocaleString()}</span>
                 </div>
-                {trend && (
-                    <div className="flex items-center text-[12px] font-bold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-lg border border-emerald-400/20">
-                        <ArrowUpRight className="h-3.5 w-3.5 mr-0.5" />
-                        {trend}%
-                    </div>
-                )}
-            </div>
-            
-            <div>
-                <p className="text-[2rem] font-bold text-white tracking-tight leading-none mb-1">
-                    {typeof value === 'number' ? value.toLocaleString() : value}
-                </p>
-                <p className="text-[13px] font-medium text-slate-400 tracking-wide uppercase">{label}</p>
-            </div>
+            ))}
         </div>
     );
 };
 
-// Premium Tooltip
-const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-        return (
-            <div className="bg-[#0f0f11]/95 backdrop-blur-xl border border-white/10 rounded-xl px-4 py-3 shadow-2xl outline-none min-w-[150px]">
-                <p className="text-[12px] font-bold text-slate-400 mb-2">{label}</p>
-                <div className="space-y-2">
-                    {payload.map((entry, index) => (
-                        <div key={index} className="flex items-center justify-between gap-6">
-                            <span className="flex items-center gap-2 text-[13px] font-medium text-white">
-                                <span className="w-2 h-2 rounded-full" style={{ background: entry.color, boxShadow: `0 0 8px ${entry.color}` }}></span>
-                                {entry.name || 'Value'}
-                            </span>
-                            <span className="text-[13px] font-bold text-white tabular-nums">
-                                {entry.value.toLocaleString()}
-                            </span>
-                        </div>
-                    ))}
-                </div>
+/* ── KPI Card ─────────────────────────────────────────── */
+const KpiCard = ({ icon: Icon, label, value, sub, color, index }) => (
+    <div
+        style={{
+            background: 'linear-gradient(145deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))',
+            border: '1px solid rgba(255,255,255,0.07)',
+            borderRadius: 22, padding: '24px 24px 20px',
+            position: 'relative', overflow: 'hidden',
+            display: 'flex', flexDirection: 'column', gap: 18,
+            transition: 'transform .3s ease, border-color .3s ease, box-shadow .3s ease',
+            animation: `fadeUp .4s cubic-bezier(.16,1,.3,1) ${index * 70}ms both`,
+        }}
+        onMouseEnter={e => { e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.borderColor=`${color}35`; e.currentTarget.style.boxShadow=`0 16px 40px -10px ${color}30`; }}
+        onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.borderColor='rgba(255,255,255,0.07)'; e.currentTarget.style.boxShadow=''; }}
+    >
+        <div style={{ position:'absolute', top:-40, right:-40, width:170, height:170, borderRadius:'50%', background: color, opacity:.07, filter:'blur(50px)', pointerEvents:'none' }} />
+        <div style={{ width:50, height:50, borderRadius:16, background:`${color}18`, border:`1px solid ${color}28`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <Icon size={22} color={color} strokeWidth={1.8} />
+        </div>
+        <div>
+            <div style={{ fontSize:34, fontWeight:800, color:'#fff', lineHeight:1, letterSpacing:'-0.03em', fontVariantNumeric:'tabular-nums', marginBottom: 6 }}>
+                {typeof value === 'number' ? value.toLocaleString() : (value ?? '—')}
             </div>
-        );
-    }
-    return null;
-};
+            <div style={{ fontSize:12, fontWeight:700, color:'#6b7280', letterSpacing:'0.07em', textTransform:'uppercase' }}>{label}</div>
+            {sub && <div style={{ fontSize:11, color:'#374151', marginTop:4, fontWeight:500 }}>{sub}</div>}
+        </div>
+    </div>
+);
 
+/* ── Card Shell ───────────────────────────────────────── */
+const Card = ({ children, style={} }) => (
+    <div style={{ background:'linear-gradient(145deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))', border:'1px solid rgba(255,255,255,0.07)', borderRadius:24, overflow:'hidden', ...style }}>
+        {children}
+    </div>
+);
+
+const CardHead = ({ title, subtitle, icon: Icon, color='#f97316', badge }) => (
+    <div style={{ padding:'20px 24px', borderBottom:'1px solid rgba(255,255,255,0.05)', display:'flex', alignItems:'center', justifyContent:'space-between', gap:14 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+            <div style={{ width:40, height:40, borderRadius:13, background:`${color}18`, border:`1px solid ${color}28`, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                <Icon size={19} color={color} strokeWidth={1.8} />
+            </div>
+            <div>
+                <div style={{ fontSize:15, fontWeight:700, color:'#f1f5f9', letterSpacing:'-0.01em' }}>{title}</div>
+                {subtitle && <div style={{ fontSize:11, color:'#4b5563', fontWeight:500, marginTop:2 }}>{subtitle}</div>}
+            </div>
+        </div>
+        {badge}
+    </div>
+);
+
+/* ── Status Badge ─────────────────────────────────────── */
+const StatusBadge = ({ label, positive }) => (
+    <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, fontWeight:700, padding:'4px 10px', borderRadius:999, background: positive?'rgba(74,222,128,0.1)':'rgba(248,113,113,0.1)', border:`1px solid ${positive?'rgba(74,222,128,0.2)':'rgba(248,113,113,0.2)'}`, color: positive?'#4ade80':'#f87171' }}>
+    {positive ? <TrendingUp size={11}/> : <TrendingDown size={11}/>} {label}
+    </div>
+);
+
+/* ── Main ────────────────────────────────────────────── */
 const Dashboard = () => {
-    const [stats, setStats] = useState(null);
+    const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [isReady, setIsReady] = useState(false);
+    const [rdy, setRdy] = useState(false);
+
+    useEffect(() => setRdy(true), []);
 
     useEffect(() => {
-        setIsReady(true);
-    }, []);
-
-    useEffect(() => {
-        const fetchStats = async () => {
-            try {
-                const res = await api.get('/dashboard/stats');
-                setStats(res.data);
-            } catch (err) {
-                console.error('Failed to fetch stats', err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchStats();
+        api.get('/dashboard/stats')
+            .then(r => setData(r.data))
+            .catch(console.error)
+            .finally(() => setLoading(false));
     }, []);
 
     if (loading) return (
-        <div className="flex h-[400px] items-center justify-center">
-            <span className="text-[14px] font-medium text-brand-400 animate-pulse bg-brand-400/10 px-4 py-2 rounded-full border border-brand-400/20">Establishing connection...</span>
-        </div>
-    );
-    
-    if (!stats) return (
-        <div className="p-6 border border-red-500/20 bg-red-500/5 rounded-2xl max-w-md">
-            <p className="text-[15px] font-bold text-white mb-1">Telemetry Error</p>
-            <p className="text-[13px] text-slate-400 leading-relaxed">Failed to aggregate statistics. Please verify system connectivity and refresh the interface.</p>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:400 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(249,115,22,0.08)', border:'1px solid rgba(249,115,22,0.2)', padding:'12px 24px', borderRadius:999 }}>
+                <Zap size={15} color="#f97316" style={{ animation:'pulse 1.5s infinite' }} />
+                <span style={{ fontSize:14, fontWeight:600, color:'#f97316' }}>Loading analytics…</span>
+            </div>
         </div>
     );
 
-    const { totals, vendorDistribution, countryDistribution, dailyActivity } = stats;
+    if (!data) return <div style={{ color:'#f87171', padding:32 }}>Failed to load stats.</div>;
+
+    const { totals, vendorDistribution, campaignStats, dncStats, leadStatusBreakdown, recentSessions } = data;
+
+    // enrich lead status for pie
+    const STATUS_COLORS = { available:'#10b981', downloaded:'#3b82f6', dnc:'#f97316', sold:'#a855f7', duplicate:'#6b7280' };
+    const statusPieData = leadStatusBreakdown?.map(s => ({ name: s.status || 'Unknown', value: s.count, fill: STATUS_COLORS[s.status] || '#6b7280' })) || [];
 
     return (
-        <div className="space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div style={{ fontFamily:"'Inter',system-ui,sans-serif", paddingBottom:40 }}>
+            <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}`}</style>
+
             {/* Header */}
-            <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">System Overview</h1>
-                <p className="text-[14px] text-slate-400 mt-1 md:mt-2 font-medium">Real-time aggregate performance metrics and telemetry.</p>
-            </div>
-
-            {/* Grid Metrics - Responsive */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-                <StatCard icon={Database} label="Total Contacts" value={totals.total_contacts || 0} trend="12.5" color="#3b82f6" />
-                <StatCard icon={Users} label="Total Vendors" value={totals.total_vendors || 0} color="#8b5cf6" />
-                <StatCard icon={Activity} label="Total Downloaded" value={totals.total_downloaded || 0} trend="8.2" color="#f59e0b" />
-                <StatCard icon={CheckCircle} label="Remaining Leads" value={totals.remaining_leads || 0} trend="41.9" color="#10b981" />
-            </div>
-
-            {/* Area Chart - Premium Fade */}
-            <div className="bg-[#0a0a0a] border border-white/10 rounded-3xl p-6 md:p-8 hover:border-white/20 transition-colors">
-                <div className="flex items-center justify-between mb-8">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-brand-500/10 rounded-xl border border-brand-500/20">
-                            <BarChart3 className="h-5 w-5 text-brand-400" />
-                        </div>
-                        <h2 className="text-[16px] font-bold text-white">Ingestion Velocity</h2>
-                    </div>
+            <div style={{ marginBottom:32, animation:'fadeUp .5s ease both' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:10 }}>
+                    <Zap size={13} color="#f97316" />
+                    <span style={{ fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.18em', color:'#f97316' }}>Live Dashboard</span>
                 </div>
-                
-                <div className="h-[250px] md:h-[300px] w-full">
-                    {isReady && (
-                        <ResponsiveContainer width="99%" height="100%" minWidth={1} debounce={1}>
-                        <AreaChart data={dailyActivity} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                            <defs>
-                                <linearGradient id="colorBrand" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
-                                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                                </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="4 8" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                            <XAxis 
-                                dataKey="date" 
-                                tickFormatter={(s) => { const d = new Date(s); return d.getDate() + ' ' + d.toLocaleString('en', { month: 'short' }); }}
-                                axisLine={false} 
-                                tickLine={false}
-                                tick={{ fill: '#64748b', fontSize: 12, fontWeight: 500 }} 
-                                dy={10}
-                                minTickGap={20}
-                            />
-                            <YAxis 
-                                axisLine={false} 
-                                tickLine={false} 
-                                tick={{ fill: '#64748b', fontSize: 12, fontWeight: 500 }} 
-                                dx={-10}
-                                tickFormatter={(val) => val >= 1000 ? `${(val/1000).toFixed(1)}k` : val}
-                            />
-                            <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1, strokeDasharray: '4 4' }} />
-                            
-                            <Area 
-                                type="monotone" 
-                                dataKey="total_quantity" 
-                                name="Volume"
-                                stroke="#3b82f6" 
-                                strokeWidth={3}
-                                fill="url(#colorBrand)" 
-                                activeDot={{ r: 6, fill: '#0a0a0a', stroke: '#3b82f6', strokeWidth: 3 }} 
-                            />
-                        </AreaChart>
-                        </ResponsiveContainer>
-                    )}
-                </div>
+                <h1 style={{ fontSize:30, fontWeight:800, color:'#fff', letterSpacing:'-0.03em', lineHeight:1 }}>CRM Command Center</h1>
+                <p style={{ fontSize:14, color:'#4b5563', marginTop:8, fontWeight:500 }}>Live data across Leads, Vendors, Campaigns, DNC and Sessions.</p>
             </div>
 
-            {/* Split Distribution Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
-                {/* Vendors Bar Chart */}
-                <div className="lg:col-span-2 bg-[#0a0a0a] border border-white/10 rounded-3xl p-6 md:p-8 hover:border-white/20 transition-colors">
-                    <div className="mb-8">
-                        <h3 className="text-[18px] font-bold text-white mb-1">Source Networks</h3>
-                        <p className="text-[13px] text-slate-400 font-medium">Data partitioned by registered provider.</p>
-                    </div>
-                    <div className="h-[250px] w-full">
-                        {isReady && (
-                            <ResponsiveContainer width="99%" height="100%" minWidth={1} debounce={1}>
-                                <BarChart data={vendorDistribution} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+            {/* ── KPI Row ── */}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))', gap:16, marginBottom:24 }}>
+                <KpiCard index={0} icon={Database}  label="Total Leads"       value={+totals.total_contacts}  color="#3b82f6" sub="All uploaded records" />
+                <KpiCard index={1} icon={CheckCircle2} label="Available"       value={+totals.remaining_leads} color="#10b981" sub="Ready for calling" />
+                <KpiCard index={2} icon={Download}  label="Downloaded"         value={+totals.total_downloaded} color="#f97316" sub="Sent to agents" />
+                <KpiCard index={3} icon={Building2} label="Vendors"            value={+totals.total_vendors}   color="#a855f7" sub="Active suppliers" />
+                <KpiCard index={4} icon={Target}    label="Campaigns"          value={+totals.active_campaigns} color="#06b6d4" sub="Active campaigns" />
+                <KpiCard index={5} icon={ShieldBan} label="DNC Numbers"        value={+totals.dnc_count}       color="#f43f5e" sub="Blocked lines" />
+                <KpiCard index={6} icon={FolderUp}  label="Upload Sessions"    value={+totals.total_sessions}  color="#f59e0b" sub="All sessions" />
+                <KpiCard index={7} icon={Layers}    label="SALE Numbers"       value={+totals.sale_count}      color="#8b5cf6" sub="Converted lines" />
+            </div>
+
+            {/* ── Row 2: Vendor Bar + Lead Status Pie ── */}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 340px', gap:20, marginBottom:20, animation:'fadeUp .5s .25s ease both' }}>
+                {/* Vendor-wise leads */}
+                <Card>
+                    <CardHead title="Leads by Vendor" subtitle="Total records per data provider" icon={Building2} color="#a855f7" />
+                    <div style={{ padding:'24px 16px 20px', height:290 }}>
+                        {rdy && vendorDistribution?.length ? (
+                            <ResponsiveContainer width="99%" height="100%">
+                                <BarChart data={vendorDistribution} margin={{ top:5, right:5, left:-20, bottom:0 }}>
                                     <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
-                                    <XAxis 
-                                        dataKey="name" 
-                                        axisLine={false} 
-                                        tickLine={false}
-                                        tick={{ fill: '#64748b', fontSize: 12, fontWeight: 500 }} 
-                                        dy={10} 
-                                    />
-                                    <YAxis 
-                                        axisLine={false} 
-                                        tickLine={false} 
-                                        tick={{ fill: '#64748b', fontSize: 12, fontWeight: 500 }}
-                                        tickFormatter={(val) => val >= 1000 ? `${(val/1000).toFixed(1)}k` : val}
-                                        dx={-10}
-                                    />
-                                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.02)' }} />
-                                    <Bar dataKey="count" name="Records" radius={[6, 6, 6, 6]} maxBarSize={48}>
-                                        {vendorDistribution?.map((_, i) => (
-                                            <Cell key={`cell-${i}`} fill={PIE_COLORS[i % PIE_COLORS.length]} fillOpacity={0.9} className="hover:fill-opacity-100 transition-opacity cursor-pointer" />
-                                        ))}
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill:'#4b5563', fontSize:11, fontWeight:600 }} dy={12} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill:'#4b5563', fontSize:11, fontWeight:600 }} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v} dx={-8} />
+                                    <Tooltip content={<Tip />} cursor={{ fill:'rgba(255,255,255,0.03)', radius:6 }} />
+                                    <Bar dataKey="count" name="Leads" radius={[8,8,4,4]} maxBarSize={52} animationDuration={1400}>
+                                        {vendorDistribution.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]} fillOpacity={0.85} />)}
                                     </Bar>
                                 </BarChart>
                             </ResponsiveContainer>
-                        )}
+                        ) : <EmptyState label="No vendor data yet" />}
                     </div>
-                </div>
+                </Card>
 
-                {/* Geography Donut */}
-                <div className="bg-[#0a0a0a] border border-white/10 rounded-3xl p-6 md:p-8 flex flex-col hover:border-white/20 transition-colors">
-                    <div className="mb-6">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Globe size={16} className="text-emerald-400" />
-                            <h3 className="text-[12px] font-bold uppercase tracking-widest text-emerald-400">Demographics</h3>
-                        </div>
-                        <h2 className="text-[18px] font-bold text-white">Global Reach</h2>
-                    </div>
-                    
-                    <div className="flex-1 min-h-[220px] relative flex items-center justify-center">
-                        {isReady && (
-                            <ResponsiveContainer width="99%" height="100%" minWidth={1} debounce={1}>
-                                <PieChart>
-                                    <Pie 
-                                        data={countryDistribution} 
-                                        innerRadius={65} 
-                                        outerRadius={90}
-                                        paddingAngle={4} 
-                                        dataKey="count" 
-                                        nameKey="country_code" 
-                                        stroke="none"
-                                        cornerRadius={6}
-                                    >
-                                        {countryDistribution?.map((_, i) => (
-                                            <Cell key={`pie-cell-${i}`} fill={PIE_COLORS[i % PIE_COLORS.length]} className="hover:opacity-80 transition-opacity outline-none cursor-pointer" />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip content={<CustomTooltip />} />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        )}
-                        
-                        {/* Center text */}
-                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-1">
-                            <span className="text-[2rem] font-bold text-white leading-none">{countryDistribution?.length || 0}</span>
-                        </div>
-                    </div>
-                    
-                    {/* Modern Legend */}
-                    <div className="mt-6 pt-6 border-t border-white/5 space-y-3">
-                        {countryDistribution?.slice(0, 4).map((e, i) => (
-                            <div key={e.country_code} className="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 transition-colors">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs" style={{ background: `${PIE_COLORS[i % PIE_COLORS.length]}20`, color: PIE_COLORS[i % PIE_COLORS.length] }}>
-                                        {e.country_code}
-                                    </div>
-                                    <span className="text-[13px] text-slate-300 font-medium tracking-wide">
-                                        {e.country_code === 'US' ? 'United States' : e.country_code === 'UK' ? 'United Kingdom' : e.country_code === 'CA' ? 'Canada' : e.country_code}
-                                    </span>
-                                </div>
-                                <span className="text-[13px] text-white font-bold bg-white/5 px-2.5 py-1 rounded-lg">{(e.count || 0).toLocaleString()}</span>
+                {/* Lead Status Donut */}
+                <Card>
+                    <CardHead title="Lead Status" subtitle="Breakdown by current state" icon={Database} color="#3b82f6" />
+                    <div style={{ padding:'16px 16px 0' }}>
+                        <div style={{ position:'relative', height:200 }}>
+                            {rdy && statusPieData.length ? (
+                                <ResponsiveContainer width="99%" height="100%">
+                                    <PieChart>
+                                        <Pie data={statusPieData} innerRadius={60} outerRadius={88} paddingAngle={4} dataKey="value" nameKey="name" stroke="transparent" cornerRadius={6} animationDuration={1400}>
+                                            {statusPieData.map((s,i)=><Cell key={i} fill={s.fill} />)}
+                                        </Pie>
+                                        <Tooltip content={<Tip />} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            ) : <EmptyState label="No lead data yet" />}
+                            <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', pointerEvents:'none' }}>
+                                <span style={{ fontSize:26, fontWeight:800, color:'#fff' }}>{(+totals.total_contacts||0).toLocaleString()}</span>
+                                <span style={{ fontSize:10, color:'#4b5563', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', marginTop:2 }}>Total</span>
                             </div>
+                        </div>
+                        {/* Legend */}
+                        <div style={{ padding:'14px 4px 18px', display:'flex', flexDirection:'column', gap:8 }}>
+                            {statusPieData.map(s=>(
+                                <div key={s.name} style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                        <span style={{ width:10, height:10, borderRadius:3, background:s.fill, display:'inline-block', flexShrink:0 }} />
+                                        <span style={{ fontSize:12, color:'#9ca3af', fontWeight:600, textTransform:'capitalize' }}>{s.name}</span>
+                                    </div>
+                                    <span style={{ fontSize:13, fontWeight:700, color:'#fff', fontVariantNumeric:'tabular-nums' }}>{s.value?.toLocaleString()}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </Card>
+            </div>
+
+            {/* ── Row 3: Campaign Bar + DNC Stacked Bar ── */}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, marginBottom:20, animation:'fadeUp .5s .4s ease both' }}>
+                {/* Campaign Leads */}
+                <Card>
+                    <CardHead title="Leads by Campaign" subtitle="Records tied to each active campaign" icon={Target} color="#06b6d4" />
+                    <div style={{ padding:'24px 16px 20px', height:270 }}>
+                        {rdy && campaignStats?.length ? (
+                            <ResponsiveContainer width="99%" height="100%">
+                                <BarChart data={campaignStats} layout="vertical" margin={{ top:5, right:20, left:10, bottom:0 }}>
+                                    <CartesianGrid stroke="rgba(255,255,255,0.04)" horizontal={false}/>
+                                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill:'#4b5563', fontSize:11, fontWeight:600 }} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v} />
+                                    <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill:'#9ca3af', fontSize:11, fontWeight:600 }} width={90} />
+                                    <Tooltip content={<Tip />} cursor={{ fill:'rgba(255,255,255,0.03)' }} />
+                                    <Bar dataKey="count" name="Leads" radius={[0,6,6,0]} maxBarSize={26} fill="#06b6d4" fillOpacity={0.85} animationDuration={1400} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : <EmptyState label="No campaign data yet" />}
+                    </div>
+                </Card>
+
+                {/* DNC / SALE per campaign */}
+                <Card>
+                    <CardHead title="DNC & SALE by Campaign" subtitle="Blocked vs converted numbers per campaign" icon={ShieldBan} color="#f43f5e"
+                        badge={<div style={{ display:'flex', gap:10 }}>
+                            <span style={{ fontSize:11, color:'#f43f5e', fontWeight:700, display:'flex', alignItems:'center', gap:5 }}><span style={{ width:8,height:8,borderRadius:2,background:'#f43f5e',display:'inline-block'}} />DNC</span>
+                            <span style={{ fontSize:11, color:'#8b5cf6', fontWeight:700, display:'flex', alignItems:'center', gap:5 }}><span style={{ width:8,height:8,borderRadius:2,background:'#8b5cf6',display:'inline-block'}} />SALE</span>
+                        </div>}
+                    />
+                    <div style={{ padding:'24px 16px 20px', height:270 }}>
+                        {rdy && dncStats?.length ? (
+                            <ResponsiveContainer width="99%" height="100%">
+                                <BarChart data={dncStats} layout="vertical" margin={{ top:5, right:20, left:10, bottom:0 }}>
+                                    <CartesianGrid stroke="rgba(255,255,255,0.04)" horizontal={false}/>
+                                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill:'#4b5563', fontSize:11, fontWeight:600 }} />
+                                    <YAxis dataKey="campaign" type="category" axisLine={false} tickLine={false} tick={{ fill:'#9ca3af', fontSize:11, fontWeight:600 }} width={80} />
+                                    <Tooltip content={<Tip />} cursor={{ fill:'rgba(255,255,255,0.03)' }} />
+                                    <Bar dataKey="dnc_count"  name="DNC"  radius={[0,4,4,0]} maxBarSize={14} fill="#f43f5e" fillOpacity={0.85} animationDuration={1400} />
+                                    <Bar dataKey="sale_count" name="SALE" radius={[0,4,4,0]} maxBarSize={14} fill="#8b5cf6" fillOpacity={0.85} animationDuration={1400} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : <EmptyState label="No DNC/SALE data yet" />}
+                    </div>
+                </Card>
+            </div>
+
+            {/* ── Row 4: Recent Sessions Table ── */}
+            <Card style={{ animation:'fadeUp .5s .55s ease both' }}>
+                <CardHead title="Recent Upload Sessions" subtitle="Latest data ingestion activity" icon={FolderUp} color="#f59e0b"
+                    badge={<StatusBadge label="Live" positive />}
+                />
+                <div style={{ padding:'4px 0 4px' }}>
+                    {/* Table Header */}
+                    <div style={{ display:'grid', gridTemplateColumns:'1.5fr 1.5fr 100px 130px', padding:'10px 24px', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
+                        {['Campaign','Vendor','Jobs','Date'].map(h=>(
+                            <span key={h} style={{ fontSize:10, fontWeight:700, color:'#4b5563', textTransform:'uppercase', letterSpacing:'0.09em' }}>{h}</span>
                         ))}
                     </div>
+                    {recentSessions?.length ? recentSessions.map((s,i)=>(
+                        <div key={i} style={{ display:'grid', gridTemplateColumns:'1.5fr 1.5fr 100px 130px', padding:'14px 24px', borderBottom: i<recentSessions.length-1?'1px solid rgba(255,255,255,0.03)':'none', alignItems:'center', transition:'background .2s' }}
+                            onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.02)'}
+                            onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                        >
+                            <span style={{ fontSize:13, color:'#e5e7eb', fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', paddingRight:12 }}>{s.campaign_type||'—'}</span>
+                            <span style={{ fontSize:12, color:'#9ca3af', fontWeight:500 }}>{s.vendor_name||'—'}</span>
+                            <span style={{ fontSize:13, color:'#f97316', fontWeight:700, fontVariantNumeric:'tabular-nums' }}>{(+s.job_count||0)}</span>
+                            <span style={{ fontSize:11, color:'#6b7280', fontWeight:500 }}>{new Date(s.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
+                        </div>
+                    )) : (
+                        <EmptyState label="No upload sessions found" style={{ padding:40 }} />
+                    )}
                 </div>
-            </div>
-            
-            <style jsx="true">{`
-                .recharts-default-tooltip { outline: none !important; }
-            `}</style>
+            </Card>
         </div>
     );
 };
+
+const EmptyState = ({ label, style={} }) => (
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100%', gap:10, opacity:0.4, ...style }}>
+        <AlertCircle size={28} color="#6b7280" strokeWidth={1.5} />
+        <span style={{ fontSize:13, color:'#6b7280', fontWeight:500 }}>{label}</span>
+    </div>
+);
 
 export default Dashboard;
