@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import { getAreaCodeState } from '../utils/areaCodes';
-import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, Database, ListFilter } from 'lucide-react';
 
 const LeadsTable = () => {
     const [leads, setLeads] = useState([]);
@@ -50,233 +50,215 @@ const LeadsTable = () => {
     };
 
     return (
-        <div style={{ fontFamily: "'Inter', sans-serif" }}>
+        <div className="max-w-[1400px] mx-auto space-y-6 font-sans pb-12">
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28, flexWrap: 'wrap', gap: 16 }}>
+            <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between mb-8 flex-wrap gap-6 border-b border-white/5 pb-6">
                 <div>
-                    <h1 style={{ fontSize: 26, fontWeight: 800, color: '#fff', margin: 0 }}>All Data</h1>
-                    <p style={{ color: '#6b7280', fontSize: 13, margin: '4px 0 0' }}>
-                        Browse and filter through all uploaded data records ({total.toLocaleString()} total)
+                    <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
+                        <Database className="w-8 h-8 text-brand-400" /> All Data
+                    </h1>
+                    <p className="text-slate-400 text-sm mt-2 font-medium">
+                        Browse and filter through all uploaded data records <span className="text-white font-mono bg-white/5 px-2 py-0.5 rounded-md ml-1 border border-white/10">{total.toLocaleString()} total</span>
                     </p>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{
-                        display: 'flex', alignItems: 'center', background: '#0f1117',
-                        border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '8px 16px',
-                        width: 320, transition: 'border-color 0.2s'
-                    }}>
-                        <Search size={16} color="#6b7280" />
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full xl:w-auto">
+                    {/* Search Field */}
+                    <div className="flex items-center bg-[#0a0a0f] border border-white/10 hover:border-brand-500/50 rounded-xl px-4 py-2.5 w-full sm:w-80 transition-all focus-within:ring-2 focus-within:ring-brand-500/20 focus-within:border-brand-500 group shadow-inner">
+                        <Search className="w-4 h-4 text-slate-500 group-focus-within:text-brand-400 transition-colors" />
                         <input 
                             type="text" 
-                            placeholder="Search by state (e.g. New York), name, or phone..."
+                            placeholder="Search state, name, or phone..."
                             value={search}
                             onChange={e => setSearch(e.target.value)}
                             onKeyDown={handleSearch}
-                            style={{
-                                background: 'transparent', border: 'none', color: '#fff', fontSize: 13,
-                                outline: 'none', width: '100%', marginLeft: 10
-                            }}
+                            className="bg-transparent border-none text-white text-[13px] outline-none w-full ml-3 placeholder:text-slate-600 font-medium"
                         />
                     </div>
                     
-                    <select
-                        value={filterDisposition}
-                        onChange={e => {
-                            setFilterDisposition(e.target.value);
-                            fetchLeads(1, { disposition: e.target.value });
-                        }}
-                        style={{
-                            background: '#0f1117', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10,
-                            padding: '9px 16px', color: filterDisposition ? '#f59e0b' : '#6b7280', fontSize: 13,
-                            outline: 'none', cursor: 'pointer', transition: 'border-color 0.2s', appearance: 'none'
-                        }}
-                    >
-                        <option value="">All Dispositions</option>
-                        {['PDROP', 'AB', 'ADC', 'A', 'AA', 'RAXFER', 'NP', 'DC', 'DNQ', 'N', 'BN', 'LRERR', 'NI', 'NA', 'LH', 'R1', 'BDNC', 'CALLBK'].map(d => (
-                            <option key={d} value={d}>{d}</option>
-                        ))}
-                    </select>
+                    {/* Filters Wrapper */}
+                    <div className="flex items-center gap-4 w-full sm:w-auto">
+                        <div className="relative group flex-1 sm:flex-none">
+                            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-brand-400">
+                                <ListFilter className="w-4 h-4" />
+                            </div>
+                            <select
+                                value={filterDisposition}
+                                onChange={e => {
+                                    setFilterDisposition(e.target.value);
+                                    fetchLeads(1, { disposition: e.target.value });
+                                }}
+                                className={`bg-[#0a0a0f] border border-white/10 hover:border-brand-500/50 rounded-xl py-2.5 pl-10 pr-10 outline-none cursor-pointer transition-all appearance-none text-[13px] font-medium w-full shadow-inner focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 ${filterDisposition ? 'text-brand-400 border-brand-500/30' : 'text-slate-400'}`}
+                            >
+                                <option value="">All Dispositions</option>
+                                {['PDROP', 'AB', 'ADC', 'A', 'AA', 'RAXFER', 'NP', 'DC', 'DNQ', 'N', 'BN', 'LRERR', 'NI', 'NA', 'LH', 'R1', 'BDNC', 'CALLBK'].map(d => (
+                                    <option key={d} value={d} className="bg-[#1e1e2d] text-white py-2">{d}</option>
+                                ))}
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 group-hover:text-brand-400">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </div>
+                        </div>
 
-                    <button 
-                        onClick={() => fetchLeads(1)}
-                        style={{
-                            background: '#f59e0b', color: '#111', border: 'none', borderRadius: 10,
-                            padding: '10px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                            transition: 'background 0.2s', boxShadow: '0 4px 14px rgba(245,158,11,0.2)'
-                        }}
-                    >
-                        Search
-                    </button>
+                        <button 
+                            onClick={() => fetchLeads(1)}
+                            className="bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white px-6 py-2.5 rounded-xl font-bold transition-all shadow-[0_4px_14px_rgba(59,130,246,0.3)] active:scale-[0.98] text-[13px] whitespace-nowrap"
+                        >
+                            Search
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            {/* Table */}
-            <div style={{ background: '#13151e', borderRadius: 14, border: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-                {/* Table Header */}
-                <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'minmax(200px, 1.5fr) 140px minmax(200px, 1.5fr) 100px 90px 140px 120px',
-                    padding: '16px 24px',
-                    borderBottom: '1px solid rgba(255,255,255,0.06)',
-                    background: 'rgba(0,0,0,0.2)'
-                }}>
-                    {['Name', 'Phone', 'Email', 'Area Code', 'State', 'Disposition', 'Status'].map(h => (
-                        <span key={h} style={{ color: '#6b7280', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                            {h}
-                        </span>
-                    ))}
-                </div>
+            {/* Table Container */}
+            <div className="bg-[#1e1e2d] rounded-[2rem] border border-white/5 overflow-x-auto shadow-2xl relative">
+                {/* Decorative glow */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-brand-500/5 rounded-full blur-[120px] pointer-events-none z-0"></div>
 
-                {/* Table Body */}
-                {loading ? (
-                    <div style={{ padding: 60, textAlign: 'center', color: '#6b7280' }}>Loading data...</div>
-                ) : leads.length === 0 ? (
-                    <div style={{ padding: 60, textAlign: 'center', color: '#6b7280' }}>
-                        <div style={{ fontSize: 40, marginBottom: 10 }}>📁</div>
-                        <p style={{ margin: 0 }}>No data found</p>
+                <div className="min-w-[1000px] relative z-10">
+                    {/* Table Header */}
+                    <div className="grid grid-cols-[minmax(200px,1.5fr)_140px_minmax(200px,1.5fr)_100px_100px_140px_120px] p-5 border-b border-white/10 bg-[#0a0a0f]/80 backdrop-blur-md sticky top-0">
+                        {['Name', 'Phone', 'Email', 'Area Code', 'State', 'Disposition', 'Status'].map(h => (
+                            <span key={h} className="text-slate-400 text-[11px] font-bold uppercase tracking-widest pl-2">
+                                {h}
+                            </span>
+                        ))}
                     </div>
-                ) : (
-                    leads.map((lead, i) => (
-                        <div key={lead.id} style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'minmax(200px, 1.5fr) 140px minmax(200px, 1.5fr) 100px 90px 140px 120px',
-                            padding: '16px 24px',
-                            borderBottom: i < leads.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none',
-                            alignItems: 'center',
-                            transition: 'background 0.2s',
-                            cursor: 'default'
-                        }}
-                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
-                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                        >
-                            {/* Name */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingRight: 16 }}>
-                                <div style={{
-                                    width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
-                                    background: 'rgba(245,158,11,0.1)',
-                                    border: '1px solid rgba(245,158,11,0.2)',
-                                    display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center',
-                                    color: '#f59e0b', fontSize: 13, fontWeight: 700
-                                }}>
-                                    {getInitials(lead.name)}
+
+                    {/* Table Body */}
+                    <div className="divide-y divide-white/5">
+                        {loading ? (
+                            <div className="p-16 text-center text-brand-400 animate-pulse font-medium tracking-widest uppercase text-sm">Loading records...</div>
+                        ) : leads.length === 0 ? (
+                            <div className="p-16 text-center text-slate-500">
+                                <Database className="w-12 h-12 mb-4 opacity-20 mx-auto" strokeWidth={1.5} />
+                                <p className="font-medium text-[15px] mb-2 text-slate-400">No records found matching your criteria</p>
+                                <p className="text-xs">Try adjusting your search terms or disposition filter.</p>
+                            </div>
+                        ) : (
+                            leads.map((lead) => (
+                                <div key={lead.id} className="grid grid-cols-[minmax(200px,1.5fr)_140px_minmax(200px,1.5fr)_100px_100px_140px_120px] p-4 items-center hover:bg-white/5 transition-colors group cursor-default">
+                                    {/* Name */}
+                                    <div className="flex items-center gap-3 pr-4 pl-2">
+                                        <div className="w-9 h-9 rounded-full shrink-0 bg-brand-500/10 border border-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-xs shadow-inner group-hover:scale-110 transition-transform">
+                                            {getInitials(lead.name)}
+                                        </div>
+                                        <div className="overflow-hidden">
+                                            <p className={`font-bold text-[14px] truncate mb-0.5 transition-colors ${lead.name ? 'text-white group-hover:text-brand-300' : 'text-slate-500 font-medium'}`}>
+                                                {lead.name || '—'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Phone */}
+                                    <div className="text-slate-300 text-[13px] font-mono tracking-wide">
+                                        {lead.phone}
+                                    </div>
+                                    
+                                    {/* Email */}
+                                    <div className="text-slate-500 text-[13px] pr-4 truncate font-medium">
+                                        {lead.email || '—'}
+                                    </div>
+
+                                    {/* Area Code */}
+                                    <div>
+                                        <span className="inline-flex px-2.5 py-1 rounded-md text-[11px] font-bold bg-[#0a0a0f] text-slate-400 border border-white/10 font-mono shadow-sm">
+                                            {(() => {
+                                                if (lead.area_code && lead.area_code !== 'Unknown') return lead.area_code;
+                                                const clean = lead.phone.replace(/\D/g, '');
+                                                if (clean.length === 11 && clean.startsWith('1')) return clean.substring(1, 4);
+                                                if (clean.length === 10) return clean.substring(0, 3);
+                                                return lead.area_code || '—';
+                                            })()}
+                                        </span>
+                                    </div>
+
+                                    {/* State */}
+                                    <div>
+                                        <span className="inline-flex px-3 py-1 rounded-md text-[10px] font-bold tracking-widest uppercase bg-purple-500/10 text-purple-400 border border-purple-500/20 shadow-sm">
+                                            {(() => {
+                                                let code = lead.area_code;
+                                                if (!code || code === 'Unknown') {
+                                                    const clean = lead.phone.replace(/\D/g, '');
+                                                    if (clean.length === 11 && clean.startsWith('1')) code = clean.substring(1, 4);
+                                                    else if (clean.length === 10) code = clean.substring(0, 3);
+                                                }
+                                                return getAreaCodeState(code);
+                                            })()}
+                                        </span>
+                                    </div>
+
+                                    {/* Disposition */}
+                                    <div>
+                                        <span className="inline-flex px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                                            {lead.disposition || '—'}
+                                        </span>
+                                    </div>
+
+                                    {/* Status */}
+                                    <div>
+                                        <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border shadow-sm ${
+                                            lead.status === 'available' 
+                                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                                                : 'bg-[#0a0a0f] text-slate-500 border-white/5'
+                                        }`}>
+                                            <div className={`w-1.5 h-1.5 rounded-full ${lead.status === 'available' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-slate-500'}`}></div>
+                                            {lead.status === 'available' ? 'Available' : 'Used'}
+                                        </span>
+                                    </div>
                                 </div>
-                                <div style={{ overflow: 'hidden' }}>
-                                    <p style={{ color: '#fff', fontWeight: 600, fontSize: 14, margin: '0 0 2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                        {lead.name ? lead.name : '\u00A0'}
-                                    </p>
-                                </div>
-                            </div>
+                            ))
+                        )}
+                    </div>
+
+                    {/* Pagination */}
+                    <div className="p-4 sm:p-5 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#0a0a0f]/50 backdrop-blur-md rounded-b-[2rem]">
+                        <span className="text-slate-500 text-[12px] font-medium tracking-wide uppercase ml-2">
+                            Showing <span className="text-white font-mono mx-1">{total === 0 ? 0 : (page - 1) * limit + 1}-{Math.min(page * limit, total)}</span> of <span className="text-white font-mono ml-1">{total}</span>
+                        </span>
+                        
+                        <div className="flex items-center gap-2 mr-2">
+                            <button 
+                                onClick={() => fetchLeads(Math.max(1, page - 1))} 
+                                disabled={page === 1}
+                                className="bg-[#1e1e2d] border border-white/10 hover:border-white/20 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg p-2.5 transition-colors active:scale-95 shadow-sm"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
                             
-                            {/* Phone */}
-                            <div style={{ color: '#d1d5db', fontSize: 13, fontFamily: 'monospace', fontWeight: 500 }}>
-                                {lead.phone}
-                            </div>
-                            
-                            {/* Email */}
-                            <div style={{ color: '#9ca3af', fontSize: 13, paddingRight: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {lead.email || '—'}
-                            </div>
-
-                            {/* Area Code */}
-                            <div>
-                                <span style={{
-                                    display: 'inline-flex', padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700,
-                                    background: 'rgba(255,255,255,0.05)', color: '#d1d5db', border: '1px solid rgba(255,255,255,0.1)'
-                                }}>
-                                    {(() => {
-                                        if (lead.area_code && lead.area_code !== 'Unknown') return lead.area_code;
-                                        // Fallback extraction
-                                        const clean = lead.phone.replace(/\D/g, '');
-                                        if (clean.length === 11 && clean.startsWith('1')) return clean.substring(1, 4);
-                                        if (clean.length === 10) return clean.substring(0, 3);
-                                        return lead.area_code || '—';
-                                    })()}
-                                </span>
+                            <div className="flex gap-1.5">
+                                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                    let start = Math.max(1, page - 2);
+                                    let end = Math.min(totalPages, start + 4);
+                                    if (end - start < 4) start = Math.max(1, end - 4);
+                                    const p = start + i;
+                                    if (p > totalPages) return null;
+                                    
+                                    const isActive = page === p;
+                                    return (
+                                        <button 
+                                            key={p} 
+                                            onClick={() => fetchLeads(p)}
+                                            className={`w-9 h-9 rounded-xl flex items-center justify-center text-[13px] font-bold transition-all ${
+                                                isActive 
+                                                    ? 'bg-gradient-to-br from-brand-600 to-brand-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-brand-400/50' 
+                                                    : 'bg-[#1e1e2d] border border-white/5 text-slate-400 hover:text-white hover:border-white/20 hover:bg-white/5'
+                                            }`}
+                                        >
+                                            {p}
+                                        </button>
+                                    );
+                                })}
                             </div>
 
-                            {/* State */}
-                            <div>
-                                <span style={{
-                                    display: 'inline-flex', padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 800,
-                                    background: 'rgba(99,102,241,0.15)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.3)'
-                                }}>
-                                    {(() => {
-                                        let code = lead.area_code;
-                                        if (!code || code === 'Unknown') {
-                                            const clean = lead.phone.replace(/\D/g, '');
-                                            if (clean.length === 11 && clean.startsWith('1')) code = clean.substring(1, 4);
-                                            else if (clean.length === 10) code = clean.substring(0, 3);
-                                        }
-                                        return getAreaCodeState(code);
-                                    })()}
-                                </span>
-                            </div>
-
-                            {/* Disposition */}
-                            <div>
-                                <span style={{
-                                    display: 'inline-flex', padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-                                    color: '#d1d5db'
-                                }}>
-                                    {lead.disposition || '—'}
-                                </span>
-                            </div>
-
-                            {/* Status */}
-                            <div>
-                                <span style={{
-                                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                                    padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700,
-                                    background: lead.status === 'available' ? 'rgba(16,185,129,0.1)' : 'rgba(107,114,128,0.1)',
-                                    color: lead.status === 'available' ? '#10b981' : '#9ca3af',
-                                }}>
-                                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: lead.status === 'available' ? '#10b981' : '#9ca3af', boxShadow: lead.status === 'available' ? '0 0 8px rgba(16,185,129,0.6)' : 'none' }}></div>
-                                    {lead.status === 'available' ? 'Available' : 'Unavailable'}
-                                </span>
-                            </div>
+                            <button 
+                                onClick={() => fetchLeads(Math.min(totalPages, page + 1))} 
+                                disabled={page === totalPages || totalPages === 0}
+                                className="bg-[#1e1e2d] border border-white/10 hover:border-white/20 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg p-2.5 transition-colors active:scale-95 shadow-sm"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
                         </div>
-                    ))
-                )}
-
-                {/* Footer / Pagination */}
-                <div style={{
-                    padding: '14px 20px', borderTop: '1px solid rgba(255,255,255,0.06)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-                }}>
-                    <span style={{ color: '#6b7280', fontSize: 13 }}>
-                        Showing {total === 0 ? 0 : (page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total} items
-                    </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <button onClick={() => fetchLeads(Math.max(1, page - 1))} disabled={page === 1}
-                            style={{ background: 'none', border: '1px solid rgba(255,255,255,0.08)', color: page === 1 ? '#374151' : '#9ca3af', cursor: page === 1 ? 'not-allowed' : 'pointer', borderRadius: 6, padding: '6px 10px' }}>
-                            <ChevronLeft size={14} />
-                        </button>
-                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                            // Calculate which pages to show (window around current page)
-                            let start = Math.max(1, page - 2);
-                            let end = Math.min(totalPages, start + 4);
-                            if (end - start < 4) start = Math.max(1, end - 4);
-                            const p = start + i;
-                            if (p > totalPages) return null;
-                            
-                            return (
-                                <button key={p} onClick={() => fetchLeads(p)}
-                                    style={{
-                                        width: 32, height: 32, borderRadius: 6, border: 'none', cursor: 'pointer',
-                                        background: page === p ? '#f59e0b' : 'none',
-                                        color: page === p ? '#111' : '#9ca3af',
-                                        fontWeight: page === p ? 700 : 400, fontSize: 13,
-                                        transition: 'background 0.2s'
-                                    }}>
-                                    {p}
-                                </button>
-                            );
-                        })}
-                        <button onClick={() => fetchLeads(Math.min(totalPages, page + 1))} disabled={page === totalPages || totalPages === 0}
-                            style={{ background: 'none', border: '1px solid rgba(255,255,255,0.08)', color: page === totalPages ? '#374151' : '#9ca3af', cursor: page === totalPages ? 'not-allowed' : 'pointer', borderRadius: 6, padding: '6px 10px' }}>
-                            <ChevronRight size={14} />
-                        </button>
                     </div>
                 </div>
             </div>

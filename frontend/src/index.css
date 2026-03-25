@@ -49,18 +49,28 @@
 
 /* Elegant Scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
-  height: 6px;
-  width: 6px;
+  height: 4px;
+  width: 4px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 10px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Date Input Icons */
+.custom-date-input::-webkit-calendar-picker-indicator {
+  filter: invert(0.6);
+  cursor: pointer;
+  transition: filter 0.2s;
+}
+.custom-date-input::-webkit-calendar-picker-indicator:hover {
+  filter: invert(0.8);
 }
 
 /* Chart Tooltip Customization */

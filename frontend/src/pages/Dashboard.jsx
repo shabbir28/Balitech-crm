@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../services/api';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -262,8 +263,8 @@ const Dashboard = () => {
                             <span key={h} style={{ fontSize:10, fontWeight:700, color:'#4b5563', textTransform:'uppercase', letterSpacing:'0.09em' }}>{h}</span>
                         ))}
                     </div>
-                    {recentSessions?.length ? recentSessions.map((s,i)=>(
-                        <div key={i} style={{ display:'grid', gridTemplateColumns:'1.5fr 1.5fr 100px 130px', padding:'14px 24px', borderBottom: i<recentSessions.length-1?'1px solid rgba(255,255,255,0.03)':'none', alignItems:'center', transition:'background .2s' }}
+                    {recentSessions?.length ? recentSessions.slice(0, 5).map((s,i)=>(
+                        <div key={i} style={{ display:'grid', gridTemplateColumns:'1.5fr 1.5fr 100px 130px', padding:'14px 24px', borderBottom: i<Math.min(recentSessions.length, 5)-1?'1px solid rgba(255,255,255,0.03)':'none', alignItems:'center', transition:'background .2s' }}
                             onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.02)'}
                             onMouseLeave={e=>e.currentTarget.style.background='transparent'}
                         >
@@ -274,6 +275,16 @@ const Dashboard = () => {
                         </div>
                     )) : (
                         <EmptyState label="No upload sessions found" style={{ padding:40 }} />
+                    )}
+                    {recentSessions?.length > 0 && (
+                        <div style={{ padding: '14px 24px', borderTop: '1px solid rgba(255,255,255,0.04)', display: 'flex', justifyContent: 'center', background: 'rgba(0,0,0,0.1)' }}>
+                            <Link to="/sessions" style={{ fontSize: 12, fontWeight: 700, color: '#f59e0b', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, transition: 'color 0.2s' }}
+                                onMouseEnter={e=>e.currentTarget.style.color='#fbbf24'}
+                                onMouseLeave={e=>e.currentTarget.style.color='#f59e0b'}
+                            >
+                                View All Sessions <ArrowUpRight size={14} />
+                            </Link>
+                        </div>
                     )}
                 </div>
             </Card>

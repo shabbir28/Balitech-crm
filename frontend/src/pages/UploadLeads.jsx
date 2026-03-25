@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
-import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Database, Building2, Layers } from 'lucide-react';
 
 const UploadLeads = () => {
     const [vendors, setVendors] = useState([]);
@@ -65,33 +65,44 @@ const UploadLeads = () => {
         }
     };
 
+    const stepIcons = [Building2, Layers, Database];
+
     return (
-        <div className="min-h-screen bg-[#60636f] text-gray-200 font-sans">
+        <div className="w-full h-full flex flex-col font-sans">
             
-            {/* Top Light Section */}
-            <div className="bg-[#f2f4f7] pt-8 pb-8 flex justify-center border-b border-gray-300">
-                {/* Stepper */}
-                <div className="w-full max-w-3xl relative mt-4">
-                    <div className="flex justify-between items-center relative z-10 px-12">
-                        {/* Connecting Line */}
-                        <div className="absolute top-1/2 left-[15%] right-[15%] h-0.5 bg-gray-300 -z-10"></div>
-                        
+            {/* Premium Stepper Header */}
+            <div className="bg-[#1e1e2d] border border-white/5 rounded-2xl p-6 sm:p-8 mb-8 shadow-sm">
+                <div className="w-full max-w-4xl mx-auto relative px-4 sm:px-12">
+                    {/* Connecting Line */}
+                    <div className="absolute top-6 left-[15%] right-[15%] h-[2px] bg-white/5 -z-10 rounded-full"></div>
+                    {/* Progress Line */}
+                    <div className="absolute top-6 left-[15%] h-[2px] bg-brand-500 -z-10 rounded-full transition-all duration-500 ease-out" 
+                         style={{ width: step === 1 ? '0%' : step === 2 ? '35%' : '70%' }}></div>
+                    
+                    <div className="flex justify-between items-start relative z-10">
                         {['Select Vendor', 'Select Campaign', 'Add Jobs'].map((label, index) => {
                             const stepNum = index + 1;
                             const isActive = step === stepNum;
                             const isPast = step > stepNum;
+                            const StepIcon = stepIcons[index];
                             
                             return (
-                                <div key={label} className="flex flex-col items-center bg-[#f0f1f3] px-2">
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg relative z-10 border-4 border-white shadow-sm ${
-                                        isActive || isPast ? 'bg-[#f57c00] text-white' : 
-                                        'bg-white text-gray-400 border-gray-200'
+                                <div key={label} className="flex flex-col items-center w-32 text-center group">
+                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-sm ${
+                                        isActive || isPast 
+                                            ? 'bg-gradient-to-br from-brand-500 to-brand-600 text-white shadow-[0_0_20px_rgba(59,130,246,0.3)] border border-brand-400/50 scale-110' 
+                                            : 'bg-[#0a0a0f] text-slate-500 border border-white/10'
                                     }`}>
-                                        {isPast ? <Check className="w-5 h-5 font-bold" /> : stepNum}
+                                        {isPast ? <Check className="w-6 h-6 stroke-[3]" /> : <StepIcon className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : ''}`} />}
                                     </div>
-                                    <span className={`text-sm mt-3 font-semibold ${isActive || isPast ? 'text-[#f57c00]' : 'text-gray-500'}`}>
+                                    <span className={`text-[13px] mt-4 font-semibold tracking-wide transition-colors ${
+                                        isActive || isPast ? 'text-brand-400' : 'text-slate-500 group-hover:text-slate-400'
+                                    }`}>
                                         {label}
                                     </span>
+                                    {isActive && (
+                                        <div className="mt-2 text-[11px] text-slate-500 uppercase tracking-widest font-bold bg-white/5 px-2 py-0.5 rounded-full border border-white/5">Current</div>
+                                    )}
                                 </div>
                             );
                         })}
@@ -100,107 +111,139 @@ const UploadLeads = () => {
             </div>
 
             {/* Content Section */}
-            <div className="flex flex-col items-center pt-16 pb-20 px-4 bg-[#60636f]">
-                <div className="w-full max-w-lg">
-                    
-                    {step === 1 && (
-                        <div className="animate-fade-in flex flex-col items-center text-center">
-                            <h2 className="text-2xl font-bold text-white mb-2 tracking-wide">Select Vendor Source</h2>
-                            <p className="text-gray-300 mb-10 text-sm">Choose the vendor this data was acquired from to begin the upload session.</p>
-                            
-                            <div className="w-full relative group mb-6">
+            <div className="flex-1 flex flex-col items-center w-full max-w-2xl mx-auto">
+                {step === 1 && (
+                    <div className="w-full bg-[#1e1e2d] border border-white/5 rounded-2xl p-8 sm:p-12 shadow-[0_8px_30px_rgb(0,0,0,0.12)] animate-fade-in relative overflow-hidden">
+                        {/* Decorative glow */}
+                        <div className="absolute -top-24 -right-24 w-48 h-48 bg-brand-500/10 rounded-full blur-[60px] pointer-events-none"></div>
+
+                        <div className="text-center mb-10 relative z-10">
+                            <div className="w-14 h-14 bg-brand-500/10 border border-brand-500/20 rounded-2xl flex items-center justify-center mx-auto mb-5 text-brand-400">
+                                <Building2 size={24} />
+                            </div>
+                            <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">Select Vendor Source</h2>
+                            <p className="text-[14px] text-slate-400 font-medium">Choose the vendor this data was acquired from to begin the upload session.</p>
+                        </div>
+                        
+                        <div className="w-full relative group mb-8 z-10 max-w-lg mx-auto">
+                            <label className="block text-slate-400 text-xs font-bold mb-2 uppercase tracking-wide ml-1">Select A Vendor</label>
+                            <div className="relative">
+                                {/* Decorative Icon */}
+                                <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-brand-400">
+                                    <Building2 className="w-5 h-5" />
+                                </div>
                                 <select 
-                                    className="w-full bg-[#4E515C] border border-[#5E616E] text-white rounded-lg py-4 px-5 appearance-none focus:outline-none focus:border-orange-500 transition-colors font-medium shadow-sm cursor-pointer hover:bg-[#555864]"
+                                    className="w-full bg-[#0a0a0f] border-2 border-white/10 hover:border-brand-500/50 text-white rounded-2xl py-4 pl-12 pr-10 appearance-none focus:outline-none focus:ring-4 focus:ring-brand-500/20 focus:border-brand-500 transition-all font-medium shadow-inner cursor-pointer text-[15px]"
                                     value={selectedVendor}
                                     onChange={(e) => {
                                         setSelectedVendor(e.target.value);
                                         setError('');
                                     }}
                                 >
-                                    <option value="" disabled className="text-gray-400">SELECT VENDOR...</option>
+                                    <option value="" disabled className="text-slate-500">Choose a Vendor...</option>
                                     {vendors.map(v => (
-                                        <option key={v.vendor_id} value={v.vendor_id} className="text-white">
+                                        <option key={v.vendor_id} value={v.vendor_id} className="text-white bg-[#1e1e2d] py-2">
                                             {v.name} ({v.company})
                                         </option>
                                     ))}
                                 </select>
-                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-6 text-gray-400">
-                                    <svg className="w-6 h-6 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd"></path></svg>
+                                {/* Custom Chevron */}
+                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-5 text-slate-400 group-hover:text-brand-400 transition-colors">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                                 </div>
-                            </div>
-
-                            {error && (
-                                <div className="w-full bg-red-500/20 border border-red-500/50 text-red-200 p-4 rounded-lg mb-6 text-center text-sm font-medium">
-                                    {error}
-                                </div>
-                            )}
-
-                            <div className="w-full flex justify-end mt-4">
-                                <button 
-                                    onClick={handleNextStep}
-                                    className="bg-[#f57c00] hover:bg-orange-600 text-white px-8 py-3 rounded-lg font-bold transition-colors shadow-lg flex items-center"
-                                >
-                                    Next Step <ArrowRight className="ml-2 w-5 h-5" />
-                                </button>
                             </div>
                         </div>
-                    )}
 
-                    {step === 2 && (
-                        <div className="animate-fade-in flex flex-col items-center text-center">
-                            <h2 className="text-2xl font-bold text-white mb-2 tracking-wide">Select Campaign Type</h2>
-                            <p className="text-gray-300 mb-8 text-sm">Categorize this upload session to ensure proper data routing.</p>
-                            
-                            {/* Exact identical grid layout from the picture */}
-                            <div className="grid grid-cols-2 gap-4 w-full mb-16">
-                                {campaigns.length > 0 ? campaigns.map(campaign => (
-                                    <button
-                                        key={campaign.campaign_id}
-                                        type="button"
-                                        onClick={() => {
-                                            setCampaignType(campaign.campaign_id);
-                                            setError('');
-                                        }}
-                                        className={`py-5 px-4 rounded-xl text-center font-bold tracking-wide transition-all shadow-md ${
-                                            campaignType === campaign.campaign_id 
-                                                ? 'bg-[#f57c00] text-white ring-2 ring-orange-400 ring-offset-2 ring-offset-[#60636f]' 
-                                                : 'bg-[#4E515C] text-gray-200 hover:bg-[#555864]'
-                                        }`}
-                                    >
-                                        {campaign.name}
-                                    </button>
-                                )) : (
-                                    <div className="col-span-2 text-center text-gray-400 py-8">
-                                        No active campaigns found. Please add a campaign first.
-                                    </div>
-                                )}
+                        {error && (
+                            <div className="w-full bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl mb-8 flex items-center gap-3 text-sm font-medium animate-fade-in relative z-10">
+                                <div className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-red-400"></div>
+                                {error}
                             </div>
+                        )}
 
-                            {error && (
-                                <div className="w-full bg-red-500/20 border border-red-500/50 text-red-200 p-4 rounded-lg mb-6 text-center text-sm font-medium">
-                                    {error}
-                                </div>
-                            )}
-
-                            <div className="w-full flex justify-between items-center mt-4">
-                                <button 
-                                    onClick={() => setStep(1)}
-                                    className="bg-[#3A3C45] hover:bg-[#434550] text-gray-200 px-6 py-2.5 rounded-lg font-bold transition-colors shadow-sm flex items-center"
-                                >
-                                    <ArrowLeft className="mr-2 w-5 h-5" /> Back
-                                </button>
-                                <button 
-                                    onClick={handleCreateSession}
-                                    disabled={creating}
-                                    className={`${creating ? 'bg-orange-400 cursor-not-allowed' : 'bg-[#f57c00] hover:bg-orange-600'} text-white px-6 py-2.5 rounded-lg font-bold transition-colors shadow-sm flex items-center`}
-                                >
-                                    {creating ? 'Creating...' : 'Create Session'} <ArrowRight className="ml-2 w-5 h-5" />
-                                </button>
-                            </div>
+                        <div className="w-full flex justify-end mt-4 relative z-10 max-w-lg mx-auto">
+                            <button 
+                                onClick={handleNextStep}
+                                className="bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white px-8 py-3.5 rounded-xl font-semibold transition-all shadow-[0_4px_14px_rgba(59,130,246,0.3)] flex items-center gap-2 active:scale-[0.98] text-[14px]"
+                            >
+                                Continue to Campaign <ArrowRight className="w-4 h-4" strokeWidth={2.5} />
+                            </button>
                         </div>
-                    )}
+                    </div>
+                )}
 
-                </div>
+                {step === 2 && (
+                    <div className="w-full bg-[#1e1e2d] border border-white/5 rounded-2xl p-8 sm:p-12 shadow-[0_8px_30px_rgb(0,0,0,0.12)] animate-fade-in relative overflow-hidden">
+                        {/* Decorative glow */}
+                        <div className="absolute -top-24 -right-24 w-48 h-48 bg-brand-500/10 rounded-full blur-[60px] pointer-events-none"></div>
+
+                        <div className="text-center mb-10 relative z-10">
+                            <div className="w-14 h-14 bg-brand-500/10 border border-brand-500/20 rounded-2xl flex items-center justify-center mx-auto mb-5 text-brand-400">
+                                <Layers size={24} />
+                            </div>
+                            <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">Select Campaign Type</h2>
+                            <p className="text-[14px] text-slate-400 font-medium">Categorize this upload session to ensure proper data routing.</p>
+                        </div>
+                        
+                        <div className="w-full relative group mb-8 z-10 max-w-lg mx-auto">
+                            <label className="block text-slate-400 text-xs font-bold mb-2 uppercase tracking-wide ml-1">Select A Campaign</label>
+                            <div className="relative">
+                                {/* Decorative Icon */}
+                                <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-brand-400">
+                                    <Layers className="w-5 h-5" />
+                                </div>
+                                <select 
+                                    className="w-full bg-[#0a0a0f] border-2 border-white/10 hover:border-brand-500/50 text-white rounded-2xl py-4 pl-12 pr-10 appearance-none focus:outline-none focus:ring-4 focus:ring-brand-500/20 focus:border-brand-500 transition-all font-medium shadow-inner cursor-pointer text-[15px]"
+                                    value={campaignType}
+                                    onChange={(e) => {
+                                        setCampaignType(e.target.value);
+                                        setError('');
+                                    }}
+                                >
+                                    <option value="" disabled className="text-slate-500">Choose a Campaign...</option>
+                                    {campaigns.map(c => (
+                                        <option key={c.campaign_id} value={c.campaign_id} className="text-white bg-[#1e1e2d] py-2">
+                                            {c.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                {/* Custom Chevron */}
+                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-5 text-slate-400 group-hover:text-brand-400 transition-colors">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </div>
+                            </div>
+                            {campaigns.length === 0 && <p className="text-slate-500 text-xs mt-2 ml-1">No active campaigns available.</p>}
+                        </div>
+
+                        {error && (
+                            <div className="w-full bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl mb-8 flex items-center gap-3 text-sm font-medium animate-fade-in relative z-10">
+                                <div className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-red-400"></div>
+                                {error}
+                            </div>
+                        )}
+
+                        <div className="w-full flex justify-between items-center mt-6 relative z-10 max-w-lg mx-auto gap-4">
+                            <button 
+                                onClick={() => setStep(1)}
+                                className="bg-[#0a0a0f] hover:bg-white/5 border border-white/10 text-slate-300 px-6 py-3.5 rounded-xl font-semibold transition-all flex items-center gap-2 active:scale-[0.98] text-[14px]"
+                            >
+                                <ArrowLeft className="w-4 h-4" strokeWidth={2.5} /> Back
+                            </button>
+                            <button 
+                                onClick={handleCreateSession}
+                                disabled={creating}
+                                className={`flex-1 flex justify-center text-white px-6 py-3.5 rounded-xl font-semibold transition-all shadow-[0_4px_14px_rgba(59,130,246,0.3)] flex items-center gap-2 active:scale-[0.98] text-[14px] ${
+                                    creating 
+                                        ? 'bg-brand-500/50 cursor-not-allowed border border-brand-500/20' 
+                                        : 'bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400'
+                                }`}
+                            >
+                                {creating ? 'Creating Session...' : 'Create Session'} <ArrowRight className="w-4 h-4" strokeWidth={2.5} />
+                            </button>
+                        </div>
+                    </div>
+                )}
+
             </div>
         </div>
     );
