@@ -33,7 +33,8 @@ const Tip = ({ active, payload, label }) => {
 };
 
 /* ── KPI Card ─────────────────────────────────────────── */
-const KpiCard = ({ icon: Icon, label, value, sub, color, index }) => (
+// eslint-disable-next-line no-unused-vars
+const KpiCard = ({ icon: IconComponent, label, value, sub, color, index }) => (
     <div
         style={{
             background: 'linear-gradient(145deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))',
@@ -49,7 +50,7 @@ const KpiCard = ({ icon: Icon, label, value, sub, color, index }) => (
     >
         <div style={{ position:'absolute', top:-40, right:-40, width:170, height:170, borderRadius:'50%', background: color, opacity:.07, filter:'blur(50px)', pointerEvents:'none' }} />
         <div style={{ width:50, height:50, borderRadius:16, background:`${color}18`, border:`1px solid ${color}28`, display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <Icon size={22} color={color} strokeWidth={1.8} />
+            <IconComponent size={22} color={color} strokeWidth={1.8} />
         </div>
         <div>
             <div style={{ fontSize:34, fontWeight:800, color:'#fff', lineHeight:1, letterSpacing:'-0.03em', fontVariantNumeric:'tabular-nums', marginBottom: 6 }}>
@@ -68,11 +69,12 @@ const Card = ({ children, style={} }) => (
     </div>
 );
 
-const CardHead = ({ title, subtitle, icon: Icon, color='#f97316', badge }) => (
+// eslint-disable-next-line no-unused-vars
+const CardHead = ({ title, subtitle, icon: IconComponent, color='#f97316', badge }) => (
     <div style={{ padding:'20px 24px', borderBottom:'1px solid rgba(255,255,255,0.05)', display:'flex', alignItems:'center', justifyContent:'space-between', gap:14 }}>
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
             <div style={{ width:40, height:40, borderRadius:13, background:`${color}18`, border:`1px solid ${color}28`, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <Icon size={19} color={color} strokeWidth={1.8} />
+                <IconComponent size={19} color={color} strokeWidth={1.8} />
             </div>
             <div>
                 <div style={{ fontSize:15, fontWeight:700, color:'#f1f5f9', letterSpacing:'-0.01em' }}>{title}</div>
@@ -96,7 +98,10 @@ const Dashboard = () => {
     const [loading, setLoading] = useState(true);
     const [rdy, setRdy] = useState(false);
 
-    useEffect(() => setRdy(true), []);
+    useEffect(() => {
+        const frame = requestAnimationFrame(() => setRdy(true));
+        return () => cancelAnimationFrame(frame);
+    }, []);
 
     useEffect(() => {
         api.get('/dashboard/stats')
