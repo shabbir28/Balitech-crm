@@ -182,7 +182,7 @@ const createJob = async (req, res) => {
                 dnc_skipped: dncSkipped,
                 dnc_skipped_dnc: dncSkippedDnc,
                 dnc_skipped_sale: dncSkippedSale,
-                duplicates_skipped: validRecords.length - insertedCount - dncSkipped
+                duplicates_skipped: validRecords.length - insertedCount - updatedCount - dncSkipped
             });
 
         } catch (err) {

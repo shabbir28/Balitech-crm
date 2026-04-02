@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import { ArrowLeft, UploadCloud, User, X, Check } from 'lucide-react';
 
@@ -31,8 +31,9 @@ const FormField = ({ label, children }) => (
     </div>
 );
 
-const AddUser = () => {
+const AddUser = ({ editMode }) => {
     const navigate = useNavigate();
+    const { id } = useParams();
     const fileInputRef = useRef();
     const [form, setForm] = useState({
         first_name: '', last_name: '', email: '', phone: '',
@@ -44,6 +45,32 @@ const AddUser = () => {
     const [submitting, setSubmitting] = useState(false);
     const [toast, setToast] = useState(null);
     const [dragOver, setDragOver] = useState(false);
+    const [loadingUser, setLoadingUser] = useState(editMode);
+
+    // Fetch existing user data in edit mode
+    useEffect(() => {
+        if (!editMode || !id) return;
+        api.get(`/users/${id}`)
+            .then(res => {
+                const u = res.data;
+                setForm(prev => ({
+                    ...prev,
+                    first_name: u.first_name || '',
+                    last_name: u.last_name || '',
+                    email: u.email || '',
+                    phone: u.phone || '',
+                    date_of_birth: u.date_of_birth ? u.date_of_birth.split('T')[0] : '',
+                    role: u.role || '',
+                    password: '',
+                    confirm_password: '',
+                }));
+                if (u.profile_picture) {
+                    setProfilePreview(`${import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000'}${u.profile_picture}`);
+                }
+            })
+            .catch(() => showToast('Failed to load user data', 'error'))
+            .finally(() => setLoadingUser(false));
+    }, [editMode, id]);
 
     const showToast = (msg, type = 'success') => {
         setToast({ msg, type });
@@ -82,8 +109,9 @@ const AddUser = () => {
         if (!form.last_name.trim()) errs.last_name = 'Required';
         if (!form.email.trim()) errs.email = 'Required';
         else if (!/\S+@\S+\.\S+/.test(form.email)) errs.email = 'Invalid email';
-        if (!form.password) errs.password = 'Required';
-        else if (form.password.length < 6) errs.password = 'Min 6 characters';
+        // In edit mode, password is optional — only validate if provided
+        if (!editMode && !form.password) errs.password = 'Required';
+        if (form.password && form.password.length < 6) errs.password = 'Min 6 characters';
         if (form.password !== form.confirm_password) errs.confirm_password = 'Passwords do not match';
         if (!form.role) errs.role = 'Required';
         return errs;
@@ -102,18 +130,30 @@ const AddUser = () => {
             });
             if (profileFile) formData.append('profile_picture', profileFile);
 
-            await api.post('/users', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-
-            showToast('User created successfully!');
+            if (editMode) {
+                await api.put(`/users/${id}`, formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                showToast('User updated successfully!');
+            } else {
+                await api.post('/users', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                showToast('User created successfully!');
+            }
             setTimeout(() => navigate('/users'), 1500);
         } catch (err) {
-            showToast(err?.response?.data?.message || 'Failed to create user', 'error');
+            showToast(err?.response?.data?.message || (editMode ? 'Failed to update user' : 'Failed to create user'), 'error');
         } finally {
             setSubmitting(false);
         }
     };
+
+    if (loadingUser) return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300, color: '#9ca3af', fontFamily: "'Inter', sans-serif" }}>
+            Loading user data...
+        </div>
+    );
 
     return (
         <div style={{ fontFamily: "'Inter', sans-serif", maxWidth: 1000, margin: '0 auto' }}>
@@ -141,8 +181,8 @@ const AddUser = () => {
                     <ArrowLeft size={15} /> Back
                 </button>
                 <div>
-                    <h1 style={{ fontSize: 24, fontWeight: 800, color: '#fff', margin: 0 }}>Add User</h1>
-                    <p style={{ color: '#6b7280', fontSize: 13, margin: '4px 0 0' }}>Please fill in the user details below.</p>
+                    <h1 style={{ fontSize: 24, fontWeight: 800, color: '#fff', margin: 0 }}>{editMode ? 'Edit User' : 'Add User'}</h1>
+                    <p style={{ color: '#6b7280', fontSize: 13, margin: '4px 0 0' }}>{editMode ? 'Update the user details below.' : 'Please fill in the user details below.'}</p>
                 </div>
             </div>
 
@@ -270,7 +310,7 @@ const AddUser = () => {
                                 marginTop: 4
                             }}
                         >
-                            {submitting ? 'Creating User...' : 'Create User'}
+                            {submitting ? (editMode ? 'Saving...' : 'Creating User...') : (editMode ? 'Save Changes' : 'Create User')}
                         </button>
                     </div>
 

@@ -100,6 +100,3 @@ const getStats = async (req, res) => {
 };
 
 module.exports = { getStats };
-
-
-module.exports = { getStats };

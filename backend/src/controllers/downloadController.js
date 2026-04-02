@@ -28,9 +28,8 @@ const downloadLeads = async (req, res) => {
             const campRes = await client.query('SELECT name FROM campaigns WHERE campaign_id = $1', [campaign_id]);
             if (campRes.rows.length > 0) {
                 const cName = campRes.rows[0].name;
-                filters.push(`(campaign = $${paramIdx} OR campaign_type = $${paramIdx + 1})`);
-                params.push(campaign_id, cName);
-                paramIdx += 2;
+                filters.push(`campaign_type = $${paramIdx++}`);
+                params.push(cName);
             } else {
                 filters.push(`1 = 0`);
             }

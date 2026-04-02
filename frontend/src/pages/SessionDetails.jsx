@@ -218,9 +218,7 @@ const SessionDetails = () => {
                                                 </div>
                                             </td>
                                             <td className="p-4">
-                                                <button className="text-brand-400 hover:text-brand-300 font-medium text-[12px] opacity-80 hover:opacity-100 transition-opacity">
-                                                    Download
-                                                </button>
+                                                <span className="text-slate-600 text-xs font-mono">—</span>
                                             </td>
                                             <td className="p-4 text-center text-slate-300 font-mono font-bold bg-[#1e1e2d]/50 border-x border-white/5">{job.total_rows?.toLocaleString() || '0'}</td>
                                             <td className="p-4">

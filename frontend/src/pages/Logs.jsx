@@ -10,9 +10,11 @@ const Logs = () => {
         api.get('/download/logs')
             .then(res => {
                 setLogs(res.data);
-                setLoading(false);
             })
-            .catch(console.error);
+            .catch(err => {
+                console.error('Failed to fetch logs:', err);
+            })
+            .finally(() => setLoading(false));
     }, []);
 
     return (

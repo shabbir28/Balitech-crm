@@ -61,11 +61,11 @@ const Users = () => {
         fetchUsers();
     }, [fetchUsers]);
 
-    // Debounced search
+    // Reset to page 1 when search changes (debounced)
     useEffect(() => {
-        const timer = setTimeout(() => { setPage(1); fetchUsers(); }, 400);
+        const timer = setTimeout(() => setPage(1), 400);
         return () => clearTimeout(timer);
-    }, [search, fetchUsers]);
+    }, [search]);
 
     const handleDelete = async (id) => {
         try {
@@ -237,7 +237,7 @@ const Users = () => {
                             {/* Profile */}
                             <div>
                                 {u.profile_picture ? (
-                                    <img src={`http://localhost:5000${u.profile_picture}`} alt=""
+                                    <img src={`${import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000'}${u.profile_picture}`} alt=""
                                         style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.1)' }} />
                                 ) : (
                                     <div style={{

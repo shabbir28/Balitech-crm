@@ -38,6 +38,12 @@ const LeadsTable = () => {
         }
     };
 
+    // Auto-refetch when search is cleared
+    useEffect(() => {
+        if (search === '') fetchLeads(1);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [search]);
+
     const totalPages = Math.ceil(total / limit);
 
     const getInitials = (name) => {

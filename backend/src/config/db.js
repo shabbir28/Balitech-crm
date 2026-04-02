@@ -9,12 +9,13 @@ const pool = new Pool({
   port: process.env.DB_PORT || 5432,
 });
 
-pool.on('error', (err, client) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle PostgreSQL client:', err);
+  // Do not exit — let the pool recover or reconnect automatically
 });
 
 module.exports = {
   query: (text, params) => pool.query(text, params),
   getClient: () => pool.connect(),
+  
 };
