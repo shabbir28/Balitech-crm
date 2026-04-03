@@ -6,7 +6,8 @@ import {
     Database, ScrollText, UserCog, Store, Megaphone, 
     Database as DatabaseIcon, PhoneOff, Search, ChevronRight, Menu, X,
     LayoutTemplate, Building2, Target, FolderUp, Scale, Layers, 
-    FileStack, ShieldBan, FolderDown, TerminalSquare, UserCheck
+    FileStack, ShieldBan, FolderDown, TerminalSquare, UserCheck,
+    GitCompareArrows
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
@@ -92,6 +93,10 @@ const Layout = ({ children }) => {
                                         <Scale className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
                                         <span>Compare</span>
                                     </NavLink>
+                                    <NavLink to="/compare-file" className={getClassName}>
+                                        <GitCompareArrows className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
+                                        <span>Compare File</span>
+                                    </NavLink>
                                     <NavLink to="/sessions" className={getClassName}>
                                         <Layers className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
                                         <span>Sessions</span>
@@ -124,6 +129,10 @@ const Layout = ({ children }) => {
                                         <NavLink to="/users" className={getClassName}>
                                             <UserCheck className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
                                             <span>Users</span>
+                                        </NavLink>
+                                        <NavLink to="/security" className={getClassName}>
+                                            <ShieldBan className="h-[16px] w-[16px] group-hover:scale-110 transition-transform duration-300" /> 
+                                            <span>Security</span>
                                         </NavLink>
                                     </div>
                                 )}

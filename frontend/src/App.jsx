@@ -18,6 +18,8 @@ import Users from './pages/Users';
 import AddUser from './pages/AddUser';
 import Campaigns from './pages/Campaigns';
 import AddCampaign from './pages/AddCampaign';
+import SecuritySettings from './pages/SecuritySettings';
+import CompareFiles from './pages/CompareFiles';
 
 const ProtectedRoute = ({ children, roles }) => {
     const { user, loading } = useContext(AuthContext);
@@ -66,8 +68,11 @@ const AppRoutes = () => {
             {/* Upload - super_admin, admin, data_entry */}
             <Route path="/upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><UploadLeads /></ProtectedRoute>} />
 
-            {/* Compare - super_admin, admin */}
+            {/* Compare (existing) - super_admin, admin */}
             <Route path="/compare" element={<ProtectedRoute roles={['super_admin', 'admin']}><UploadLeads /></ProtectedRoute>} />
+
+            {/* Compare File (new module) - super_admin, admin */}
+            <Route path="/compare-file" element={<ProtectedRoute roles={['super_admin', 'admin']}><CompareFiles /></ProtectedRoute>} />
 
             {/* Download - super_admin, admin */}
             <Route path="/download" element={<ProtectedRoute roles={['super_admin', 'admin']}><DownloadLeads /></ProtectedRoute>} />
@@ -76,6 +81,9 @@ const AppRoutes = () => {
             <Route path="/users" element={<ProtectedRoute roles={['super_admin']}><Users /></ProtectedRoute>} />
             <Route path="/users/add" element={<ProtectedRoute roles={['super_admin']}><AddUser /></ProtectedRoute>} />
             <Route path="/users/edit/:id" element={<ProtectedRoute roles={['super_admin']}><AddUser editMode /></ProtectedRoute>} />
+
+            {/* Security settings - super_admin only */}
+            <Route path="/security" element={<ProtectedRoute roles={['super_admin']}><SecuritySettings /></ProtectedRoute>} />
 
             {/* Campaigns - super_admin, admin */}
             <Route path="/campaigns" element={<ProtectedRoute roles={['super_admin', 'admin']}><Campaigns /></ProtectedRoute>} />

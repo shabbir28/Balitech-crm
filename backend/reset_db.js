@@ -23,7 +23,8 @@ const resetData = async () => {
         upload_sessions,
         campaigns,
         vendors,
-        dnc_numbers
+        dnc_numbers,
+        ip_whitelist
       RESTART IDENTITY
       CASCADE;
     `);
