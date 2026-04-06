@@ -19,7 +19,9 @@ const SecurityService = {
     deleteIP: async (id) => {
         const response = await api.delete(`/security/${id}`);
         return response.data;
+        
     }
 };
 
 export default SecurityService;
+
