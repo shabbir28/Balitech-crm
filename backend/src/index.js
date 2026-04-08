@@ -14,6 +14,7 @@ const userRoutes = require("./routes/users");
 const campaignRoutes = require("./routes/campaigns");
 const dncRoutes = require("./routes/dnc");
 const securityRoutes = require("./routes/security");
+const notificationRoutes = require("./routes/notifications");
 const enforceIPWhitelist = require("./middleware/ipWhitelist");
 
 if (!process.env.JWT_SECRET) {
@@ -41,6 +42,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/campaigns", campaignRoutes);
 app.use("/api/dnc", dncRoutes);
 app.use("/api/security", securityRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date() });

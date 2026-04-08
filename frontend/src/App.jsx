@@ -11,6 +11,7 @@ import SessionDetails from './pages/SessionDetails';
 import AddJob from './pages/AddJob';
 import LeadsTable from './pages/LeadsTable';
 import DownloadLeads from './pages/DownloadLeads';
+import DownloadRequests from './pages/DownloadRequests';
 import Logs from './pages/Logs';
 import Dashboard from './pages/Dashboard';
 import Dnc from './pages/Dnc';
@@ -81,6 +82,9 @@ const AppRoutes = () => {
             <Route path="/users" element={<ProtectedRoute roles={['super_admin']}><Users /></ProtectedRoute>} />
             <Route path="/users/add" element={<ProtectedRoute roles={['super_admin']}><AddUser /></ProtectedRoute>} />
             <Route path="/users/edit/:id" element={<ProtectedRoute roles={['super_admin']}><AddUser editMode /></ProtectedRoute>} />
+
+            {/* Download Requests (approval panel) - super_admin only */}
+            <Route path="/download-requests" element={<ProtectedRoute roles={['super_admin']}><DownloadRequests /></ProtectedRoute>} />
 
             {/* Security settings - super_admin only */}
             <Route path="/security" element={<ProtectedRoute roles={['super_admin']}><SecuritySettings /></ProtectedRoute>} />
