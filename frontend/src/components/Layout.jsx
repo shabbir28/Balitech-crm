@@ -194,6 +194,10 @@ const Layout = ({ children }) => {
     const navigate = useNavigate();
     const location = useLocation();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [searchOpen,  setSearchOpen]  = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const searchRef  = useRef(null);
+    const searchInputRef = useRef(null);
 
     useEffect(() => {
         const timer = setTimeout(() => setIsMobileMenuOpen(false), 0);
@@ -238,6 +242,60 @@ const Layout = ({ children }) => {
     const currentPageName = pathSegments.length > 0
         ? pathSegments[0].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
         : 'Overview';
+
+    // ── Global Search ─────────────────────────────────────────
+    const ALL_PAGES = [
+        { label: 'Dashboard',         path: '/',                  roles: ['super_admin','admin'],        icon: <LayoutTemplate className="h-4 w-4" /> },
+        { label: 'Vendors',           path: '/vendors',           roles: ['super_admin','admin','data_entry'], icon: <Building2 className="h-4 w-4" /> },
+        { label: 'Campaigns',         path: '/campaigns',         roles: ['super_admin','admin'],        icon: <Target className="h-4 w-4" /> },
+        { label: 'Upload Data',       path: '/upload',            roles: ['super_admin','admin','data_entry'], icon: <FolderUp className="h-4 w-4" /> },
+        { label: 'Compare',           path: '/compare',           roles: ['super_admin','admin'],        icon: <Scale className="h-4 w-4" /> },
+        { label: 'Compare File',      path: '/compare-file',      roles: ['super_admin','admin'],        icon: <GitCompareArrows className="h-4 w-4" /> },
+        { label: 'Sessions',          path: '/sessions',          roles: ['super_admin','admin'],        icon: <Layers className="h-4 w-4" /> },
+        { label: 'All Data',          path: '/leads',             roles: ['super_admin','admin'],        icon: <FileStack className="h-4 w-4" /> },
+        { label: 'DNC',               path: '/dnc',               roles: ['super_admin','admin'],        icon: <ShieldBan className="h-4 w-4" /> },
+        { label: 'Download Data',     path: '/download',          roles: ['super_admin','admin'],        icon: <FolderDown className="h-4 w-4" /> },
+        { label: 'Logs',              path: '/logs',              roles: ['super_admin','admin'],        icon: <TerminalSquare className="h-4 w-4" /> },
+        { label: 'Users',             path: '/users',             roles: ['super_admin'],               icon: <UserCheck className="h-4 w-4" /> },
+        { label: 'Download Requests', path: '/download-requests', roles: ['super_admin'],               icon: <ClipboardList className="h-4 w-4" /> },
+        { label: 'Security',          path: '/security',          roles: ['super_admin'],               icon: <ShieldBan className="h-4 w-4" /> },
+    ];
+
+    const filteredPages = searchQuery.trim()
+        ? ALL_PAGES.filter(p =>
+            p.roles.includes(role) &&
+            p.label.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+        : ALL_PAGES.filter(p => p.roles.includes(role));
+
+    const openSearch = () => {
+        setSearchOpen(true);
+        setSearchQuery('');
+        setTimeout(() => searchInputRef.current?.focus(), 50);
+    };
+    const closeSearch = () => { setSearchOpen(false); setSearchQuery(''); };
+
+    const goToPage = (path) => { closeSearch(); navigate(path); };
+
+    // Keyboard shortcut Ctrl+K / ⌘K
+    useEffect(() => {
+        const handler = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                e.preventDefault();
+                searchOpen ? closeSearch() : openSearch();
+            }
+            if (e.key === 'Escape') closeSearch();
+        };
+        document.addEventListener('keydown', handler);
+        return () => document.removeEventListener('keydown', handler);
+    }, [searchOpen]);
+
+    // Close on outside click
+    useEffect(() => {
+        const h = (e) => { if (searchRef.current && !searchRef.current.contains(e.target)) closeSearch(); };
+        document.addEventListener('mousedown', h);
+        return () => document.removeEventListener('mousedown', h);
+    }, []);
 
     return (
         <div className="min-h-screen flex bg-[#0f1117] text-white selection:bg-brand-500/30 selection:text-white font-sans antialiased">
@@ -403,11 +461,87 @@ const Layout = ({ children }) => {
 
                     {/* Right */}
                     <div className="flex items-center gap-2">
-                        {/* Search bar */}
-                        <div className="hidden md:flex items-center gap-2 h-9 px-3 rounded-xl border border-white/8 bg-white/[0.03] hover:border-white/15 transition-all w-44 lg:w-56 cursor-text">
-                            <Search className="h-3.5 w-3.5 text-slate-600 shrink-0" />
-                            <span className="text-[12px] text-slate-600 truncate flex-1">Search...</span>
-                            <kbd className="font-mono text-[9px] text-slate-600 bg-white/5 border border-white/8 px-1.5 py-0.5 rounded">⌘K</kbd>
+
+                        {/* ── Search ── */}
+                        <div className="relative" ref={searchRef}>
+                            {/* Desktop: inline bar */}
+                            <button
+                                onClick={openSearch}
+                                className="hidden md:flex items-center gap-2 h-9 px-3 rounded-xl border border-white/8 bg-white/[0.03] hover:border-white/15 transition-all w-44 lg:w-56 cursor-text text-left"
+                            >
+                                <Search className="h-3.5 w-3.5 text-slate-600 shrink-0" />
+                                <span className="text-[12px] text-slate-600 truncate flex-1">Search...</span>
+                                <kbd className="font-mono text-[9px] text-slate-600 bg-white/5 border border-white/8 px-1.5 py-0.5 rounded">⌘K</kbd>
+                            </button>
+
+                            {/* Mobile: icon button */}
+                            <button
+                                onClick={openSearch}
+                                className="md:hidden p-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/8 border border-transparent hover:border-white/10 transition-all duration-200"
+                            >
+                                <Search className="h-5 w-5" />
+                            </button>
+
+                            {/* Search dropdown/overlay */}
+                            {searchOpen && (
+                                <>
+                                    {/* Backdrop (mobile) */}
+                                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[90] md:hidden" onClick={closeSearch} />
+
+                                    {/* Dropdown panel */}
+                                    <div className="fixed md:absolute left-1/2 md:left-auto -translate-x-1/2 md:translate-x-0 md:right-0 top-[70px] md:top-full md:mt-2 w-[92vw] md:w-[380px] bg-[#1a1d2e] border border-white/10 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] overflow-hidden z-[100]">
+                                        {/* Input row */}
+                                        <div className="flex items-center gap-3 px-4 py-3 border-b border-white/8">
+                                            <Search className="h-4 w-4 text-slate-500 shrink-0" />
+                                            <input
+                                                ref={searchInputRef}
+                                                type="text"
+                                                value={searchQuery}
+                                                onChange={e => setSearchQuery(e.target.value)}
+                                                onKeyDown={e => { if (e.key === 'Enter' && filteredPages.length > 0) goToPage(filteredPages[0].path); }}
+                                                placeholder="Search pages..."
+                                                className="flex-1 bg-transparent text-[13px] text-white placeholder:text-slate-600 outline-none font-medium"
+                                            />
+                                            <button onClick={closeSearch} className="p-1 rounded-lg hover:bg-white/8 text-slate-500 hover:text-white transition-colors">
+                                                <X className="h-4 w-4" />
+                                            </button>
+                                        </div>
+
+                                        {/* Results */}
+                                        <div className="max-h-[320px] overflow-y-auto py-2">
+                                            {filteredPages.length === 0 ? (
+                                                <div className="px-4 py-8 text-center">
+                                                    <p className="text-slate-500 text-sm">No pages found for <span className="text-white font-medium">"{searchQuery}"</span></p>
+                                                </div>
+                                            ) : (
+                                                filteredPages.map((page) => (
+                                                    <button
+                                                        key={page.path}
+                                                        onClick={() => goToPage(page.path)}
+                                                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-all hover:bg-white/[0.05] ${
+                                                            location.pathname === page.path ? 'bg-brand-500/10 text-brand-300' : 'text-slate-300'
+                                                        }`}
+                                                    >
+                                                        <span className={`shrink-0 ${ location.pathname === page.path ? 'text-brand-400' : 'text-slate-500' }`}>
+                                                            {page.icon}
+                                                        </span>
+                                                        <span className="text-[13px] font-medium">{page.label}</span>
+                                                        {location.pathname === page.path && (
+                                                            <span className="ml-auto text-[10px] font-bold text-brand-400 bg-brand-500/10 border border-brand-500/20 px-2 py-0.5 rounded-full">Current</span>
+                                                        )}
+                                                    </button>
+                                                ))
+                                            )}
+                                        </div>
+
+                                        {/* Footer hint */}
+                                        <div className="px-4 py-2.5 border-t border-white/8 bg-white/[0.01] flex items-center gap-3">
+                                            <span className="text-[10px] text-slate-600"><kbd className="bg-white/8 border border-white/10 px-1.5 py-0.5 rounded text-[9px]">↵</kbd> to navigate</span>
+                                            <span className="text-[10px] text-slate-600"><kbd className="bg-white/8 border border-white/10 px-1.5 py-0.5 rounded text-[9px]">Esc</kbd> to close</span>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </div>
 
                         {/* Notification Bell */}
