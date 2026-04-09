@@ -49,7 +49,7 @@ async function buildFilters(client, { vendor_id, campaign_id, states }) {
 // ─────────────────────────────────────────────────────────────
 // HELPER: perform the actual DB download + return CSV rows
 // ─────────────────────────────────────────────────────────────
-async function executeDownload(client, { vendor_id, campaign_id, states, quantity, user_id }) {
+async function executeDownload(client, { vendor_id, campaign_id, states, quantity, user_id, approved_by_id }) {
     const { filters, params, paramIdx } = await buildFilters(client, { vendor_id, campaign_id, states });
     const whereClause = filters.join(' AND ');
 
@@ -75,11 +75,11 @@ async function executeDownload(client, { vendor_id, campaign_id, states, quantit
 
     const result = await client.query(updateQuery, params);
 
-    // Log the download
+    // Log the download — include approved_by if it was a request approval
     await client.query(
-        `INSERT INTO download_logs (user_id, vendor_id, country_code, area_code, quantity)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [user_id, vendor_id || null, null, null, result.rows.length]
+        `INSERT INTO download_logs (user_id, vendor_id, country_code, area_code, quantity, approved_by)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [user_id, vendor_id || null, null, null, result.rows.length, approved_by_id || null]
     );
 
     return result.rows;
@@ -306,7 +306,8 @@ const reviewDownloadRequest = async (req, res) => {
             campaign_id: dlReq.campaign_id,
             states:      dlReq.states,
             quantity:    dlReq.quantity,
-            user_id:     dlReq.admin_id
+            user_id:     dlReq.admin_id,
+            approved_by_id: req.user.id   // ← the super_admin who approved
         });
 
         if (rows.length === 0) {
@@ -398,10 +399,19 @@ const executeApprovedDownload = async (req, res) => {
 const getDownloadLogs = async (req, res) => {
     try {
         const result = await db.query(`
-            SELECT dl.*, u.username, v.name as vendor_name 
+            SELECT
+                dl.*,
+                u.username,
+                u.first_name  AS user_first_name,
+                u.last_name   AS user_last_name,
+                v.name        AS vendor_name,
+                ap.username   AS approved_by_username,
+                ap.first_name AS approved_by_first_name,
+                ap.last_name  AS approved_by_last_name
             FROM download_logs dl
-            LEFT JOIN users u ON dl.user_id = u.id
-            LEFT JOIN vendors v ON dl.vendor_id = v.vendor_id
+            LEFT JOIN users u  ON dl.user_id    = u.id
+            LEFT JOIN users ap ON dl.approved_by = ap.id
+            LEFT JOIN vendors v ON dl.vendor_id  = v.vendor_id
             ORDER BY dl.download_date DESC
             LIMIT 100
         `);

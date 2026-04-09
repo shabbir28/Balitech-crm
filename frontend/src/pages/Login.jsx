@@ -123,6 +123,31 @@ const Login = () => {
                     <p className="text-[12px] text-slate-600 font-medium">
                         &copy; {new Date().getFullYear()} BaliTech Pvt.Ltd
                     </p>
+                    {/* Powered by GO Connectivo */}
+                    <div className="flex flex-col items-center gap-1.5 mt-2">
+                        <div className="flex items-center gap-2 w-full justify-center">
+                            <div className="h-px flex-1 max-w-[60px]" style={{background: 'linear-gradient(to right, transparent, rgba(139,92,246,0.25))'}} />
+                            <p className="text-[9px] uppercase tracking-[0.2em] text-slate-600 font-semibold">Powered by</p>
+                            <div className="h-px flex-1 max-w-[60px]" style={{background: 'linear-gradient(to left, transparent, rgba(139,92,246,0.25))'}} />
+                        </div>
+                        <div
+                            className="flex items-center justify-center px-4 py-2 rounded-xl cursor-default select-none transition-all duration-300 hover:scale-[1.03]"
+                            style={{
+                                background: 'linear-gradient(135deg, rgba(139,92,246,0.09) 0%, rgba(217,70,239,0.06) 50%, rgba(236,72,153,0.04) 100%)',
+                                border: '1px solid rgba(139,92,246,0.2)',
+                                boxShadow: '0 0 20px rgba(139,92,246,0.1), 0 4px 12px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.05)'
+                            }}
+                        >
+                            <img
+                                src="/assets/Go Connectivo 1.png"
+                                alt="GO Connectivo"
+                                className="h-6 w-28 object-fill select-none"
+                                style={{ filter: 'drop-shadow(0 0 6px rgba(139,92,246,0.45))' }}
+                            />
+                        </div>
+                    </div>
+
+
                 </div>
             </div>
         </div>

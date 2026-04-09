@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 
 // ─── Notification Bell Component ─────────────────────────────
-const NotificationBell = ({ userId, role }) => {
+const NotificationBell = () => {
     const [notifications, setNotifications] = useState([]);
     const [unreadCount, setUnreadCount]     = useState(0);
     const [open, setOpen]                   = useState(false);
@@ -27,7 +27,10 @@ const NotificationBell = ({ userId, role }) => {
     }, []);
 
     useEffect(() => {
-        fetchNotifications();
+        const doFetch = async () => {
+            await fetchNotifications();
+        };
+        doFetch();
         const interval = setInterval(fetchNotifications, 20000); // poll every 20s
         return () => clearInterval(interval);
     }, [fetchNotifications]);
@@ -76,8 +79,14 @@ const NotificationBell = ({ userId, role }) => {
         },
     };
 
+    const [now, setNow] = useState(() => Date.now());
+    useEffect(() => {
+        const timer = setInterval(() => setNow(Date.now()), 60000);
+        return () => clearInterval(timer);
+    }, []);
+
     const fmtTime = (d) => {
-        const diff = (Date.now() - new Date(d).getTime()) / 1000;
+        const diff = (now - new Date(d).getTime()) / 1000;
         if (diff < 60) return 'Just now';
         if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
         if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
@@ -201,18 +210,18 @@ const Layout = ({ children }) => {
 
     // Pending download requests count (superadmin sidebar badge)
     const [pendingCount, setPendingCount] = useState(0);
-    const fetchPendingCount = useCallback(async () => {
-        if (!isSuperAdmin) return;
-        try {
-            const res = await api.get('/download/requests');
-            setPendingCount(res.data.filter(r => r.status === 'pending').length);
-        } catch { /* silent */ }
-    }, [isSuperAdmin]);
     useEffect(() => {
+        if (!isSuperAdmin) return;
+        const fetchPendingCount = async () => {
+            try {
+                const res = await api.get('/download/requests');
+                setPendingCount(res.data.filter(r => r.status === 'pending').length);
+            } catch { /* silent */ }
+        };
         fetchPendingCount();
         const interval = setInterval(fetchPendingCount, 30000);
         return () => clearInterval(interval);
-    }, [fetchPendingCount]);
+    }, [isSuperAdmin]);
 
     const getClassName = ({ isActive }) =>
         `group relative flex items-center px-3.5 py-2.5 text-[13px] font-medium rounded-xl transition-all duration-200 gap-3 mb-0.5 ${
@@ -346,7 +355,30 @@ const Layout = ({ children }) => {
                             <LogOut className="h-3.5 w-3.5" />
                         </button>
                     </div>
+
+                    {/* Powered by GO Connectivo */}
+                    <div className="mt-3 pt-3 border-t border-white/[0.05]">
+                        <div className="flex flex-col items-center gap-1.5">
+                            <p className="text-[9px] uppercase tracking-[0.18em] text-slate-700 font-semibold">Powered by</p>
+                            <div
+                                className="flex items-center gap-2 px-3 py-1.5 rounded-xl cursor-default select-none transition-all duration-300 hover:scale-[1.02]"
+                                style={{
+                                    background: 'linear-gradient(135deg, rgba(139,92,246,0.07) 0%, rgba(217,70,239,0.05) 50%, rgba(236,72,153,0.04) 100%)',
+                                    border: '1px solid rgba(139,92,246,0.16)',
+                                    boxShadow: '0 0 14px rgba(139,92,246,0.07), inset 0 1px 0 rgba(255,255,255,0.04)'
+                                }}
+                            >
+                                <img
+                                    src="/assets/Go Connectivo 1.png"
+                                    alt="GO Connectivo"
+                                    className="h-7 w-28 object-fill select-none"
+                                    style={{ filter: 'drop-shadow(0 0 4px rgba(139,92,246,0.35))' }}
+                                />
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
             </aside>
 
             {/* ══════ MAIN AREA ══════════════════════════════════ */}
@@ -379,7 +411,7 @@ const Layout = ({ children }) => {
                         </div>
 
                         {/* Notification Bell */}
-                        <NotificationBell userId={user?.id} role={role} />
+                        <NotificationBell />
 
                         {/* Status */}
                         <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
