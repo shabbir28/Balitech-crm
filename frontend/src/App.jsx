@@ -69,7 +69,7 @@ const AppRoutes = () => {
             {/* Upload - super_admin, admin, data_entry */}
             <Route path="/upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><UploadLeads /></ProtectedRoute>} />
 
-            {/* Compare (existing) - super_admin, admin */}
+            {/* Compare (DB compare flow) — UploadLeads detects /compare path and sets isCompareMode=true */}
             <Route path="/compare" element={<ProtectedRoute roles={['super_admin', 'admin']}><UploadLeads /></ProtectedRoute>} />
 
             {/* Compare File (new module) - super_admin, admin */}

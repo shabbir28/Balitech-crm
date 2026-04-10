@@ -54,20 +54,25 @@ const uploadLeads = async (req, res) => {
         const values = [];
         let paramIndex = 1;
 
+        // Deduplicate phones within this batch to prevent:
+        // "ON CONFLICT DO UPDATE command cannot affect row a second time"
+        const deduped = new Map(); // phone -> record
         batch.forEach((record) => {
           const { phone, countryCode, areaCode } = parsePhone(record.phone);
-
           if (!phone) return;
+          deduped.set(phone, { ...record, phone, countryCode, areaCode });
+        });
 
+        deduped.forEach((record) => {
           valueStrings.push(
             `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6})`,
           );
           values.push(
             record.name || null,
-            phone,
+            record.phone,
             record.email || null,
-            countryCode,
-            areaCode,
+            record.countryCode,
+            record.areaCode,
             vendor_id,
             record.disposition || null,
           );

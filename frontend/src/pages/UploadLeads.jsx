@@ -232,7 +232,7 @@ const UploadLeads = () => {
                             <button 
                                 onClick={handleCreateSession}
                                 disabled={creating}
-                                className={`flex-1 flex justify-center text-white px-6 py-3.5 rounded-xl font-semibold transition-all shadow-[0_4px_14px_rgba(59,130,246,0.3)] flex items-center gap-2 active:scale-[0.98] text-[14px] ${
+                                className={`flex-1 justify-center text-white px-6 py-3.5 rounded-xl font-semibold transition-all shadow-[0_4px_14px_rgba(59,130,246,0.3)] flex items-center gap-2 active:scale-[0.98] text-[14px] ${
                                     creating 
                                         ? 'bg-brand-500/50 cursor-not-allowed border border-brand-500/20' 
                                         : 'bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400'

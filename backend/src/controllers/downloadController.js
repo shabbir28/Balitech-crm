@@ -265,6 +265,7 @@ const reviewDownloadRequest = async (req, res) => {
     }
 
     const client = await db.getClient();
+    let txnStarted = false;
     try {
         // Fetch the request
         const reqRes = await client.query(
@@ -298,8 +299,9 @@ const reviewDownloadRequest = async (req, res) => {
             return res.json({ message: 'Request rejected successfully.' });
         }
 
-        // ── Accept ──
+        // ── Accept ── (BEGIN transaction only for accepts)
         await client.query('BEGIN');
+        txnStarted = true;
 
         const rows = await executeDownload(client, {
             vendor_id:   dlReq.vendor_id,
@@ -312,6 +314,7 @@ const reviewDownloadRequest = async (req, res) => {
 
         if (rows.length === 0) {
             await client.query('ROLLBACK');
+            txnStarted = false;
             // Mark as rejected due to no data available
             await db.query(
                 `UPDATE download_requests
@@ -337,6 +340,7 @@ const reviewDownloadRequest = async (req, res) => {
         );
 
         await client.query('COMMIT');
+        txnStarted = false;
 
         // Notify the admin that their request was approved
         await createNotification(
@@ -353,7 +357,7 @@ const reviewDownloadRequest = async (req, res) => {
         });
 
     } catch (err) {
-        await client.query('ROLLBACK');
+        if (txnStarted) await client.query('ROLLBACK').catch(() => {});
         console.error('Review Download Request Error:', err);
         return res.status(500).json({ message: 'Server error processing request' });
     } finally {
