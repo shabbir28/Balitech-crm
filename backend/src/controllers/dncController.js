@@ -5,10 +5,12 @@ const { processFileBuffer } = require("../utils/fileProcessor");
 const VALID_TYPES = new Set(["DNC", "SALE"]);
 
 const normalizeType = (value) => {
-  const t = String(value || "").trim().toUpperCase();
-  // BLA to DNC mapping for backward compatibility if needed, 
+  const t = String(value || "")
+    .trim()
+    .toUpperCase();
+  // BLA to DNC mapping for backward compatibility if needed,
   // but since we migrated DB, we just ensure we use DNC.
-  if (t === 'BLA') return 'DNC';
+  if (t === "BLA") return "DNC";
   return VALID_TYPES.has(t) ? t : null;
 };
 
@@ -73,7 +75,9 @@ const addDnc = async (req, res) => {
     const { phone, type, source, notes, campaign_id } = req.body || {};
     const dncType = normalizeType(type);
     if (!dncType) {
-      return res.status(400).json({ message: "Valid type is required (DNC/SALE)" });
+      return res
+        .status(400)
+        .json({ message: "Valid type is required (DNC/SALE)" });
     }
 
     const normalized = normalizeUsDigits(phone);
@@ -92,7 +96,14 @@ const addDnc = async (req, res) => {
             campaign_id = COALESCE(EXCLUDED.campaign_id, dnc_numbers.campaign_id)
         RETURNING *;
       `,
-      [normalized, dncType, source || null, notes || null, req.user?.id || null, campaign_id || null],
+      [
+        normalized,
+        dncType,
+        source || null,
+        notes || null,
+        req.user?.id || null,
+        campaign_id || null,
+      ],
     );
 
     res.status(201).json(result.rows[0]);
@@ -111,7 +122,9 @@ const importDnc = async (req, res) => {
     const campaignId = req.body?.campaign_id || null;
 
     if (!dncType) {
-      return res.status(400).json({ message: "Valid type is required (DNC/SALE)" });
+      return res
+        .status(400)
+        .json({ message: "Valid type is required (DNC/SALE)" });
     }
 
     const records = await processFileBuffer(
@@ -173,7 +186,10 @@ const importDnc = async (req, res) => {
 const deleteDnc = async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await db.query("DELETE FROM dnc_numbers WHERE id = $1 RETURNING id", [id]);
+    const result = await db.query(
+      "DELETE FROM dnc_numbers WHERE id = $1 RETURNING id",
+      [id],
+    );
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "DNC entry not found" });
     }
@@ -190,4 +206,3 @@ module.exports = {
   importDnc,
   deleteDnc,
 };
-

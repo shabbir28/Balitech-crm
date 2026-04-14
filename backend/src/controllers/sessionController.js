@@ -1,84 +1,82 @@
 const db = require("../config/db");
 
 const createSession = async (req, res) => {
-    try {
-        const { vendor_id, campaign_type } = req.body;
-        
-        if (!vendor_id || !campaign_type) {
-            return res.status(400).json({ message: 'Vendor ID and Campaign Type are required' });
-        }
+  try {
+    const { vendor_id, campaign_type } = req.body;
 
-        const vendorCheck = await db.query("SELECT vendor_id FROM vendors WHERE vendor_id = $1", [vendor_id]);
-        if (vendorCheck.rows.length === 0) {
-            return res.status(404).json({ message: 'Vendor not found' });
-        }
+    if (!vendor_id || !campaign_type) {
+      return res
+        .status(400)
+        .json({ message: "Vendor ID and Campaign Type are required" });
+    }
 
-        const result = await db.query(
-          `
+    const vendorCheck = await db.query(
+      "SELECT vendor_id FROM vendors WHERE vendor_id = $1",
+      [vendor_id],
+    );
+    if (vendorCheck.rows.length === 0) {
+      return res.status(404).json({ message: "Vendor not found" });
+    }
+
+    const result = await db.query(
+      `
             INSERT INTO upload_sessions (vendor_id, campaign_type, created_by)
             VALUES ($1, $2, $3)
             RETURNING *
         `,
-          [vendor_id, campaign_type, req.user?.id || null],
-        );
+      [vendor_id, campaign_type, req.user?.id || null],
+    );
 
-        res.status(201).json(result.rows[0]);
-    } catch (err) {
-        console.error("Create Session Error:", err);
-        res.status(500).json({ message: "Server error creating session" });
-    }
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error("Create Session Error:", err);
+    res.status(500).json({ message: "Server error creating session" });
+  }
 };
 
 const getSession = async (req, res) => {
-    try {
-        const { id } = req.params;
+  try {
+    const { id } = req.params;
 
-        const sessionResult = await db.query(
-          `
+    const sessionResult = await db.query(
+      `
             SELECT s.*, v.name as vendor_name, v.company as vendor_company, u.username as created_by_username
             FROM upload_sessions s
             JOIN vendors v ON s.vendor_id = v.vendor_id
             LEFT JOIN users u ON s.created_by = u.id
             WHERE s.id = $1
         `,
-          [id],
-        );
+      [id],
+    );
 
-        if (sessionResult.rows.length === 0) {
-            return res.status(404).json({ message: 'Session not found' });
-        }
+    if (sessionResult.rows.length === 0) {
+      return res.status(404).json({ message: "Session not found" });
+    }
 
-        const jobsResult = await db.query(
-          `
+    const jobsResult = await db.query(
+      `
             SELECT * FROM upload_jobs
             WHERE session_id = $1
             ORDER BY created_at ASC
         `,
-          [id],
-        );
+      [id],
+    );
 
-        const session = sessionResult.rows[0];
-        session.jobs = jobsResult.rows;
+    const session = sessionResult.rows[0];
+    session.jobs = jobsResult.rows;
 
-        res.json(session);
-    } catch (err) {
-        console.error("Get Session Error:", err);
-        res.status(500).json({ message: "Server error fetching session" });
-    }
+    res.json(session);
+  } catch (err) {
+    console.error("Get Session Error:", err);
+    res.status(500).json({ message: "Server error fetching session" });
+  }
 };
 
 // GET /api/sessions
 // Returns paginated list for "Session List" screen
 const listSessions = async (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 20,
-      search,
-      status,
-      from,
-      to,
-    } = req.query;
+    const { page = 1, limit = 20, search, status, from, to } = req.query;
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = parseInt(limit, 10) || 20;
     const offset = (pageNum - 1) * limitNum;
@@ -197,8 +195,8 @@ const deleteSession = async (req, res) => {
 };
 
 module.exports = {
-    createSession,
-    getSession,
-    listSessions,
-    deleteSession,
+  createSession,
+  getSession,
+  listSessions,
+  deleteSession,
 };

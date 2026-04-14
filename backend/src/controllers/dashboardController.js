@@ -1,18 +1,18 @@
-const db = require('../config/db');
+const db = require("../config/db");
 
 // GET /api/dashboard/stats
 const getStats = async (req, res) => {
-    try {
-        const [
-            totalsResult,
-            vendorWiseResult,
-            campaignStatsResult,
-            dncStatsResult,
-            leadStatusResult,
-            recentSessionsResult,
-        ] = await Promise.all([
-            // Overall Totals
-            db.query(`
+  try {
+    const [
+      totalsResult,
+      vendorWiseResult,
+      campaignStatsResult,
+      dncStatsResult,
+      leadStatusResult,
+      recentSessionsResult,
+    ] = await Promise.all([
+      // Overall Totals
+      db.query(`
                 SELECT
                     (SELECT COUNT(*) FROM leads)                                   AS total_contacts,
                     (SELECT COUNT(*) FROM vendors)                                 AS total_vendors,
@@ -24,8 +24,8 @@ const getStats = async (req, res) => {
                     (SELECT COUNT(*) FROM upload_sessions)                         AS total_sessions
             `),
 
-            // Vendor-wise lead counts
-            db.query(`
+      // Vendor-wise lead counts
+      db.query(`
                 SELECT v.name, COUNT(l.id)::int AS count
                 FROM vendors v
                 LEFT JOIN leads l ON v.vendor_id = l.vendor_id
@@ -34,8 +34,8 @@ const getStats = async (req, res) => {
                 LIMIT 8
             `),
 
-            // Campaign-wise lead counts (uses campaign_type column in leads)
-            db.query(`
+      // Campaign-wise lead counts (uses campaign_type column in leads)
+      db.query(`
                 SELECT campaign_type AS name, COUNT(*)::int AS count
                 FROM leads
                 WHERE campaign_type IS NOT NULL AND campaign_type <> ''
@@ -44,8 +44,8 @@ const getStats = async (req, res) => {
                 LIMIT 6
             `),
 
-            // DNC vs SALE breakdown per campaign
-            db.query(`
+      // DNC vs SALE breakdown per campaign
+      db.query(`
                 SELECT
                     COALESCE(c.name, 'Untagged') AS campaign,
                     SUM(CASE WHEN d.dnc_type = 'DNC'  THEN 1 ELSE 0 END)::int AS dnc_count,
@@ -60,16 +60,16 @@ const getStats = async (req, res) => {
                 LIMIT 6
             `),
 
-            // Lead status breakdown
-            db.query(`
+      // Lead status breakdown
+      db.query(`
                 SELECT status, COUNT(*)::int AS count
                 FROM leads
                 GROUP BY status
                 ORDER BY count DESC
             `),
 
-            // Recent upload sessions (using real columns)
-            db.query(`
+      // Recent upload sessions (using real columns)
+      db.query(`
                 SELECT
                     s.id,
                     s.campaign_type,
@@ -83,20 +83,22 @@ const getStats = async (req, res) => {
                 ORDER BY s.created_at DESC
                 LIMIT 6
             `),
-        ]);
+    ]);
 
-        res.json({
-            totals:             totalsResult.rows[0],
-            vendorDistribution: vendorWiseResult.rows,
-            campaignStats:      campaignStatsResult.rows,
-            dncStats:           dncStatsResult.rows,
-            leadStatusBreakdown: leadStatusResult.rows,
-            recentSessions:     recentSessionsResult.rows,
-        });
-    } catch (err) {
-        console.error('Dashboard Stats Error:', err);
-        res.status(500).json({ message: 'Server error fetching stats', error: err.message });
-    }
+    res.json({
+      totals: totalsResult.rows[0],
+      vendorDistribution: vendorWiseResult.rows,
+      campaignStats: campaignStatsResult.rows,
+      dncStats: dncStatsResult.rows,
+      leadStatusBreakdown: leadStatusResult.rows,
+      recentSessions: recentSessionsResult.rows,
+    });
+  } catch (err) {
+    console.error("Dashboard Stats Error:", err);
+    res
+      .status(500)
+      .json({ message: "Server error fetching stats", error: err.message });
+  }
 };
 
 module.exports = { getStats };
