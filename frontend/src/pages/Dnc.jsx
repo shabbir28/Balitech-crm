@@ -12,6 +12,9 @@ const Dnc = () => {
     const [campaigns, setCampaigns] = useState([]);
     const [selectedCampaign, setSelectedCampaign] = useState('');
 
+    const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
     const queryString = useMemo(() => {
         return `/dnc?page=1&limit=50&type=${encodeURIComponent(type)}&search=${encodeURIComponent(search)}`;
     }, [type, search]);
@@ -39,14 +42,27 @@ const Dnc = () => {
             .catch(e => console.error('Failed to load campaigns', e));
     }, []);
 
-    const deleteRow = async (id) => {
-        const ok = window.confirm('Delete this DNC number?');
-        if (!ok) return;
+    const openDeleteConfirm = (id) => {
+        setDeleteConfirmId(id);
+    };
+
+    const closeDeleteConfirm = () => {
+        if (!isDeleting) {
+            setDeleteConfirmId(null);
+        }
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteConfirmId) return;
+        setIsDeleting(true);
         try {
-            await api.delete(`/dnc/${id}`);
+            await api.delete(`/dnc/${deleteConfirmId}`);
             fetchList();
+            setDeleteConfirmId(null);
         } catch (e) {
             console.error('Failed to delete DNC', e);
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -284,7 +300,7 @@ const Dnc = () => {
                                     {/* Action */}
                                     <div className="pl-2">
                                         <button
-                                            onClick={() => deleteRow(r.id)}
+                                            onClick={() => openDeleteConfirm(r.id)}
                                             className="bg-red-500/5 hover:bg-red-500/20 text-red-400/80 hover:text-red-400 border border-transparent hover:border-red-500/30 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 active:scale-95"
                                         >
                                             <Trash2 className="w-3.5 h-3.5" /> Remove
@@ -296,6 +312,54 @@ const Dnc = () => {
                     </div>
                 </div>
             </div>
+            {/* Custom Delete Confirmation Modal */}
+            {deleteConfirmId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="bg-[#1e1e2d] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden relative animate-in fade-in zoom-in duration-200">
+                        {/* Decorative glow */}
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-[50px] pointer-events-none"></div>
+                        
+                        <div className="p-6 relative z-10">
+                            <div className="flex items-center gap-4 mb-4">
+                                <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center shrink-0 border border-red-500/20">
+                                    <Trash2 className="w-6 h-6 text-red-500" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold text-white mb-1">Remove Record?</h3>
+                                    <p className="text-slate-400 text-[13px] leading-relaxed">
+                                        Are you sure you want to delete this {type} record? This action cannot be undone.
+                                    </p>
+                                </div>
+                            </div>
+                            
+                            <div className="flex justify-end gap-3 mt-8">
+                                <button
+                                    onClick={closeDeleteConfirm}
+                                    disabled={isDeleting}
+                                    className="px-5 py-2.5 rounded-xl text-[13px] font-bold text-slate-300 hover:text-white hover:bg-white/5 border border-transparent transition-all disabled:opacity-50 cursor-pointer"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={confirmDelete}
+                                    disabled={isDeleting}
+                                    className="px-5 py-2.5 rounded-xl text-[13px] font-bold bg-gradient-to-r from-red-600 to-red-500 text-white shadow-[0_4px_14px_rgba(239,68,68,0.3)] hover:shadow-[0_6px_20px_rgba(239,68,68,0.4)] transition-all flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
+                                >
+                                    {isDeleting ? (
+                                        <>
+                                            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                                            Deleting...
+                                        </>
+                                    ) : (
+                                        'Yes, Remove Record'
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
             {/* Scoped styles for file inputs are applied via Tailwind classes */}
         </div>
     );
