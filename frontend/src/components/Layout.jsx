@@ -415,24 +415,15 @@ const Layout = ({ children }) => {
                     </div>
 
                     {/* Powered by GO Connectivo */}
-                    <div className="mt-3 pt-3 border-t border-white/[0.05]">
-                        <div className="flex flex-col items-center gap-1.5">
-                            <p className="text-[9px] uppercase tracking-[0.18em] text-slate-700 font-semibold">Powered by</p>
-                            <div
-                                className="flex items-center gap-2 px-3 py-1.5 rounded-xl cursor-default select-none transition-all duration-300 hover:scale-[1.02]"
-                                style={{
-                                    background: 'linear-gradient(135deg, rgba(139,92,246,0.07) 0%, rgba(217,70,239,0.05) 50%, rgba(236,72,153,0.04) 100%)',
-                                    border: '1px solid rgba(139,92,246,0.16)',
-                                    boxShadow: '0 0 14px rgba(139,92,246,0.07), inset 0 1px 0 rgba(255,255,255,0.04)'
-                                }}
-                            >
-                                <img
-                                    src="/assets/Go Connectivo 1.png"
-                                    alt="GO Connectivo"
-                                    className="h-7 w-28 object-fill select-none"
-                                    style={{ filter: 'drop-shadow(0 0 4px rgba(139,92,246,0.35))' }}
-                                />
-                            </div>
+                    <div className="mt-3 pt-3 border-t border-white/[0.05] flex justify-center">
+                        <div className="flex items-center gap-4 px-4 py-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all duration-300 group cursor-default shadow-sm">
+                            <span className="text-[11px] tracking-[0.2em] uppercase text-slate-300 font-semibold transition-colors">Powered by</span>
+                            <div className="w-px h-4 bg-white/20 transition-colors" />
+                            <img
+                                src="/assets/Go Connectivo 1.png"
+                                alt="GO Connectivo"
+                                className="h-6 w-auto object-contain opacity-100 brightness-110 drop-shadow-sm"
+                            />
                         </div>
                     </div>
                 </div>

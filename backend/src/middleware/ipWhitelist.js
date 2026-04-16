@@ -1,49 +1,64 @@
 const db = require('../config/db');
 
+const getClientIP = (req) => {
+    let ip =
+        req.headers['x-forwarded-for']?.split(',')[0].trim() ||
+        req.headers['x-real-ip'] ||
+        req.socket.remoteAddress ||
+        req.ip;
+
+    // Normalize IPv6 mapped IPv4 (::ffff:xxx.xxx.xxx.xxx → xxx.xxx.xxx.xxx)
+    if (ip && ip.startsWith('::ffff:')) {
+        ip = ip.replace('::ffff:', '');
+    }
+
+    // Normalize localhost
+    if (ip === '::1') {
+        ip = '127.0.0.1';
+    }
+
+    return ip;
+};
+
 const enforceIPWhitelist = async (req, res, next) => {
     try {
-        // Extract client IP (handle proxies if behind Nginx/Cloudflare)
-        let clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip;
-        
-        // If x-forwarded-for contains multiple IPs, the first one is the client
-        if (clientIp && clientIp.includes(',')) {
-            clientIp = clientIp.split(',')[0].trim();
-        }
+        const clientIp = getClientIP(req);
 
-        // Normalize IPv6 localhost to IPv4
-        if (clientIp === '::1' || clientIp === '::ffff:127.0.0.1') {
-            clientIp = '127.0.0.1';
-        }
+        console.log("🔍 Client IP:", clientIp);
 
-        // 1. Check if the whitelist table is completely empty (Fail-Open behavior)
-        const { rows: countRows } = await db.query('SELECT COUNT(*) FROM ip_whitelist');
+        // 1️⃣ Check if whitelist is empty (fail-open)
+        const { rows: countRows } = await db.query(
+            'SELECT COUNT(*) FROM ip_whitelist'
+        );
         const count = parseInt(countRows[0].count, 10);
 
         if (count === 0) {
-            // Whitelist is unconfigured. Allow all.
+            console.log("⚠️ Whitelist empty → allowing all");
             return next();
         }
 
-        // 2. Table is configured. Check if the specific IP exists and is globally whitelisted
+        // 2️⃣ Check if IP exists & allowed
         const { rows } = await db.query(
             'SELECT is_whitelisted FROM ip_whitelist WHERE ip_address = $1',
             [clientIp]
         );
 
         if (rows.length === 0 || rows[0].is_whitelisted === false) {
-            console.log(`[Security] Blocked unauthorized IP connection attempt: ${clientIp}`);
-            return res.status(403).json({ 
-                error: 'Access Denied', 
-                message: 'Your IP address is not authorized to access this API. Please contact the administrator.' 
-            });
+            console.log(`🚫 BLOCKED IP: ${clientIp}`);
+
+            // Forcefully close the connection without sending an HTTP response
+            // This natively simulates 'This site can't be reached' for API requests
+            return req.socket.destroy();
         }
 
-        // IP is authorized
+        console.log(`✅ ALLOWED IP: ${clientIp}`);
         next();
+
     } catch (err) {
-        console.error('Error in enforceIPWhitelist middleware:', err);
-        // On database error, it's safer to fail-open or respond with 500. Let's respond with 500.
-        res.status(500).json({ error: 'Internal Server Error during security check' });
+        console.error('❌ Whitelist middleware error:', err);
+        res.status(500).json({
+            error: 'Internal Server Error during IP validation'
+        });
     }
 };
 

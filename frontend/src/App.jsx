@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import Login from './pages/Login';
 import Layout from './components/Layout';
+import IpGuard from './components/IpGuard';
 
 import Vendors from './pages/Vendors';
 import UploadLeads from './pages/UploadLeads';
@@ -104,7 +105,9 @@ const App = () => {
     return (
         <BrowserRouter>
             <AuthProvider>
-                <AppRoutes />
+                <IpGuard>
+                    <AppRoutes />
+                </IpGuard>
             </AuthProvider>
         </BrowserRouter>
     );
