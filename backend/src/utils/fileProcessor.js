@@ -134,7 +134,7 @@ const guessIndices = (rowLower) => {
     }
 
     if (
-      (v === "first_name" || v === "firstname" || v === "first") &&
+      (v === "first_name" || v === "firstname" || v === "first" || v === "fname") &&
       firstNameIdx === -1
     ) {
       firstNameIdx = i;
@@ -153,7 +153,7 @@ const guessIndices = (rowLower) => {
     }
 
     if (
-      (v === "last_name" || v === "lastname" || v === "last") &&
+      (v === "last_name" || v === "lastname" || v === "last" || v === "lname") &&
       lastNameIdx === -1
     ) {
       lastNameIdx = i;
@@ -222,6 +222,8 @@ const processFileBuffer = async (buffer, mimetype, originalname) => {
       if (first || last || middle) {
         const parts = [first, middle, last].filter(Boolean);
         name = parts.join(" ").trim();
+      } else if (headerIndices.nameIdx !== -1) {
+        name = String(values[headerIndices.nameIdx] || "").trim();
       } else {
         name = "";
       }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import { getAreaCodeState } from '../utils/areaCodes';
-import { ChevronLeft, ChevronRight, Search, Database, ListFilter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, Database, ListFilter } from 'lucide-react';
 
 const LeadsTable = () => {
     const [leads, setLeads] = useState([]);
@@ -10,6 +10,7 @@ const LeadsTable = () => {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [filterDisposition, setFilterDisposition] = useState('');
+    const [jumpPage, setJumpPage] = useState('');
     const limit = 20;
 
     const fetchLeads = async (pageToFetch, customOptions = {}) => {
@@ -38,11 +39,19 @@ const LeadsTable = () => {
         }
     };
 
-    // Auto-refetch when search is cleared
     useEffect(() => {
         if (search === '') fetchLeads(1);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [search]);
+
+    const handleJumpPage = (e) => {
+        e.preventDefault();
+        const p = parseInt(jumpPage);
+        if (!isNaN(p) && p >= 1 && p <= totalPages) {
+            fetchLeads(p);
+            setJumpPage('');
+        }
+    };
 
     const totalPages = Math.ceil(total / limit);
 
@@ -225,8 +234,17 @@ const LeadsTable = () => {
                         
                         <div className="flex items-center gap-2 mr-2">
                             <button 
+                                onClick={() => fetchLeads(1)} 
+                                disabled={page === 1}
+                                title="First Page"
+                                className="bg-[#1e1e2d] border border-white/10 hover:border-white/20 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg p-2.5 transition-colors active:scale-95 shadow-sm"
+                            >
+                                <ChevronsLeft className="w-4 h-4" />
+                            </button>
+                            <button 
                                 onClick={() => fetchLeads(Math.max(1, page - 1))} 
                                 disabled={page === 1}
+                                title="Previous Page"
                                 className="bg-[#1e1e2d] border border-white/10 hover:border-white/20 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg p-2.5 transition-colors active:scale-95 shadow-sm"
                             >
                                 <ChevronLeft className="w-4 h-4" />
@@ -260,10 +278,34 @@ const LeadsTable = () => {
                             <button 
                                 onClick={() => fetchLeads(Math.min(totalPages, page + 1))} 
                                 disabled={page === totalPages || totalPages === 0}
+                                title="Next Page"
                                 className="bg-[#1e1e2d] border border-white/10 hover:border-white/20 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg p-2.5 transition-colors active:scale-95 shadow-sm"
                             >
                                 <ChevronRight className="w-4 h-4" />
                             </button>
+                            <button 
+                                onClick={() => fetchLeads(totalPages)} 
+                                disabled={page === totalPages || totalPages === 0}
+                                title="Last Page"
+                                className="bg-[#1e1e2d] border border-white/10 hover:border-white/20 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg p-2.5 transition-colors active:scale-95 shadow-sm"
+                            >
+                                <ChevronsRight className="w-4 h-4" />
+                            </button>
+
+                            <form onSubmit={handleJumpPage} className="flex items-center ml-2 border-l border-white/10 pl-4">
+                                <input 
+                                    type="number"
+                                    min="1"
+                                    max={totalPages}
+                                    value={jumpPage}
+                                    onChange={(e) => setJumpPage(e.target.value)}
+                                    placeholder="Page..."
+                                    className="bg-[#0a0a0f] border border-white/10 text-white text-xs rounded-lg px-2 py-2 w-16 outline-none focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/50 transition-all font-mono"
+                                />
+                                <button type="submit" className="ml-2 bg-[#1e1e2d] hover:bg-white/5 text-slate-300 text-xs px-3 py-2 rounded-lg font-bold border border-white/10 transition-colors">
+                                    Go
+                                </button>
+                            </form>
                         </div>
                     </div>
                 </div>
