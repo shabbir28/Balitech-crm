@@ -294,7 +294,17 @@ const AddJob = () => {
                                                     disabled={comparing}
                                                     className="bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white px-8 py-3.5 rounded-xl font-semibold transition-all shadow-[0_4px_14px_rgba(59,130,246,0.3)] flex items-center gap-2 active:scale-[0.98] text-[14px] disabled:opacity-50 disabled:cursor-not-allowed"
                                                 >
-                                                    {comparing ? 'Comparing...' : isBulk ? 'Start Bulk Compare' : 'Start Compare'} <ArrowRight className="w-4 h-4" strokeWidth={2.5} />
+                                                    {comparing ? (
+                                                        <>
+                                                            <div className="relative flex items-center justify-center w-5 h-5">
+                                                                <div className="absolute inset-0 bg-white/30 rounded-full animate-ping opacity-70"></div>
+                                                                <img src="/favicon.png" alt="Loading" className="w-5 h-5 relative z-10 animate-[spin_1.5s_linear_infinite] drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
+                                                            </div>
+                                                            Comparing Data...
+                                                        </>
+                                                    ) : (
+                                                        <>{isBulk ? 'Start Bulk Compare' : 'Start Compare'} <ArrowRight className="w-4 h-4" strokeWidth={2.5} /></>
+                                                    )}
                                                 </button>
                                             </div>
                                         </div>
@@ -454,7 +464,17 @@ const AddJob = () => {
                                             disabled={uploading}
                                             className="bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white px-8 py-3.5 rounded-xl font-semibold transition-all shadow-[0_4px_14px_rgba(59,130,246,0.3)] flex items-center gap-2 active:scale-[0.98] text-[14px]"
                                         >
-                                            {uploading ? 'Processing Data...' : 'Upload Fresh Numbers'} <ArrowRight className="w-4 h-4" strokeWidth={2.5} />
+                                            {uploading ? (
+                                                <>
+                                                    <div className="relative flex items-center justify-center w-5 h-5">
+                                                        <div className="absolute inset-0 bg-white/30 rounded-full animate-ping opacity-70"></div>
+                                                        <img src="/favicon.png" alt="Loading" className="w-5 h-5 relative z-10 animate-[spin_1.5s_linear_infinite] drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
+                                                    </div>
+                                                    Processing Data...
+                                                </>
+                                            ) : (
+                                                <>{'Upload Fresh Numbers'} <ArrowRight className="w-4 h-4" strokeWidth={2.5} /></>
+                                            )}
                                         </button>
                                     </div>
                                     

@@ -96,7 +96,20 @@ async function executeDownload(
     ],
   );
 
-  return result.rows;
+  const rowsWithState = result.rows.map(r => {
+    let code = r.area_code;
+    if (!code || code === 'Unknown') {
+      const clean = r.phone ? String(r.phone).replace(/\D/g, '') : '';
+      if (clean.length === 11 && clean.startsWith('1')) code = clean.substring(1, 4);
+      else if (clean.length === 10) code = clean.substring(0, 3);
+    }
+    return {
+      ...r,
+      state: areaCodesMap[code] || 'Unknown'
+    };
+  });
+
+  return rowsWithState;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -144,6 +157,7 @@ const downloadLeads = async (req, res) => {
       "email",
       "country_code",
       "area_code",
+      "state",
       "disposition",
     ];
     const csv = new Parser({ fields }).parse(rows);
@@ -384,6 +398,7 @@ const reviewDownloadRequest = async (req, res) => {
       "email",
       "country_code",
       "area_code",
+      "state",
       "disposition",
     ];
     const csv = new Parser({ fields }).parse(rows);

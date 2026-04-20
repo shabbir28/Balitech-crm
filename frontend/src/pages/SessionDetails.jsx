@@ -23,9 +23,14 @@ const SessionDetails = () => {
     }, [fetchSession]);
 
     if (loading) return (
-        <div className="flex items-center justify-center p-12 w-full h-full text-brand-400">
-            <RefreshCcw className="w-8 h-8 animate-spin" />
-            <span className="ml-3 font-bold tracking-widest uppercase text-sm">Loading Session Details...</span>
+        <div className="flex flex-col items-center justify-center p-12 w-full h-[60vh] min-h-[400px]">
+            <div className="relative flex items-center justify-center w-20 h-20 mb-6">
+                <div className="absolute inset-0 bg-brand-500/20 rounded-full animate-ping blur-md"></div>
+                <div className="absolute inset-2 bg-brand-400/30 rounded-full animate-pulse blur-sm"></div>
+                <img src="/favicon.png" className="w-14 h-14 relative z-10 animate-[spin_2s_ease-in-out_infinite] drop-shadow-[0_0_15px_rgba(59,130,246,0.9)]" alt="Loading..." />
+            </div>
+            <span className="font-extrabold tracking-widest uppercase text-sm text-transparent bg-clip-text bg-gradient-to-r from-brand-400 to-white animate-pulse">Syncing Session Details...</span>
+            <span className="text-slate-500 text-[11px] mt-2 font-mono uppercase tracking-widest">Please wait while we retrieve the records</span>
         </div>
     );
     if (!session) return (
