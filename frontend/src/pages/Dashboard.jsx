@@ -153,6 +153,30 @@ const Dashboard = () => {
                 <KpiCard index={7} icon={Layers}    label="SALE Numbers"       value={+totals.sale_count}      color="#8b5cf6" sub="Converted lines" />
             </div>
 
+            {/* ── Campaign Cards Row ── */}
+            {campaignStats && campaignStats.length > 0 && (
+                <div style={{ marginBottom: 32 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
+                        <Target size={16} color="#06b6d4" />
+                        <h2 style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', letterSpacing: '0.02em' }}>Uploaded Data by Campaign</h2>
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
+                        {campaignStats.map((camp, idx) => (
+                            <div key={camp.name} style={{ maxWidth: '300px' }}>
+                                <KpiCard 
+                                    index={idx} 
+                                    icon={Database} 
+                                    label={camp.name} 
+                                    value={+camp.count} 
+                                    color={COLORS[idx % COLORS.length]} 
+                                    sub="Total uploaded leads" 
+                                />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* ── Row 2: Vendor Bar + Lead Status Pie ── */}
             <div style={{ display:'grid', gridTemplateColumns:'1fr 340px', gap:20, marginBottom:20, animation:'fadeUp .5s .25s ease both' }}>
                 {/* Vendor-wise leads */}
