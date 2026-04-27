@@ -1,7 +1,8 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useRef } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Lock, User, ArrowRight, ShieldCheck } from 'lucide-react';
+import ReCAPTCHA from "react-google-recaptcha";
 
 const Login = () => {
     const { login } = useContext(AuthContext);
@@ -10,15 +11,27 @@ const Login = () => {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
+    const [captchaToken, setCaptchaToken] = useState(null);
+    const recaptchaRef = useRef(null);
+
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!captchaToken) {
+            setError("Please complete the reCAPTCHA verification.");
+            return;
+        }
+
         setLoading(true);
         setError('');
         try {
-            await login(formData.username, formData.password);
+            await login(formData.username, formData.password, captchaToken);
             navigate('/');
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to login');
+            if (recaptchaRef.current) {
+                recaptchaRef.current.reset();
+                setCaptchaToken(null);
+            }
         } finally {
             setLoading(false);
         }
@@ -95,6 +108,15 @@ const Login = () => {
                                         onChange={(e) => setFormData({...formData, password: e.target.value})}
                                     />
                                 </div>
+                            </div>
+
+                            <div className="flex justify-center pt-2">
+                                <ReCAPTCHA
+                                    ref={recaptchaRef}
+                                    sitekey="6LeKZc0sAAAAANwwnn5RDKJ3d9mBhmx0mwOZYAYz"
+                                    onChange={(token) => setCaptchaToken(token)}
+                                    theme="dark"
+                                />
                             </div>
 
                             <div className="pt-2">

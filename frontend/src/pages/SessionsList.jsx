@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
-import { Database, Search, Calendar, ChevronLeft, ChevronRight, ListFilter, AlertTriangle, Trash2, X, Activity, FileText, Files } from 'lucide-react';
+import { Database, Search, Calendar, ChevronLeft, ChevronRight, ListFilter, AlertTriangle, Trash2, X, Activity, FileText, Files, BarChart3, TrendingUp, CheckCircle2, AlertCircle, Copy, Ban } from 'lucide-react';
 
 const SessionsList = () => {
     const [sessions, setSessions] = useState([]);
@@ -17,7 +17,8 @@ const SessionsList = () => {
     const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null, isDeleting: false });
 
     // Files Viewer Modal State
-    const [filesModal, setFilesModal] = useState({ isOpen: false, files: [], sessionId: null });
+    const [filesModal, setFilesModal] = useState({ isOpen: false, files: [], jobsData: [], sessionId: null });
+    const [selectedJobStats, setSelectedJobStats] = useState(null); // null = list view, object = stats view
     
     const limit = 20;
 
@@ -126,25 +127,37 @@ const SessionsList = () => {
             {/* Files Viewer Modal */}
             {filesModal.isOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={() => setFilesModal({ isOpen: false, files: [], sessionId: null })}></div>
-                    <div className="bg-[#1e1e2d] border border-white/10 rounded-2xl w-full max-w-lg relative z-10 overflow-hidden shadow-2xl">
+                    <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={() => { setFilesModal({ isOpen: false, files: [], jobsData: [], sessionId: null }); setSelectedJobStats(null); }}></div>
+                    <div className="bg-[#1e1e2d] border border-white/10 rounded-2xl w-full max-w-xl relative z-10 overflow-hidden shadow-2xl">
+
                         {/* Modal Header */}
-                        <div className="flex items-center justify-between p-5 border-b border-white/8">
+                        <div className="flex items-center justify-between p-5 border-b border-white/8 bg-black/20">
                             <div className="flex items-center gap-3">
                                 <div className="w-9 h-9 rounded-xl bg-brand-500/15 border border-brand-500/25 flex items-center justify-center">
-                                    <Files className="w-4 h-4 text-brand-400" />
+                                    {selectedJobStats ? <BarChart3 className="w-4 h-4 text-brand-400" /> : <Files className="w-4 h-4 text-brand-400" />}
                                 </div>
                                 <div>
-                                    <h3 className="text-white font-bold text-[15px] tracking-tight">Uploaded Files</h3>
-                                    <p className="text-slate-500 text-[11px] font-mono mt-0.5">Session: {formatShortId(filesModal.sessionId)}</p>
+                                    <h3 className="text-white font-bold text-[15px] tracking-tight">
+                                        {selectedJobStats ? 'File Processing Stats' : 'Uploaded Files'}
+                                    </h3>
+                                    <p className="text-slate-500 text-[11px] font-mono mt-0.5">
+                                        {selectedJobStats ? <span className="truncate max-w-[260px] block" title={selectedJobStats.file_name}>{selectedJobStats.file_name}</span> : `Session: ${formatShortId(filesModal.sessionId)}`}
+                                    </p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className="bg-brand-500/15 border border-brand-500/25 text-brand-300 text-[11px] font-bold px-2.5 py-1 rounded-lg font-mono">
-                                    {filesModal.files.length} {filesModal.files.length === 1 ? 'file' : 'files'}
-                                </span>
+                                {!selectedJobStats && (
+                                    <span className="bg-brand-500/15 border border-brand-500/25 text-brand-300 text-[11px] font-bold px-2.5 py-1 rounded-lg font-mono">
+                                        {filesModal.files.length} {filesModal.files.length === 1 ? 'file' : 'files'}
+                                    </span>
+                                )}
+                                {selectedJobStats && (
+                                    <button onClick={() => setSelectedJobStats(null)} className="text-[12px] text-brand-400 hover:text-brand-300 font-semibold px-3 py-1 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 transition-colors border border-brand-500/20">
+                                        ← Back
+                                    </button>
+                                )}
                                 <button
-                                    onClick={() => setFilesModal({ isOpen: false, files: [], sessionId: null })}
+                                    onClick={() => { setFilesModal({ isOpen: false, files: [], jobsData: [], sessionId: null }); setSelectedJobStats(null); }}
                                     className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
                                 >
                                     <X className="w-4 h-4" />
@@ -152,39 +165,103 @@ const SessionsList = () => {
                             </div>
                         </div>
 
-                        {/* Files List */}
-                        <div className="p-4 max-h-[60vh] overflow-y-auto custom-scrollbar space-y-2">
-                            {filesModal.files.map((fileName, idx) => {
-                                const ext = fileName.split('.').pop().toUpperCase();
-                                const isExcel = ['XLS', 'XLSX'].includes(ext);
-                                return (
-                                    <div
-                                        key={idx}
-                                        className="flex items-center gap-3 bg-[#0a0a0f] border border-white/5 rounded-xl px-4 py-3 hover:border-brand-500/30 hover:bg-brand-500/5 transition-all group"
-                                    >
-                                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 font-bold text-[10px] border ${
-                                            isExcel
-                                                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                                                : 'bg-brand-500/10 border-brand-500/20 text-brand-400'
-                                        }`}>
-                                            {ext}
+                        {/* Content */}
+                        {!selectedJobStats ? (
+                            // Files List View
+                            <div className="p-4 max-h-[60vh] overflow-y-auto custom-scrollbar space-y-2">
+                                {filesModal.files.map((fileName, idx) => {
+                                    const ext = fileName.split('.').pop().toUpperCase();
+                                    const isExcel = ['XLS', 'XLSX'].includes(ext);
+                                    const jobData = filesModal.jobsData?.find(j => j.file_name === fileName);
+                                    const isCompleted = jobData?.status === 'Completed';
+                                    return (
+                                        <div
+                                            key={idx}
+                                            onClick={() => isCompleted && setSelectedJobStats(jobData)}
+                                            className={`flex items-center gap-3 bg-[#0a0a0f] border border-white/5 rounded-xl px-4 py-3 transition-all group ${
+                                                isCompleted ? 'hover:border-brand-500/40 hover:bg-brand-500/5 cursor-pointer' : 'cursor-default opacity-80'
+                                            }`}
+                                        >
+                                            <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 font-bold text-[10px] border ${
+                                                isExcel ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-brand-500/10 border-brand-500/20 text-brand-400'
+                                            }`}>
+                                                {ext}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className={`text-[13px] font-medium truncate transition-colors ${
+                                                    isCompleted ? 'text-white group-hover:text-brand-300' : 'text-slate-400'
+                                                }`} title={fileName}>
+                                                    {fileName}
+                                                </p>
+                                                <p className="text-slate-600 text-[11px] mt-0.5 font-mono">File #{idx + 1}</p>
+                                            </div>
+                                            {isCompleted ? (
+                                                <span className="text-[9px] bg-brand-500/15 border border-brand-500/25 text-brand-400 px-1.5 py-0.5 rounded font-bold shrink-0">STATS →</span>
+                                            ) : (
+                                                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0 border ${
+                                                    jobData?.status === 'Failed' ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                                                }`}>{jobData?.status || '—'}</span>
+                                            )}
                                         </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-white text-[13px] font-medium truncate group-hover:text-brand-300 transition-colors" title={fileName}>
-                                                {fileName}
-                                            </p>
-                                            <p className="text-slate-600 text-[11px] mt-0.5 font-mono">File #{idx + 1}</p>
-                                        </div>
-                                        <FileText className="w-4 h-4 text-slate-600 group-hover:text-brand-400 transition-colors shrink-0" />
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            // Stats View
+                            <div className="p-5 grid grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                                {/* Total */}
+                                <div className="col-span-2 bg-[#0a0a0f] rounded-xl border border-white/5 p-4 flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-lg bg-slate-500/10 border border-slate-500/20 flex items-center justify-center shrink-0">
+                                        <FileText className="w-5 h-5 text-slate-400" />
                                     </div>
-                                );
-                            })}
-                        </div>
+                                    <div>
+                                        <p className="text-slate-500 text-[11px] uppercase tracking-widest font-bold">Total Valid Rows</p>
+                                        <p className="text-2xl font-extrabold text-white mt-0.5">{(selectedJobStats.total_rows || 0).toLocaleString()}</p>
+                                    </div>
+                                </div>
+                                {/* Fresh */}
+                                <div className="bg-[#0a0a0f] rounded-xl border border-brand-500/20 p-4 relative overflow-hidden">
+                                    <div className="absolute top-0 left-0 w-1 h-full bg-brand-500"></div>
+                                    <div className="flex items-center gap-1.5 mb-2 ml-2"><TrendingUp className="w-3 h-3 text-brand-400" /><p className="text-brand-400 text-[10px] uppercase tracking-widest font-bold">Fresh</p></div>
+                                    <p className="text-2xl font-extrabold text-white ml-2">{(selectedJobStats.fresh_count || 0).toLocaleString()}</p>
+                                </div>
+                                {/* Inserted */}
+                                <div className="bg-[#0a0a0f] rounded-xl border border-emerald-500/20 p-4 relative overflow-hidden">
+                                    <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+                                    <div className="flex items-center gap-1.5 mb-2 ml-2"><CheckCircle2 className="w-3 h-3 text-emerald-400" /><p className="text-emerald-400 text-[10px] uppercase tracking-widest font-bold">Inserted</p></div>
+                                    <p className="text-2xl font-extrabold text-white ml-2">{(selectedJobStats.inserted || 0).toLocaleString()}</p>
+                                </div>
+                                {/* Already Present */}
+                                <div className="bg-[#0a0a0f] rounded-xl border border-amber-500/20 p-4 relative overflow-hidden">
+                                    <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
+                                    <div className="flex items-center gap-1.5 mb-2 ml-2"><AlertCircle className="w-3 h-3 text-amber-400" /><p className="text-amber-400 text-[10px] uppercase tracking-widest font-bold">Already Present</p></div>
+                                    <p className="text-2xl font-extrabold text-white ml-2">{(selectedJobStats.existing_count || 0).toLocaleString()}</p>
+                                </div>
+                                {/* Duplicates */}
+                                <div className="bg-[#0a0a0f] rounded-xl border border-orange-500/20 p-4 relative overflow-hidden">
+                                    <div className="absolute top-0 left-0 w-1 h-full bg-orange-500"></div>
+                                    <div className="flex items-center gap-1.5 mb-2 ml-2"><Copy className="w-3 h-3 text-orange-400" /><p className="text-orange-400 text-[10px] uppercase tracking-widest font-bold">Duplicates</p></div>
+                                    <p className="text-2xl font-extrabold text-white ml-2">{(selectedJobStats.duplicates_in_file || 0).toLocaleString()}</p>
+                                </div>
+                                {/* DNC */}
+                                <div className="col-span-2 bg-[#0a0a0f] rounded-xl border border-purple-500/20 p-4 relative overflow-hidden">
+                                    <div className="absolute top-0 left-0 w-1 h-full bg-purple-500"></div>
+                                    <div className="flex items-center gap-1.5 mb-3 ml-2"><Ban className="w-3 h-3 text-purple-400" /><p className="text-purple-400 text-[10px] uppercase tracking-widest font-bold">DNC Skipped</p></div>
+                                    <div className="ml-2 flex items-center gap-6">
+                                        <div><p className="text-slate-500 text-[10px] font-bold mb-0.5">TOTAL</p><p className="text-xl font-extrabold text-white">{(selectedJobStats.dnc_skipped || 0).toLocaleString()}</p></div>
+                                        <div className="w-px h-8 bg-white/5"></div>
+                                        <div><p className="text-slate-500 text-[10px] font-bold mb-0.5">DNC</p><p className="text-xl font-extrabold text-purple-300">{(selectedJobStats.dnc_skipped_dnc || 0).toLocaleString()}</p></div>
+                                        <div className="w-px h-8 bg-white/5"></div>
+                                        <div><p className="text-slate-500 text-[10px] font-bold mb-0.5">SALE</p><p className="text-xl font-extrabold text-purple-300">{(selectedJobStats.dnc_skipped_sale || 0).toLocaleString()}</p></div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
-                        {/* Modal Footer */}
+                        {/* Footer */}
                         <div className="px-4 py-3 border-t border-white/5 bg-black/20 flex justify-end">
                             <button
-                                onClick={() => setFilesModal({ isOpen: false, files: [], sessionId: null })}
+                                onClick={() => { setFilesModal({ isOpen: false, files: [], jobsData: [], sessionId: null }); setSelectedJobStats(null); }}
                                 className="px-5 py-2 rounded-xl text-[13px] font-semibold text-slate-300 hover:text-white hover:bg-white/5 transition-colors"
                             >
                                 Close
@@ -353,7 +430,7 @@ const SessionsList = () => {
                                                 {s.uploaded_files && s.uploaded_files.length > 0 
                                                     ? (
                                                         <button
-                                                            onClick={() => setFilesModal({ isOpen: true, files: s.uploaded_files, sessionId: s.id })}
+                                                            onClick={() => { setSelectedJobStats(null); setFilesModal({ isOpen: true, files: s.uploaded_files, jobsData: s.jobs_data || [], sessionId: s.id }); }}
                                                             className="flex items-center gap-1.5 group cursor-pointer hover:text-brand-300 transition-colors text-left"
                                                             title={`Click to view all ${s.uploaded_files.length} file(s)`}
                                                         >

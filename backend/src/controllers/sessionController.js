@@ -124,6 +124,21 @@ const listSessions = async (req, res) => {
           COALESCE(SUM(CASE WHEN j.status = 'Completed' THEN j.total_rows ELSE 0 END), 0) AS processed_rows,
           MAX(j.end_time) AS end_time,
           ARRAY_AGG(DISTINCT j.file_name) FILTER (WHERE j.file_name IS NOT NULL) AS uploaded_files,
+          JSON_AGG(
+            json_build_object(
+              'file_name',         j.file_name,
+              'file_size',         j.file_size,
+              'status',            j.status,
+              'total_rows',        j.total_rows,
+              'fresh_count',       j.fresh_count,
+              'existing_count',    j.existing_count,
+              'duplicates_in_file',j.duplicates_in_file,
+              'dnc_skipped',       j.dnc_skipped,
+              'dnc_skipped_dnc',   j.dnc_skipped_dnc,
+              'dnc_skipped_sale',  j.dnc_skipped_sale,
+              'inserted',          j.inserted
+            )
+          ) FILTER (WHERE j.file_name IS NOT NULL) AS jobs_data,
           CASE
             WHEN COUNT(j.id) = 0 THEN 'Pending'
             WHEN COUNT(*) FILTER (WHERE j.status = 'Processing') > 0 THEN 'Processing'

@@ -472,10 +472,28 @@ const uploadFreshJob = async (req, res) => {
             await db.query(`
                 UPDATE upload_jobs
                 SET status = 'Completed',
-                    total_rows = $1,
-                    end_time = CURRENT_TIMESTAMP
+                    total_rows          = $1,
+                    end_time            = CURRENT_TIMESTAMP,
+                    fresh_count         = $3,
+                    existing_count      = $4,
+                    duplicates_in_file  = $5,
+                    dnc_skipped         = $6,
+                    dnc_skipped_dnc     = $7,
+                    dnc_skipped_sale    = $8,
+                    inserted            = $9,
+                    updated             = 0
                 WHERE id = $2
-            `, [validRecords.length, job.id]);
+            `, [
+                validRecords.length,
+                job.id,
+                freshCount,
+                existingCount,
+                duplicatesInFile,
+                dncSet.size,
+                dncSkippedDnc,
+                dncSkippedSale,
+                insertedCount,
+            ]);
 
             return res.json({
                 message: 'Fresh upload completed',

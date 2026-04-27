@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../services/api';
-import { Settings, UserCircle, RefreshCcw, FileText, Clock, Database, ChevronRight, PlayCircle, Plus } from 'lucide-react';
+import { Settings, UserCircle, RefreshCcw, FileText, Clock, Database, ChevronRight, PlayCircle, Plus, X, BarChart3, CheckCircle2, AlertCircle, Copy, Ban, TrendingUp } from 'lucide-react';
 
 const SessionDetails = () => {
     const { id } = useParams();
     const [session, setSession] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [jobStatsModal, setJobStatsModal] = useState({ isOpen: false, job: null });
 
     const fetchSession = useCallback(() => {
         api.get(`/sessions/${id}`)
@@ -50,8 +51,134 @@ const SessionDetails = () => {
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     };
 
+    const openJobStats = (job) => {
+        if (job.status === 'Completed') {
+            setJobStatsModal({ isOpen: true, job });
+        }
+    };
+
     return (
         <div className="max-w-7xl mx-auto space-y-6 text-slate-200 font-sans pb-12">
+
+            {/* Job Stats Modal */}
+            {jobStatsModal.isOpen && jobStatsModal.job && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={() => setJobStatsModal({ isOpen: false, job: null })}></div>
+                    <div className="bg-[#1e1e2d] border border-white/10 rounded-2xl w-full max-w-xl relative z-10 overflow-hidden shadow-2xl">
+                        
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between p-5 border-b border-white/8 bg-black/20">
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-brand-500/15 border border-brand-500/25 flex items-center justify-center">
+                                    <BarChart3 className="w-4 h-4 text-brand-400" />
+                                </div>
+                                <div>
+                                    <h3 className="text-white font-bold text-[15px] tracking-tight">File Processing Stats</h3>
+                                    <p className="text-slate-500 text-[11px] font-mono mt-0.5 truncate max-w-[280px]" title={jobStatsModal.job.file_name}>
+                                        {jobStatsModal.job.file_name}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setJobStatsModal({ isOpen: false, job: null })}
+                                className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        {/* Stats Grid */}
+                        <div className="p-5 grid grid-cols-2 gap-3">
+                            {/* Total Rows */}
+                            <div className="col-span-2 bg-[#0a0a0f] rounded-xl border border-white/5 p-4 flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-lg bg-slate-500/10 border border-slate-500/20 flex items-center justify-center shrink-0">
+                                    <FileText className="w-5 h-5 text-slate-400" />
+                                </div>
+                                <div>
+                                    <p className="text-slate-500 text-[11px] uppercase tracking-widest font-bold">Total Valid Rows in File</p>
+                                    <p className="text-2xl font-extrabold text-white mt-0.5">{(jobStatsModal.job.total_rows || 0).toLocaleString()}</p>
+                                </div>
+                            </div>
+
+                            {/* Fresh */}
+                            <div className="bg-[#0a0a0f] rounded-xl border border-brand-500/20 p-4 relative overflow-hidden group hover:border-brand-500/40 transition-colors">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-brand-500"></div>
+                                <div className="flex items-center gap-2 mb-2 ml-2">
+                                    <TrendingUp className="w-3.5 h-3.5 text-brand-400" />
+                                    <p className="text-brand-400 text-[11px] uppercase tracking-widest font-bold">Fresh Numbers</p>
+                                </div>
+                                <p className="text-2xl font-extrabold text-white ml-2">{(jobStatsModal.job.fresh_count || 0).toLocaleString()}</p>
+                            </div>
+
+                            {/* Inserted */}
+                            <div className="bg-[#0a0a0f] rounded-xl border border-emerald-500/20 p-4 relative overflow-hidden group hover:border-emerald-500/40 transition-colors">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+                                <div className="flex items-center gap-2 mb-2 ml-2">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                    <p className="text-emerald-400 text-[11px] uppercase tracking-widest font-bold">Inserted in DB</p>
+                                </div>
+                                <p className="text-2xl font-extrabold text-white ml-2">{(jobStatsModal.job.inserted || 0).toLocaleString()}</p>
+                            </div>
+
+                            {/* Already Present */}
+                            <div className="bg-[#0a0a0f] rounded-xl border border-amber-500/20 p-4 relative overflow-hidden group hover:border-amber-500/40 transition-colors">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
+                                <div className="flex items-center gap-2 mb-2 ml-2">
+                                    <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                                    <p className="text-amber-400 text-[11px] uppercase tracking-widest font-bold">Already Present</p>
+                                </div>
+                                <p className="text-2xl font-extrabold text-white ml-2">{(jobStatsModal.job.existing_count || 0).toLocaleString()}</p>
+                            </div>
+
+                            {/* Duplicates in file */}
+                            <div className="bg-[#0a0a0f] rounded-xl border border-orange-500/20 p-4 relative overflow-hidden group hover:border-orange-500/40 transition-colors">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-orange-500"></div>
+                                <div className="flex items-center gap-2 mb-2 ml-2">
+                                    <Copy className="w-3.5 h-3.5 text-orange-400" />
+                                    <p className="text-orange-400 text-[11px] uppercase tracking-widest font-bold">Duplicates in File</p>
+                                </div>
+                                <p className="text-2xl font-extrabold text-white ml-2">{(jobStatsModal.job.duplicates_in_file || 0).toLocaleString()}</p>
+                            </div>
+
+                            {/* DNC Skipped */}
+                            <div className="col-span-2 bg-[#0a0a0f] rounded-xl border border-purple-500/20 p-4 relative overflow-hidden">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-purple-500"></div>
+                                <div className="flex items-center gap-2 mb-3 ml-2">
+                                    <Ban className="w-3.5 h-3.5 text-purple-400" />
+                                    <p className="text-purple-400 text-[11px] uppercase tracking-widest font-bold">DNC Skipped</p>
+                                </div>
+                                <div className="ml-2 flex items-center gap-6">
+                                    <div>
+                                        <p className="text-slate-500 text-[10px] uppercase tracking-wider font-bold mb-0.5">Total</p>
+                                        <p className="text-2xl font-extrabold text-white">{(jobStatsModal.job.dnc_skipped || 0).toLocaleString()}</p>
+                                    </div>
+                                    <div className="w-px h-10 bg-white/5"></div>
+                                    <div>
+                                        <p className="text-slate-500 text-[10px] uppercase tracking-wider font-bold mb-0.5">DNC</p>
+                                        <p className="text-xl font-extrabold text-purple-300">{(jobStatsModal.job.dnc_skipped_dnc || 0).toLocaleString()}</p>
+                                    </div>
+                                    <div className="w-px h-10 bg-white/5"></div>
+                                    <div>
+                                        <p className="text-slate-500 text-[10px] uppercase tracking-wider font-bold mb-0.5">SALE</p>
+                                        <p className="text-xl font-extrabold text-purple-300">{(jobStatsModal.job.dnc_skipped_sale || 0).toLocaleString()}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="px-5 py-3 border-t border-white/5 bg-black/20 flex items-center justify-between">
+                            <span className="text-slate-500 text-[11px] font-mono">Size: {formatBytes(parseInt(jobStatsModal.job.file_size || 0))}</span>
+                            <button
+                                onClick={() => setJobStatsModal({ isOpen: false, job: null })}
+                                className="px-5 py-2 rounded-xl text-[13px] font-semibold text-slate-300 hover:text-white hover:bg-white/5 transition-colors"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             
             {/* Header Breadcrumb */}
             <div className="flex items-center space-x-2 text-[13px] text-slate-400 bg-[#1e1e2d] px-5 py-3.5 rounded-2xl shadow-sm border border-white/5 mx-auto">
@@ -96,8 +223,26 @@ const SessionDetails = () => {
                     <h3 className="text-orange-500 font-bold flex items-center mb-5 text-sm uppercase tracking-widest drop-shadow-[0_0_8px_rgba(234,88,12,0.4)]">
                         <FileText className="mr-2 w-4 h-4" strokeWidth={2.5} /> Session Metadata
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                        <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 group hover:border-brand-500/30 transition-colors md:col-span-2">
+                            <p className="text-slate-500 text-[11px] uppercase tracking-widest font-bold mb-1.5">Uploaded File(s)</p>
+                            <div className="flex items-center text-[14px] font-medium text-white truncate">
+                                <span className="truncate" title={session.jobs.map(j => j.file_name).join(', ')}>
+                                    {session.jobs.length > 0 ? (
+                                        session.jobs.length === 1 ? session.jobs[0].file_name : `${session.jobs[0].file_name} (+${session.jobs.length - 1} more)`
+                                    ) : (
+                                        <span className="text-slate-500 italic">No files yet</span>
+                                    )}
+                                </span>
+                            </div>
+                        </div>
                         <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 group hover:border-brand-500/30 transition-colors">
+                            <p className="text-slate-500 text-[11px] uppercase tracking-widest font-bold mb-1.5">Uploaded By</p>
+                            <p className="text-[14px] font-medium text-white flex items-center truncate" title={session.created_by_username || 'System User'}>
+                                <UserCircle className="w-4 h-4 mr-1.5 text-brand-400 shrink-0" /> {session.created_by_username || 'System User'}
+                            </p>
+                        </div>
+                        <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 group hover:border-brand-500/30 transition-colors md:col-span-2">
                             <p className="text-slate-500 text-[11px] uppercase tracking-widest font-bold mb-1.5">Vendor / Campaign</p>
                             <p className="text-[15px] font-medium truncate text-white">{session.vendor_name} <span className="text-slate-500 mx-1">/</span> {session.campaign_type}</p>
                         </div>
@@ -107,7 +252,7 @@ const SessionDetails = () => {
                         </div>
                         <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 group hover:border-brand-500/30 transition-colors">
                             <p className="text-slate-500 text-[11px] uppercase tracking-widest font-bold mb-1.5">Processing Strategy</p>
-                            <p className="text-[15px] font-medium text-white flex items-center">
+                            <p className="text-[14px] font-medium text-white flex items-center">
                                 <span className="w-1.5 h-1.5 rounded-full bg-brand-400 mr-2"></span> Mixed Mode
                             </p>
                         </div>
@@ -123,14 +268,10 @@ const SessionDetails = () => {
                     <h3 className="text-orange-500 font-bold flex items-center mb-5 text-sm uppercase tracking-widest drop-shadow-[0_0_8px_rgba(234,88,12,0.4)]">
                         <Clock className="mr-2 w-4 h-4" strokeWidth={2.5} /> Timeline & Logs
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div className="bg-[#0a0a0f] p-4 rounded-2xl border border-white/5">
                             <p className="text-slate-500 text-[11px] uppercase tracking-widest font-bold mb-1">Initialization</p>
                             <p className="text-[13px] text-slate-300 font-mono">{new Date(session.created_at).toLocaleString()}</p>
-                        </div>
-                        <div className="bg-[#0a0a0f] p-4 rounded-2xl border border-white/5">
-                            <p className="text-slate-500 text-[11px] uppercase tracking-widest font-bold mb-1">Completion Details</p>
-                            <p className="text-[13px] text-slate-500 font-mono">Pending processing...</p>
                         </div>
                         <div className="bg-[#0a0a0f] p-4 rounded-2xl border border-white/5">
                             <p className="text-slate-500 text-[11px] uppercase tracking-widest font-bold mb-1">Latest Activity</p>
@@ -139,14 +280,13 @@ const SessionDetails = () => {
                             </p>
                         </div>
                         <div className="bg-[#0a0a0f] p-4 rounded-2xl border border-white/5">
-                            <p className="text-slate-500 text-[11px] uppercase tracking-widest font-bold mb-1">Created At</p>
-                            <p className="text-[13px] text-slate-300 font-mono">{new Date(session.created_at).toLocaleString()}</p>
+                            <p className="text-slate-500 text-[11px] uppercase tracking-widest font-bold mb-1">Completion Details</p>
+                            <p className="text-[13px] text-slate-500 font-mono">Pending processing...</p>
                         </div>
                         <div className="bg-[#0a0a0f] p-4 rounded-2xl border border-white/5">
-                            <p className="text-slate-500 text-[11px] uppercase tracking-widest font-bold mb-1">Authenticated User</p>
+                            <p className="text-slate-500 text-[11px] uppercase tracking-widest font-bold mb-1">System Load</p>
                             <p className="text-[13px] font-bold text-white flex items-center">
-                                <UserCircle className="w-4 h-4 mr-1.5 text-brand-400" />
-                                {session.created_by_username || 'System User'}
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5"></span> Normal
                             </p>
                         </div>
                     </div>
@@ -195,7 +335,25 @@ const SessionDetails = () => {
                                     session.jobs.map((job, index) => (
                                         <tr key={job.id} className="hover:bg-white/5 transition-colors group">
                                             <td className="p-4 text-slate-500 font-mono font-medium">{String(index + 1).padStart(2, '0')}</td>
-                                            <td className="p-4 font-bold text-slate-200 max-w-[200px] truncate" title={job.file_name}>{job.file_name}</td>
+                                            <td className="p-4 max-w-[200px]">
+                                                <button
+                                                    onClick={() => openJobStats(job)}
+                                                    title={job.status === 'Completed' ? `Click to view stats for ${job.file_name}` : job.file_name}
+                                                    className={`flex items-center gap-2 text-left group ${
+                                                        job.status === 'Completed'
+                                                            ? 'cursor-pointer hover:text-brand-300 text-slate-200'
+                                                            : 'cursor-default text-slate-400'
+                                                    } transition-colors`}
+                                                >
+                                                    <FileText className={`w-3.5 h-3.5 shrink-0 ${
+                                                        job.status === 'Completed' ? 'text-brand-400 group-hover:text-brand-300' : 'text-slate-600'
+                                                    } transition-colors`} />
+                                                    <span className="font-bold truncate max-w-[160px]">{job.file_name}</span>
+                                                    {job.status === 'Completed' && (
+                                                        <span className="text-[9px] bg-brand-500/15 border border-brand-500/25 text-brand-400 px-1.5 py-0.5 rounded font-bold shrink-0">STATS</span>
+                                                    )}
+                                                </button>
+                                            </td>
                                             <td className="p-4 text-slate-400 font-mono">{formatBytes(parseInt(job.file_size))}</td>
                                             <td className="p-4">
                                                 <span className={`px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider flex items-center max-w-fit ${
