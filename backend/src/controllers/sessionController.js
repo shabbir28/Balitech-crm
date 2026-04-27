@@ -123,6 +123,7 @@ const listSessions = async (req, res) => {
           COALESCE(SUM(j.total_rows), 0) AS total_rows,
           COALESCE(SUM(CASE WHEN j.status = 'Completed' THEN j.total_rows ELSE 0 END), 0) AS processed_rows,
           MAX(j.end_time) AS end_time,
+          ARRAY_AGG(DISTINCT j.file_name) FILTER (WHERE j.file_name IS NOT NULL) AS uploaded_files,
           CASE
             WHEN COUNT(j.id) = 0 THEN 'Pending'
             WHEN COUNT(*) FILTER (WHERE j.status = 'Processing') > 0 THEN 'Processing'

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
-import { Database, Search, Calendar, UserCircle, ChevronLeft, ChevronRight, ListFilter, PlayCircle, AlertTriangle, Trash2, X, Activity } from 'lucide-react';
+import { Database, Search, Calendar, ChevronLeft, ChevronRight, ListFilter, AlertTriangle, Trash2, X, Activity, FileText, Files } from 'lucide-react';
 
 const SessionsList = () => {
     const [sessions, setSessions] = useState([]);
@@ -15,6 +15,9 @@ const SessionsList = () => {
     
     // Custom Delete Modal State
     const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null, isDeleting: false });
+
+    // Files Viewer Modal State
+    const [filesModal, setFilesModal] = useState({ isOpen: false, files: [], sessionId: null });
     
     const limit = 20;
 
@@ -120,6 +123,77 @@ const SessionsList = () => {
                 </div>
             )}
 
+            {/* Files Viewer Modal */}
+            {filesModal.isOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={() => setFilesModal({ isOpen: false, files: [], sessionId: null })}></div>
+                    <div className="bg-[#1e1e2d] border border-white/10 rounded-2xl w-full max-w-lg relative z-10 overflow-hidden shadow-2xl">
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between p-5 border-b border-white/8">
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-brand-500/15 border border-brand-500/25 flex items-center justify-center">
+                                    <Files className="w-4 h-4 text-brand-400" />
+                                </div>
+                                <div>
+                                    <h3 className="text-white font-bold text-[15px] tracking-tight">Uploaded Files</h3>
+                                    <p className="text-slate-500 text-[11px] font-mono mt-0.5">Session: {formatShortId(filesModal.sessionId)}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="bg-brand-500/15 border border-brand-500/25 text-brand-300 text-[11px] font-bold px-2.5 py-1 rounded-lg font-mono">
+                                    {filesModal.files.length} {filesModal.files.length === 1 ? 'file' : 'files'}
+                                </span>
+                                <button
+                                    onClick={() => setFilesModal({ isOpen: false, files: [], sessionId: null })}
+                                    className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Files List */}
+                        <div className="p-4 max-h-[60vh] overflow-y-auto custom-scrollbar space-y-2">
+                            {filesModal.files.map((fileName, idx) => {
+                                const ext = fileName.split('.').pop().toUpperCase();
+                                const isExcel = ['XLS', 'XLSX'].includes(ext);
+                                return (
+                                    <div
+                                        key={idx}
+                                        className="flex items-center gap-3 bg-[#0a0a0f] border border-white/5 rounded-xl px-4 py-3 hover:border-brand-500/30 hover:bg-brand-500/5 transition-all group"
+                                    >
+                                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 font-bold text-[10px] border ${
+                                            isExcel
+                                                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                                                : 'bg-brand-500/10 border-brand-500/20 text-brand-400'
+                                        }`}>
+                                            {ext}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-white text-[13px] font-medium truncate group-hover:text-brand-300 transition-colors" title={fileName}>
+                                                {fileName}
+                                            </p>
+                                            <p className="text-slate-600 text-[11px] mt-0.5 font-mono">File #{idx + 1}</p>
+                                        </div>
+                                        <FileText className="w-4 h-4 text-slate-600 group-hover:text-brand-400 transition-colors shrink-0" />
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="px-4 py-3 border-t border-white/5 bg-black/20 flex justify-end">
+                            <button
+                                onClick={() => setFilesModal({ isOpen: false, files: [], sessionId: null })}
+                                className="px-5 py-2 rounded-xl text-[13px] font-semibold text-slate-300 hover:text-white hover:bg-white/5 transition-colors"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Header Area */}
             <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between mb-8 gap-6 border-b border-white/5 pb-6">
                 <div className="shrink-0">
@@ -210,13 +284,14 @@ const SessionsList = () => {
             <div className="bg-[#13151f] rounded-3xl border border-white/5 shadow-2xl relative">
                 
                 <div className="w-full overflow-x-auto custom-scrollbar rounded-3xl">
-                    <div className="min-w-[1300px]">
+                    <div className="min-w-[1500px]">
                         {/* Table Header */}
-                        <div className="grid grid-cols-[160px_100px_160px_160px_140px_150px_150px_130px_180px_170px] p-4 items-center border-b border-white/10 bg-black/20 text-[11px] font-bold text-slate-400 uppercase tracking-widest sticky top-0 backdrop-blur-xl z-20">
+                        <div className="grid grid-cols-[160px_100px_160px_160px_200px_140px_150px_150px_130px_180px_170px] p-4 items-center border-b border-white/10 bg-black/20 text-[11px] font-bold text-slate-400 uppercase tracking-widest sticky top-0 backdrop-blur-xl z-20">
                             <div className="pl-4">Session ID</div>
                             <div>Jobs</div>
                             <div>Vendor</div>
                             <div>Campaign</div>
+                            <div>Uploaded File</div>
                             <div>Created By</div>
                             <div>Start Time</div>
                             <div>End Time</div>
@@ -249,7 +324,7 @@ const SessionsList = () => {
                                     const totalJobs = parseInt(s.total_jobs || 0, 10);
 
                                     return (
-                                        <div key={s.id} className="grid grid-cols-[160px_100px_160px_160px_140px_150px_150px_130px_180px_170px] p-3 items-center hover:bg-white/[0.02] transition-colors group">
+                                        <div key={s.id} className="grid grid-cols-[160px_100px_160px_160px_200px_140px_150px_150px_130px_180px_170px] p-3 items-center hover:bg-white/[0.02] transition-colors group">
                                             
                                             {/* Session ID */}
                                             <div className="pl-4">
@@ -271,6 +346,27 @@ const SessionsList = () => {
                                             {/* Campaign */}
                                             <div className="text-slate-300 text-[13px] pr-2 font-medium line-clamp-1">
                                                 {s.campaign_type || '—'}
+                                            </div>
+                                            
+                                            {/* Uploaded File */}
+                                            <div className="text-slate-300 text-[13px] pr-2 font-medium">
+                                                {s.uploaded_files && s.uploaded_files.length > 0 
+                                                    ? (
+                                                        <button
+                                                            onClick={() => setFilesModal({ isOpen: true, files: s.uploaded_files, sessionId: s.id })}
+                                                            className="flex items-center gap-1.5 group cursor-pointer hover:text-brand-300 transition-colors text-left"
+                                                            title={`Click to view all ${s.uploaded_files.length} file(s)`}
+                                                        >
+                                                            <FileText className="w-3.5 h-3.5 text-slate-500 group-hover:text-brand-400 shrink-0 transition-colors" />
+                                                            <span className="truncate max-w-[120px]">{s.uploaded_files[0]}</span>
+                                                            {s.uploaded_files.length > 1 && (
+                                                                <span className="text-[10px] bg-brand-500/15 border border-brand-500/25 px-1.5 py-0.5 rounded text-brand-400 font-bold shrink-0">
+                                                                    +{s.uploaded_files.length - 1}
+                                                                </span>
+                                                            )}
+                                                        </button>
+                                                    ) 
+                                                    : <span className="text-slate-600">—</span>}
                                             </div>
                                             
                                             {/* Created By */}
