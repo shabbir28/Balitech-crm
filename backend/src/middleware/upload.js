@@ -4,13 +4,13 @@ const path = require('path');
 // Configure memory storage
 const storage = multer.memoryStorage();
 
-// Accept only CSV and Excel (.xlsx, .xls) files
+// Accept only CSV, Excel (.xlsx, .xls) and Text (.txt) files
 const fileFilter = (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    if (ext === '.csv' || ext === '.xlsx' || ext === '.xls') {
+    if (ext === '.csv' || ext === '.xlsx' || ext === '.xls' || ext === '.txt') {
         cb(null, true);
     } else {
-        cb(new Error('Only CSV or Excel files are allowed'), false);
+        cb(new Error('Only CSV, Excel or TXT files are allowed'), false);
     }
 };
 

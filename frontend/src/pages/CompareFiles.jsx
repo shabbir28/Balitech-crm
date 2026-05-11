@@ -108,7 +108,7 @@ const DropZone = ({ label, badge, side, file, onFile, onClear }) => {
                 style={{ background: drag ? `${color}10` : 'transparent', minHeight: '180px' }}
                 onClick={() => !file && ref.current?.click()}
             >
-                <input ref={ref} type="file" accept=".xlsx,.xls,.csv" className="hidden"
+                <input ref={ref} type="file" accept=".xlsx,.xls,.csv,.txt" className="hidden"
                     onChange={e => e.target.files?.[0] && onFile(e.target.files[0])} />
                 {file ? (
                     <div className="flex flex-col items-center gap-3 text-center">

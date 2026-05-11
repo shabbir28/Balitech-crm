@@ -238,7 +238,7 @@ const AddJob = () => {
                                     <div className="group relative border-2 border-dashed border-white/20 hover:border-brand-500/50 rounded-3xl p-10 text-center bg-[#1e1e2d]/50 hover:bg-brand-500/5 transition-all duration-300">
                                         <input 
                                             type="file" 
-                                            accept=".csv, .xls, .xlsx" 
+                                            accept=".csv, .xls, .xlsx, .txt" 
                                             multiple={isBulk}
                                             onChange={handleFileChange}
                                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
