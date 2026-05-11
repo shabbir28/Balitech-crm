@@ -49,7 +49,7 @@ const Field = ({ label, required, hint, children }) => (
     </div>
 );
 
-const SelectInput = ({ value, onChange, disabled, required, placeholder, children }) => (
+const SelectInput = ({ value, onChange, disabled, required, children }) => (
     <div className="relative">
         <select
             value={value}
@@ -98,7 +98,7 @@ const DownloadLeads = () => {
         if (!isAdmin) return;
         setLoadingReq(true);
         try { const r = await api.get('/download/requests/mine'); setMyRequests(r.data); }
-        catch {} finally { setLoadingReq(false); }
+        catch (err) { console.error(err); } finally { setLoadingReq(false); }
     };
     useEffect(() => { fetchMyReqs(); }, []); // eslint-disable-line
 

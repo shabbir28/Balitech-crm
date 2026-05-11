@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { Plus, Trash2, Edit, Eye, X } from 'lucide-react';
+import { Plus, Trash2, Edit, Eye, X, AlertTriangle, CheckCircle } from 'lucide-react';
 
 const Vendors = () => {
     const [vendors, setVendors] = useState([]);
@@ -9,6 +9,8 @@ const Vendors = () => {
     // Modals state
     const [showFormModal, setShowFormModal] = useState(false);
     const [showViewModal, setShowViewModal] = useState(false);
+    const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null, isDeleting: false });
+    const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
     
     // Form and selected vendor state
     const [editingId, setEditingId] = useState(null);
@@ -35,6 +37,11 @@ const Vendors = () => {
     useEffect(() => {
         fetchVendors();
     }, []);
+
+    const showNotification = (message, type = 'success') => {
+        setNotification({ show: true, message, type });
+        setTimeout(() => setNotification({ show: false, message: '', type: 'success' }), 3000);
+    };
 
     const handleOpenAdd = () => {
         setEditingId(null);
@@ -64,23 +71,36 @@ const Vendors = () => {
         try {
             if (editingId) {
                 await api.put(`/vendors/${editingId}`, formData);
+                showNotification('Vendor updated successfully');
             } else {
                 await api.post('/vendors', formData);
+                showNotification('Vendor created successfully');
             }
             setShowFormModal(false);
             fetchVendors();
         } catch {
-            alert('Failed to save vendor');
+            showNotification('Failed to save vendor', 'error');
         }
     };
 
-    const handleDelete = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this vendor? This action cannot be undone.')) return;
+    const confirmDelete = (id) => {
+        setDeleteModal({ isOpen: true, id, isDeleting: false });
+    };
+
+    const cancelDelete = () => {
+        setDeleteModal({ isOpen: false, id: null, isDeleting: false });
+    };
+
+    const executeDelete = async () => {
+        setDeleteModal(prev => ({ ...prev, isDeleting: true }));
         try {
-            await api.delete(`/vendors/${id}`);
+            await api.delete(`/vendors/${deleteModal.id}`);
+            showNotification('Vendor deleted successfully');
             fetchVendors();
+            setDeleteModal({ isOpen: false, id: null, isDeleting: false });
         } catch {
-            alert('Failed to delete vendor');
+            showNotification('Failed to delete vendor', 'error');
+            setDeleteModal(prev => ({ ...prev, isDeleting: false }));
         }
     };
 
@@ -97,6 +117,58 @@ const Vendors = () => {
                     <Plus className="mr-2 h-4 w-4" /> Add Vendor
                 </button>
             </div>
+
+            {/* Notification Toast */}
+            {notification.show && (
+                <div className={`fixed top-6 right-6 z-[200] flex items-center gap-3 px-5 py-3.5 rounded-xl shadow-2xl border animate-fade-in ${
+                    notification.type === 'success' 
+                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
+                    : 'bg-red-500/10 border-red-500/20 text-red-400'
+                }`}>
+                    {notification.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+                    <span className="font-semibold text-sm">{notification.message}</span>
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {deleteModal.isOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={cancelDelete}></div>
+                    <div className="bg-[#1e1e2d] border border-white/10 rounded-2xl w-full max-w-md relative z-10 overflow-hidden shadow-2xl animate-fade-in scale-in">
+                        <div className="p-6">
+                            <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4 border border-red-500/20">
+                                <AlertTriangle className="w-6 h-6 text-red-500" />
+                            </div>
+                            <h3 className="text-xl font-bold text-white mb-2">Delete Vendor?</h3>
+                            <p className="text-slate-400 text-[14px] leading-relaxed">
+                                Are you sure you want to delete this vendor? 
+                                <br/><span className="text-red-400 font-medium">This action cannot be undone and may affect associated campaigns.</span>
+                            </p>
+                        </div>
+                        <div className="bg-black/20 p-4 border-t border-white/5 flex items-center justify-end gap-3">
+                            <button
+                                disabled={deleteModal.isDeleting}
+                                onClick={cancelDelete}
+                                className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                disabled={deleteModal.isDeleting}
+                                onClick={executeDelete}
+                                className="px-5 py-2 rounded-xl text-sm font-semibold bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 transition-all flex items-center gap-2 group disabled:opacity-50"
+                            >
+                                {deleteModal.isDeleting ? (
+                                    <span className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin"></span>
+                                ) : (
+                                    <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                                )}
+                                Yes, Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="card overflow-x-auto bg-[#1a1d2e] border border-white/[0.05] shadow-2xl rounded-2xl">
                 <table className="min-w-full divide-y divide-white/[0.05] text-sm">
@@ -143,7 +215,7 @@ const Vendors = () => {
                                         <Edit className="h-4 w-4 inline" />
                                     </button>
                                     <button 
-                                        onClick={() => handleDelete(vendor.vendor_id)}
+                                        onClick={() => confirmDelete(vendor.vendor_id)}
                                         className="text-red-500 hover:text-red-400 transition-colors"
                                         title="Delete Vendor"
                                     >

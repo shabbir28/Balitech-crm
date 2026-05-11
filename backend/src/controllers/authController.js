@@ -19,7 +19,11 @@ const login = async (req, res) => {
     const verifyData = await verifyResponse.json();
 
     if (!verifyData.success) {
-      return res.status(400).json({ message: "reCAPTCHA verification failed" });
+      console.error("reCAPTCHA Verification Failed:", verifyData);
+      return res.status(400).json({ 
+        message: "reCAPTCHA verification failed", 
+        errors: verifyData["error-codes"] 
+      });
     }
 
     const { rows } = await db.query(

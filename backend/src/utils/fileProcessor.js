@@ -100,7 +100,7 @@ const guessIndices = (rowLower) => {
   let dispIdx = -1;
 
   const isPhoneHeader = (v) => {
-    // Strong matches for phone-number columns
+    // Strong exact matches for phone-number columns
     if (
       v === "phone" ||
       v === "phone_number" ||
@@ -108,14 +108,31 @@ const guessIndices = (rowLower) => {
       v === "phone_no" ||
       v === "phone_nu" ||
       v === "number" ||
-      v === "contact"
+      v === "contact" ||
+      v === "customertelephonenumber" ||
+      v === "telephonenumber" ||
+      v === "telephone" ||
+      v === "telephone_number" ||
+      v === "mobile" ||
+      v === "mobile_number" ||
+      v === "cell" ||
+      v === "cell_number"
     ) {
       return true;
     }
-    // Generic includes "phone" / "number" but avoid mixed headers like "phone_nu_status"
-    return (
-      (v.includes("phone") || v.includes("number")) && !v.includes("status")
-    );
+    // Generic includes "phone" / "telephone" / "mobile" but avoid mixed headers like "phone_nu_status"
+    if ((v.includes("phone") || v.includes("telephone") || v.includes("mobile")) && !v.includes("status")) {
+      return true;
+    }
+    // Includes "number" but not other ambiguous words
+    if (v.includes("number") && !v.includes("status") && !v.includes("name") && !v.includes("policy") && !v.includes("zip")) {
+      return true;
+    }
+    return false;
+  };
+
+  const isEmailHeader = (v) => {
+    return v.includes("email") || v === "customeremailaddress" || v === "emailaddress";
   };
 
   const isDispositionHeader = (v) => {
@@ -127,46 +144,56 @@ const guessIndices = (rowLower) => {
     return false;
   };
 
+  const isNameHeader = (v) => {
+    // Explicit full-name columns
+    if (v === "name" || v === "full_name" || v === "customername" || v === "insuredname" || v === "clientname") return true;
+    // Contains "name" but EXCLUDE phone-related columns like "customertelephonenumber"
+    if (v.includes("name") && !v.includes("phone") && !v.includes("telephone") && !v.includes("mobile") && !v.includes("number")) return true;
+    return false;
+  };
+
+  const isFirstNameHeader = (v) =>
+    v === "first_name" || v === "firstname" || v === "first" || v === "fname" ||
+    v === "customerfirstname" || v === "insuredfirstname";
+
+  const isMiddleNameHeader = (v) =>
+    v === "middle_initial" || v === "middle" || v === "mi" || v === "middle_name" ||
+    v === "customermiddlename" || v === "customermiddleinitial";
+
+  const isLastNameHeader = (v) =>
+    v === "last_name" || v === "lastname" || v === "last" || v === "lname" ||
+    v === "customerlastname" || v === "insuredlastname";
+
   rowLower.forEach((v, i) => {
-    if (v.includes("email") && emailIdx === -1) {
+    // IMPORTANT: Check phone FIRST to prevent headers like "customertelephonenumber"
+    // from being incorrectly matched as a name column (it contains the word "name").
+    if (isPhoneHeader(v) && phoneIdx === -1) {
+      phoneIdx = i;
+      return;
+    }
+
+    if (isEmailHeader(v) && emailIdx === -1) {
       emailIdx = i;
       return;
     }
 
-    if (
-      (v === "first_name" || v === "firstname" || v === "first" || v === "fname") &&
-      firstNameIdx === -1
-    ) {
+    if (isFirstNameHeader(v) && firstNameIdx === -1) {
       firstNameIdx = i;
       return;
     }
 
-    if (
-      (v === "middle_initial" ||
-        v === "middle" ||
-        v === "mi" ||
-        v === "middle_name") &&
-      middleIdx === -1
-    ) {
+    if (isMiddleNameHeader(v) && middleIdx === -1) {
       middleIdx = i;
       return;
     }
 
-    if (
-      (v === "last_name" || v === "lastname" || v === "last" || v === "lname") &&
-      lastNameIdx === -1
-    ) {
+    if (isLastNameHeader(v) && lastNameIdx === -1) {
       lastNameIdx = i;
       return;
     }
 
-    if ((v === "name" || v === "full_name" || v.includes("name")) && nameIdx === -1) {
+    if (isNameHeader(v) && nameIdx === -1) {
       nameIdx = i;
-      return;
-    }
-
-    if (isPhoneHeader(v) && phoneIdx === -1) {
-      phoneIdx = i;
       return;
     }
 
