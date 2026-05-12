@@ -2,6 +2,11 @@ const db = require('../config/db');
 const { processFileBuffer } = require('../utils/fileProcessor');
 const { parsePhone } = require('../utils/phoneParser');
 
+const truncate = (val, max) => {
+    if (typeof val !== 'string') return val;
+    return val.length > max ? val.substring(0, max) : val;
+};
+
 const chunkArray = (arr, size) => {
     if (!Array.isArray(arr) || arr.length === 0) return [];
     const out = [];
@@ -129,13 +134,13 @@ const createJob = async (req, res) => {
 
                     valueStrings.push(`($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3}, $${paramIndex+4}, $${paramIndex+5}, $${paramIndex+6})`);
                     values.push(
-                        record.name || null,
+                        truncate(record.name, 150) || null,
                         record.phone,
-                        record.email || null,
+                        truncate(record.email, 150) || null,
                         record.countryCode,
                         record.areaCode,
                         session.vendor_id,
-                        record.disposition || null
+                        truncate(record.disposition, 100) || null
                     );
                     paramIndex += 7;
                   });
@@ -444,14 +449,14 @@ const uploadFreshJob = async (req, res) => {
                 for (const record of batch) {
                     valueStrings.push(`($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7})`);
                     values.push(
-                        record.name || null,
+                        truncate(record.name, 150) || null,
                         record.phone,
-                        record.email || null,
+                        truncate(record.email, 150) || null,
                         record.countryCode,
                         record.areaCode,
                         session.vendor_id,
-                        record.disposition || null,
-                        session.campaign_type
+                        truncate(record.disposition, 100) || null,
+                        truncate(session.campaign_type, 50)
                     );
                     paramIndex += 8;
                 }

@@ -121,18 +121,33 @@ const guessIndices = (rowLower) => {
       return true;
     }
     // Generic includes "phone" / "telephone" / "mobile" but avoid mixed headers like "phone_nu_status"
-    if ((v.includes("phone") || v.includes("telephone") || v.includes("mobile")) && !v.includes("status")) {
+    if (
+      (v.includes("phone") ||
+        v.includes("telephone") ||
+        v.includes("mobile")) &&
+      !v.includes("status")
+    ) {
       return true;
     }
     // Includes "number" but not other ambiguous words
-    if (v.includes("number") && !v.includes("status") && !v.includes("name") && !v.includes("policy") && !v.includes("zip")) {
+    if (
+      v.includes("number") &&
+      !v.includes("status") &&
+      !v.includes("name") &&
+      !v.includes("policy") &&
+      !v.includes("zip")
+    ) {
       return true;
     }
     return false;
   };
 
   const isEmailHeader = (v) => {
-    return v.includes("email") || v === "customeremailaddress" || v === "emailaddress";
+    return (
+      v.includes("email") ||
+      v === "customeremailaddress" ||
+      v === "emailaddress"
+    );
   };
 
   const isDispositionHeader = (v) => {
@@ -146,23 +161,49 @@ const guessIndices = (rowLower) => {
 
   const isNameHeader = (v) => {
     // Explicit full-name columns
-    if (v === "name" || v === "full_name" || v === "customername" || v === "insuredname" || v === "clientname") return true;
+    if (
+      v === "name" ||
+      v === "full_name" ||
+      v === "customername" ||
+      v === "insuredname" ||
+      v === "clientname"
+    )
+      return true;
     // Contains "name" but EXCLUDE phone-related columns like "customertelephonenumber"
-    if (v.includes("name") && !v.includes("phone") && !v.includes("telephone") && !v.includes("mobile") && !v.includes("number")) return true;
+    if (
+      v.includes("name") &&
+      !v.includes("phone") &&
+      !v.includes("telephone") &&
+      !v.includes("mobile") &&
+      !v.includes("number")
+    )
+      return true;
     return false;
   };
 
   const isFirstNameHeader = (v) =>
-    v === "first_name" || v === "firstname" || v === "first" || v === "fname" ||
-    v === "customerfirstname" || v === "insuredfirstname";
+    v === "first_name" ||
+    v === "firstname" ||
+    v === "first" ||
+    v === "fname" ||
+    v === "customerfirstname" ||
+    v === "insuredfirstname";
 
   const isMiddleNameHeader = (v) =>
-    v === "middle_initial" || v === "middle" || v === "mi" || v === "middle_name" ||
-    v === "customermiddlename" || v === "customermiddleinitial";
+    v === "middle_initial" ||
+    v === "middle" ||
+    v === "mi" ||
+    v === "middle_name" ||
+    v === "customermiddlename" ||
+    v === "customermiddleinitial";
 
   const isLastNameHeader = (v) =>
-    v === "last_name" || v === "lastname" || v === "last" || v === "lname" ||
-    v === "customerlastname" || v === "insuredlastname";
+    v === "last_name" ||
+    v === "lastname" ||
+    v === "last" ||
+    v === "lname" ||
+    v === "customerlastname" ||
+    v === "insuredlastname";
 
   rowLower.forEach((v, i) => {
     // IMPORTANT: Check phone FIRST to prevent headers like "customertelephonenumber"
