@@ -254,6 +254,33 @@ const guessIndices = (rowLower) => {
   };
 };
 
+const detectSeparator = (buffer) => {
+  const content = buffer.toString("utf8", 0, 8192); // Read more content
+  const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0).slice(0, 20);
+  if (lines.length === 0) return ",";
+
+  const separators = [",", "\t", "|", ";"];
+  const totalCounts = { ",": 0, "\t": 0, "|": 0, ";": 0 };
+
+  lines.forEach(line => {
+    separators.forEach(sep => {
+      const count = (line.split(sep).length - 1);
+      totalCounts[sep] += count;
+    });
+  });
+
+  let bestSep = ",";
+  let maxCount = 0;
+  for (const sep in totalCounts) {
+    if (totalCounts[sep] > maxCount) {
+      maxCount = totalCounts[sep];
+      bestSep = sep;
+    }
+  }
+
+  return maxCount > 0 ? bestSep : ",";
+};
+
 const processFileBuffer = async (buffer, mimetype, originalname) => {
   const records = [];
   let isHeaderDetected = false;
@@ -271,9 +298,6 @@ const processFileBuffer = async (buffer, mimetype, originalname) => {
       if (headerIndices.phoneIdx !== -1)
         phone = String(values[headerIndices.phoneIdx] || "").trim();
 
-      // IMPORTANT: Only populate "name" when we have first/middle/last style columns.
-      // We intentionally ignore generic "full_name" fields because they often contain
-      // non-person labels (e.g. "Outbound Auto Dial").
       const first =
         headerIndices.firstNameIdx !== -1
           ? String(values[headerIndices.firstNameIdx] || "").trim()
@@ -292,8 +316,6 @@ const processFileBuffer = async (buffer, mimetype, originalname) => {
         name = parts.join(" ").trim();
       } else if (headerIndices.nameIdx !== -1) {
         name = String(values[headerIndices.nameIdx] || "").trim();
-      } else {
-        name = "";
       }
 
       if (headerIndices.emailIdx !== -1)
@@ -304,20 +326,26 @@ const processFileBuffer = async (buffer, mimetype, originalname) => {
       // Clean phone number initially
       let digitsOnly = phone ? phone.replace(/\D/g, "") : "";
 
-      // Fallback for phone if missing or invalid (like scientific notation string '6.12E+09' from Excel)
-      if (digitsOnly.length < 10) {
+      // Fallback for phone if missing or invalid
+      if (digitsOnly.length < 10 || digitsOnly.length > 15) {
+        let bestFallbackIdx = -1;
+        let maxFallbackScore = -1;
+
         for (let i = 0; i < values.length; i++) {
           const val = String(values[i] || "").trim();
-          // Avoid dates by checking for standard US 10+ digit phone lengths
-          if (
-            (val.match(/\d/g) || []).length >= 10 &&
-            i !== headerIndices.nameIdx &&
-            i !== headerIndices.emailIdx &&
-            i !== headerIndices.dispIdx
-          ) {
-            phone = val;
-            break;
+          const d = val.replace(/\D/g, "");
+          if (d.length >= 10 && d.length <= 15) {
+            let s = 0;
+            if (d.length === 10) s += 20;
+            if (val.includes("-") && val.includes(":")) s -= 50; 
+            if (s > maxFallbackScore) {
+              maxFallbackScore = s;
+              bestFallbackIdx = i;
+            }
           }
+        }
+        if (bestFallbackIdx !== -1 && maxFallbackScore >= 0) {
+           phone = String(values[bestFallbackIdx]);
         }
       }
     } else {
@@ -326,41 +354,60 @@ const processFileBuffer = async (buffer, mimetype, originalname) => {
         eIdx = -1,
         dIdx = -1;
 
-      // Pass 1: exact matching
+      let bestPhoneIdx = -1;
+      let maxPhoneScore = -1;
+
       values.forEach((v, i) => {
         const val = String(v).trim();
-        const lower = val.toLowerCase();
         if (!val) return;
+        const lower = val.toLowerCase();
 
         if (val.includes("@") && val.includes(".")) {
-          eIdx = i;
-        } else if ((val.match(/\d/g) || []).length >= 10) {
-          if (pIdx === -1) pIdx = i;
-        } else if (KNOWN_DISPOSITIONS.has(lower)) {
-          dIdx = i;
+          if (eIdx === -1) eIdx = i;
+          return;
+        }
+
+        if (KNOWN_DISPOSITIONS.has(lower)) {
+          if (dIdx === -1) dIdx = i;
+          return;
+        }
+
+        const digits = val.replace(/\D/g, "");
+        if (digits.length >= 7) {
+          let score = 0;
+          if (digits.length === 10) score += 30;
+          else if (digits.length === 11 && digits.startsWith("1")) score += 20;
+          else if (digits.length >= 10 && digits.length <= 15) score += 10;
+          
+          if (val.includes("-") && val.includes(":")) score -= 100; // Date/Time
+          if (val.includes(" ") && val.split(" ").length > 2) score -= 50; // Too many spaces
+          if (val.length > 25) score -= 40; // Too long for a phone number field
+
+          if (score > maxPhoneScore) {
+            maxPhoneScore = score;
+            bestPhoneIdx = i;
+          }
         }
       });
+
+      if (bestPhoneIdx !== -1 && maxPhoneScore >= 0) {
+        pIdx = bestPhoneIdx;
+      }
 
       const used = new Set([pIdx, eIdx, dIdx].filter((x) => x !== -1));
 
-      // Pass 2: fill blanks
-      values.forEach((v, i) => {
-        if (used.has(i)) return;
-        const val = String(v).trim();
-        if (!val) return;
-        const lower = val.toLowerCase();
-
-        if (KNOWN_STATES.has(lower)) {
-          return; // Ignore states
-        }
-
-        // NOTE: We intentionally do NOT guess "name" without explicit first/last columns.
-        // Many vendor files include labels like "Outbound Auto Dial" that would be mistaken for a name.
-        if (dIdx === -1 && val.length > 1 && val.length < 50) {
-          dIdx = i;
-          used.add(i);
-        }
-      });
+      if (dIdx === -1) {
+        values.forEach((v, i) => {
+          if (used.has(i)) return;
+          const val = String(v).trim();
+          if (!val) return;
+          if (KNOWN_STATES.has(val.toLowerCase())) return;
+          if (val.length > 1 && val.length < 50 && !val.includes("@")) {
+            dIdx = i;
+            used.add(i);
+          }
+        });
+      }
 
       if (pIdx !== -1) phone = String(values[pIdx] || "").trim();
       if (eIdx !== -1) email = String(values[eIdx] || "").trim();
@@ -368,9 +415,8 @@ const processFileBuffer = async (buffer, mimetype, originalname) => {
     }
 
     if (phone) {
-      // Clean phone number: remove everything except digits
       const digitsOnly = phone.replace(/\D/g, "");
-      if (digitsOnly.length >= 7) {
+      if (digitsOnly.length >= 7 && digitsOnly.length <= 15) {
         return {
           name: name || null,
           phone: digitsOnly,
@@ -391,9 +437,7 @@ const processFileBuffer = async (buffer, mimetype, originalname) => {
 
   if (isExcel) {
     const workbook = xlsx.read(buffer, { type: "buffer" });
-    const firstSheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[firstSheetName];
-    const jsonData = xlsx.utils.sheet_to_json(worksheet, {
+    const jsonData = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {
       defval: "",
       header: 1,
     });
@@ -401,56 +445,42 @@ const processFileBuffer = async (buffer, mimetype, originalname) => {
     for (let i = 0; i < jsonData.length; i++) {
       if (i === 0 && jsonData[i].length > 0) {
         const rowLower = jsonData[i].map((v) => String(v).trim().toLowerCase());
-        const hasHeader = rowLower.some(
-          (v) =>
-            v.includes("phone") ||
-            v.includes("number") ||
-            v.includes("name") ||
-            v.includes("email") ||
-            v.includes("disp") ||
-            v.includes("status"),
-        );
+        const hasHeader = rowLower.some(v => ["phone", "number", "name", "email", "disp", "status"].some(k => v.includes(k)));
         if (hasHeader) {
           isHeaderDetected = true;
           headerIndices = guessIndices(rowLower);
           continue;
         }
       }
-
       const record = parseDataRow(jsonData[i]);
-      if (record) {
-        records.push(record);
-      }
+      if (record) records.push(record);
     }
     return records;
   } else {
-    // CSV Uploads
+    const detectedSeparator = detectSeparator(buffer);
+    console.log(`Detected separator for ${originalname}: [${detectedSeparator}]`);
+
     return new Promise((resolve, reject) => {
       let isFirstRow = true;
       const bufferStream = new stream.PassThrough();
       bufferStream.end(buffer);
       bufferStream
-        .pipe(csvParser({ headers: false }))
+        .pipe(csvParser({ headers: false, separator: detectedSeparator }))
         .on("data", (row) => {
-          const values = Object.values(row);
-          if (values.length === 0) return;
+          const values = Object.values(row).map(v => String(v).trim());
+          if (values.length === 0 || (values.length === 1 && !values[0])) return;
 
           if (isFirstRow) {
             isFirstRow = false;
-            const rowLower = values.map((v) => String(v).trim().toLowerCase());
-            const hasHeader = rowLower.some(
-              (v) =>
-                v.includes("phone") ||
-                v.includes("number") ||
-                v.includes("name") ||
-                v.includes("email") ||
-                v.includes("disp") ||
-                v.includes("status"),
-            );
-            if (hasHeader) {
-              isHeaderDetected = true;
-              headerIndices = guessIndices(rowLower);
-              return;
+            // Stricter header check: must have multiple columns to be a valid header for CSV/TXT
+            if (values.length > 1) {
+              const rowLower = values.map((v) => v.toLowerCase());
+              const hasHeader = rowLower.some(v => ["phone", "number", "name", "email", "disp", "status"].some(k => v.includes(k)));
+              if (hasHeader) {
+                isHeaderDetected = true;
+                headerIndices = guessIndices(rowLower);
+                return;
+              }
             }
           }
 

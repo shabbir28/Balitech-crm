@@ -54,11 +54,14 @@ const createJob = async (req, res) => {
 
         // Create initial job record
         console.log('Inserting into upload_jobs...');
+        const importType = req.file.originalname.toLowerCase().endsWith('.csv') ? 'CSV' : 
+                           req.file.originalname.toLowerCase().endsWith('.txt') ? 'TXT' : 'Excel';
+
         const jobResult = await db.query(`
             INSERT INTO upload_jobs (session_id, file_name, file_size, import_type, start_time, status)
             VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, 'Processing')
             RETURNING *
-        `, [session_id, req.file.originalname, req.file.size, req.file.mimetype === 'text/csv' ? 'CSV' : 'Excel']);
+        `, [session_id, req.file.originalname, req.file.size, importType]);
         const job = jobResult.rows[0];
         console.log('Job created with ID:', job.id);
 
@@ -350,7 +353,8 @@ const uploadFreshJob = async (req, res) => {
             session_id,
             req.file.originalname,
             req.file.size,
-            req.file.mimetype === 'text/csv' ? 'CSV' : 'Excel'
+            req.file.originalname.toLowerCase().endsWith('.csv') ? 'CSV' : 
+            req.file.originalname.toLowerCase().endsWith('.txt') ? 'TXT' : 'Excel'
         ]);
         job = jobResult.rows[0];
 
