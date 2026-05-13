@@ -465,42 +465,51 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
       }
       const record = parseDataRow(jsonData[i]);
       if (record) records.push(record);
+
+      // Yield occasionally to prevent event loop blocking for very large files
+      if (i % 5000 === 0) {
+        await new Promise(resolve => setImmediate(resolve));
+      }
     }
     return records;
   } else {
     const detectedSeparator = detectSeparator(buffer);
     console.log(`Detected separator for ${originalname}: [${detectedSeparator}]`);
 
-    return new Promise((resolve, reject) => {
-      let isFirstRow = true;
-      const bufferStream = new stream.PassThrough();
-      bufferStream.end(buffer);
-      bufferStream
-        .pipe(csvParser({ headers: false, separator: detectedSeparator }))
-        .on("data", (row) => {
-          const values = Object.values(row).map(v => String(v).trim());
-          if (values.length === 0 || (values.length === 1 && !values[0])) return;
+    let isFirstRow = true;
+    const bufferStream = new stream.PassThrough();
+    bufferStream.end(buffer);
+    
+    const parser = bufferStream.pipe(csvParser({ headers: false, separator: detectedSeparator }));
+    
+    for await (const row of parser) {
+      const values = Object.values(row).map(v => String(v).trim());
+      if (values.length === 0 || (values.length === 1 && !values[0])) continue;
 
-          if (isFirstRow) {
-            isFirstRow = false;
-            // Stricter header check: must have multiple columns to be a valid header for CSV/TXT
-            if (values.length > 1) {
-              const rowLower = values.map((v) => v.toLowerCase());
-              const hasHeader = rowLower.some(v => ["phone", "number", "name", "email", "disp", "status"].some(k => v.includes(k)));
-              if (hasHeader) {
-                isHeaderDetected = true;
-                headerIndices = guessIndices(rowLower);
-                return;
-              }
-            }
+      if (isFirstRow) {
+        isFirstRow = false;
+        // Stricter header check: must have multiple columns to be a valid header for CSV/TXT
+        if (values.length > 1) {
+          const rowLower = values.map((v) => v.toLowerCase());
+          const hasHeader = rowLower.some(v => ["phone", "number", "name", "email", "disp", "status"].some(k => v.includes(k)));
+          if (hasHeader) {
+            isHeaderDetected = true;
+            headerIndices = guessIndices(rowLower);
+            continue;
           }
+        }
+      }
 
-          const record = parseDataRow(values);
-          if (record) records.push(record);
-        })
-        .on("end", () => resolve(records))
-        .on("error", (err) => reject(err));
-    });
+      const record = parseDataRow(values);
+      if (record) records.push(record);
+
+      // Yield occasionally to prevent event loop blocking
+      if (records.length % 5000 === 0) {
+        await new Promise(resolve => setImmediate(resolve));
+      }
+    }
+    
+    return records;
   }
 };
 

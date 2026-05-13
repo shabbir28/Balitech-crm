@@ -95,6 +95,10 @@ const createJob = async (req, res) => {
 
             const BATCH_SIZE = 1000;
             for (let i = 0; i < validRecords.length; i += BATCH_SIZE) {
+                // Yield to event loop
+                if (i % 5000 === 0 && i > 0) {
+                    await new Promise(resolve => setImmediate(resolve));
+                }
                 const batch = validRecords.slice(i, i + BATCH_SIZE);
                 
                 const valueStrings = [];
@@ -252,6 +256,9 @@ const compareJob = async (req, res) => {
         let dncSkippedSale = 0;
 
         for (const chunk of chunkArray(uniquePhones, 5000)) {
+            // Yield to event loop
+            await new Promise(resolve => setImmediate(resolve));
+
             const dncRes = await db.query(
                 "SELECT phone, dnc_type FROM dnc_numbers WHERE phone = ANY($1::text[])",
                 [chunk]
@@ -273,6 +280,8 @@ const compareJob = async (req, res) => {
 
         const existingBreakdown = {};
         for (const chunk of chunkArray(phonesNotDnc, 5000)) {
+            await new Promise(resolve => setImmediate(resolve));
+
             const existingRes = await db.query(
                 "SELECT phone, COALESCE(campaign_type, 'Unknown Campaign') as vendor_name FROM leads WHERE phone = ANY($1::text[])",
                 [chunk]
@@ -449,6 +458,9 @@ const uploadFreshJob = async (req, res) => {
 
             // Insert only fresh records. Use DO NOTHING to avoid race-condition conflicts.
             for (let i = 0; i < freshRecords.length; i += BATCH_SIZE) {
+                if (i % 5000 === 0 && i > 0) {
+                    await new Promise(resolve => setImmediate(resolve));
+                }
                 const batch = freshRecords.slice(i, i + BATCH_SIZE);
                 const valueStrings = [];
                 const values = [];

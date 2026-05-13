@@ -18,8 +18,8 @@ const SessionDetails = () => {
 
     useEffect(() => {
         fetchSession();
-        // Optional: Poll for job updates
-        const interval = setInterval(fetchSession, 5000);
+        // Poll for job updates every 10 seconds to reduce server load
+        const interval = setInterval(fetchSession, 10000);
         return () => clearInterval(interval);
     }, [fetchSession]);
 

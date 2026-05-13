@@ -101,17 +101,20 @@ const AppRoutes = () => {
     );
 };
 
+import ErrorBoundary from './components/ErrorBoundary';
+
 const App = () => {
     return (
         <BrowserRouter>
             <AuthProvider>
-                <IpGuard>
-                    <AppRoutes />
-                </IpGuard>
+                <ErrorBoundary>
+                    <IpGuard>
+                        <AppRoutes />
+                    </IpGuard>
+                </ErrorBoundary>
             </AuthProvider>
         </BrowserRouter>
     );
 };
 
 export default App;
-

@@ -50,8 +50,8 @@ const enforceIPWhitelist = async (req, res, next) => {
             await refreshCache();
         }
 
-        // 1️⃣ Whitelist empty hai → sab allow karo (fail-open)
-        if (cachedIsEmpty) {
+        // 1️⃣ Whitelist empty hai ya Localhost hai → sab allow karo (fail-open / dev friendly)
+        if (cachedIsEmpty || clientIp === '127.0.0.1' || clientIp === '::1') {
             return next();
         }
 
@@ -59,8 +59,8 @@ const enforceIPWhitelist = async (req, res, next) => {
         const isWhitelisted = cachedWhitelist.get(clientIp);
 
         if (isWhitelisted === undefined || isWhitelisted === false) {
-            // Forcefully close the connection without sending an HTTP response
-            return req.socket.destroy();
+            // Send 403 Forbidden instead of destroying socket so frontend catches it instantly
+            return res.status(403).json({ error: 'Access Denied: IP not whitelisted' });
         }
 
         next();
