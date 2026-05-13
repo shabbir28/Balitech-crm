@@ -20,46 +20,57 @@ const getClientIP = (req) => {
     return ip;
 };
 
+// ─── In-Memory Cache ───────────────────────────────────────────────────────
+// Pehle: Har request par 2 DB queries hoti thin
+// Ab:    Sirf har 60 seconds mein 1 DB query — baaki sab memory se
+const CACHE_TTL_MS = 60 * 1000; // 1 minute
+let cachedWhitelist = null;   // Map<ip_address, is_whitelisted>
+let cachedIsEmpty   = true;   // agar whitelist empty hai
+let cacheExpiry     = 0;
+
+const refreshCache = async () => {
+    const { rows } = await db.query('SELECT ip_address, is_whitelisted FROM ip_whitelist');
+    cachedIsEmpty   = rows.length === 0;
+    cachedWhitelist = new Map(rows.map(r => [r.ip_address, r.is_whitelisted]));
+    cacheExpiry     = Date.now() + CACHE_TTL_MS;
+};
+
+// Bahar se call karke cache force-refresh kar sako (jab IP add/remove ho)
+const invalidateWhitelistCache = () => {
+    cacheExpiry = 0;
+};
+// ───────────────────────────────────────────────────────────────────────────
+
 const enforceIPWhitelist = async (req, res, next) => {
     try {
         const clientIp = getClientIP(req);
 
-        console.log("🔍 Client IP:", clientIp);
+        // Cache expire ho gayi ho toh refresh karo
+        if (Date.now() > cacheExpiry) {
+            await refreshCache();
+        }
 
-        // 1️⃣ Check if whitelist is empty (fail-open)
-        const { rows: countRows } = await db.query(
-            'SELECT COUNT(*) FROM ip_whitelist'
-        );
-        const count = parseInt(countRows[0].count, 10);
-
-        if (count === 0) {
-            console.log("⚠️ Whitelist empty → allowing all");
+        // 1️⃣ Whitelist empty hai → sab allow karo (fail-open)
+        if (cachedIsEmpty) {
             return next();
         }
 
-        // 2️⃣ Check if IP exists & allowed
-        const { rows } = await db.query(
-            'SELECT is_whitelisted FROM ip_whitelist WHERE ip_address = $1',
-            [clientIp]
-        );
+        // 2️⃣ IP check karo memory se (no DB hit)
+        const isWhitelisted = cachedWhitelist.get(clientIp);
 
-        if (rows.length === 0 || rows[0].is_whitelisted === false) {
-            console.log(`🚫 BLOCKED IP: ${clientIp}`);
-
+        if (isWhitelisted === undefined || isWhitelisted === false) {
             // Forcefully close the connection without sending an HTTP response
-            // This natively simulates 'This site can't be reached' for API requests
             return req.socket.destroy();
         }
 
-        console.log(`✅ ALLOWED IP: ${clientIp}`);
         next();
 
     } catch (err) {
         console.error('❌ Whitelist middleware error:', err);
-        res.status(500).json({
-            error: 'Internal Server Error during IP validation'
-        });
+        // Cache error par bhi app band nahi honi chahiye — allow karo
+        next();
     }
 };
 
 module.exports = enforceIPWhitelist;
+module.exports.invalidateWhitelistCache = invalidateWhitelistCache;

@@ -2,6 +2,7 @@ const db = require("../config/db");
 const { processFileBuffer } = require("../utils/fileProcessor");
 const { parsePhone } = require("../utils/phoneParser");
 const { getAreaCodesForStateSearch } = require("../utils/areaCodes");
+const { cleanupFile } = require('../middleware/upload');
 
 // POST /api/leads/upload
 const uploadLeads = async (req, res) => {
@@ -26,10 +27,11 @@ const uploadLeads = async (req, res) => {
 
     // Process file
     const records = await processFileBuffer(
-      req.file.buffer,
+      req.file.path,
       req.file.mimetype,
       req.file.originalname,
     );
+    cleanupFile(req.file.path); // Temp file delete karo
 
     if (records.length === 0) {
       return res

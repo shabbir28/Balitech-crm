@@ -1,6 +1,7 @@
 const csvParser = require("csv-parser");
 const xlsx = require("xlsx");
 const stream = require("stream");
+const fs = require("fs");
 
 const KNOWN_STATES = new Set([
   "al",
@@ -281,7 +282,17 @@ const detectSeparator = (buffer) => {
   return maxCount > 0 ? bestSep : ",";
 };
 
-const processFileBuffer = async (buffer, mimetype, originalname) => {
+// filePath: disk par file ka path (preferred — less memory)
+// buffer:   RAM buffer (fallback for backward compat)
+const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
+  // Buffer ya path — dono handle karo
+  let buffer;
+  const isPath = typeof bufferOrPath === 'string';
+  if (isPath) {
+    buffer = fs.readFileSync(bufferOrPath);
+  } else {
+    buffer = bufferOrPath;
+  }
   const records = [];
   let isHeaderDetected = false;
   let headerIndices = null;

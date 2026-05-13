@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const { processFileBuffer } = require('../utils/fileProcessor');
 const { parsePhone } = require('../utils/phoneParser');
+const { cleanupFile } = require('../middleware/upload');
 
 const truncate = (val, max) => {
     if (typeof val !== 'string') return val;
@@ -65,10 +66,11 @@ const createJob = async (req, res) => {
         const job = jobResult.rows[0];
         console.log('Job created with ID:', job.id);
 
-        // Process file
+        // Process file (disk se read karega — RAM safe)
         console.log('Starting file processing...', req.file.mimetype);
-        const records = await processFileBuffer(req.file.buffer, req.file.mimetype, req.file.originalname);
+        const records = await processFileBuffer(req.file.path, req.file.mimetype, req.file.originalname);
         console.log('File processing complete, records:', records.length);
+        cleanupFile(req.file.path); // Temp file delete karo
         
         // Remove empty rows specifically
         const validRecords = records.filter(r => r.name || r.phone || r.email);
@@ -228,7 +230,8 @@ const compareJob = async (req, res) => {
             return res.status(404).json({ message: 'Session not found' });
         }
 
-        const records = await processFileBuffer(req.file.buffer, req.file.mimetype, req.file.originalname);
+        const records = await processFileBuffer(req.file.path, req.file.mimetype, req.file.originalname);
+        cleanupFile(req.file.path); // Temp file delete karo
 
         // Match existing behavior: allow rows where at least one of these has data.
         const validRecords = records.filter(r => r.name || r.phone || r.email);
@@ -358,8 +361,9 @@ const uploadFreshJob = async (req, res) => {
         ]);
         job = jobResult.rows[0];
 
-        const records = await processFileBuffer(req.file.buffer, req.file.mimetype, req.file.originalname);
+        const records = await processFileBuffer(req.file.path, req.file.mimetype, req.file.originalname);
         const validRecords = records.filter(r => r.name || r.phone || r.email);
+        cleanupFile(req.file.path); // Temp file delete karo
 
         if (validRecords.length === 0) {
             await db.query(`

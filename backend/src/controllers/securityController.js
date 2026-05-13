@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { invalidateWhitelistCache } = require('../middleware/ipWhitelist');
 
 const getWhitelistedIPs = async (req, res) => {
   try {
@@ -29,6 +30,7 @@ const addWhitelistedIP = async (req, res) => {
         is_whitelisted !== undefined ? is_whitelisted : true,
       ],
     );
+    invalidateWhitelistCache(); // Cache refresh karo
     res.status(201).json(rows[0]);
   } catch (err) {
     if (err.code === "23505") {
@@ -59,6 +61,7 @@ const updateWhitelistedIP = async (req, res) => {
     if (rows.length === 0) {
       return res.status(404).json({ error: "IP whitelist entry not found" });
     }
+    invalidateWhitelistCache(); // Cache refresh karo
     res.json(rows[0]);
   } catch (err) {
     if (err.code === "23505") {
@@ -84,6 +87,7 @@ const deleteWhitelistedIP = async (req, res) => {
     if (rowCount === 0) {
       return res.status(404).json({ error: "IP whitelist entry not found" });
     }
+    invalidateWhitelistCache(); // Cache refresh karo
     res.json({ message: "IP whitelist entry deleted successfully" });
   } catch (err) {
     console.error("Error deleting whitelisted IP:", err);

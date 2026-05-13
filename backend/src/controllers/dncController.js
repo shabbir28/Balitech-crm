@@ -1,6 +1,7 @@
 const db = require("../config/db");
 const { normalizeUsDigits } = require("../utils/phoneParser");
 const { processFileBuffer } = require("../utils/fileProcessor");
+const { cleanupFile } = require('../middleware/upload');
 
 const VALID_TYPES = new Set(["DNC", "SALE"]);
 
@@ -128,10 +129,11 @@ const importDnc = async (req, res) => {
     }
 
     const records = await processFileBuffer(
-      req.file.buffer,
+      req.file.path,
       req.file.mimetype,
       req.file.originalname,
     );
+    cleanupFile(req.file.path); // Temp file delete karo
 
     const phones = [];
     for (const r of records) {
