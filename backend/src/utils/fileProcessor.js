@@ -257,15 +257,18 @@ const guessIndices = (rowLower) => {
 
 const detectSeparator = (buffer) => {
   const content = buffer.toString("utf8", 0, 8192); // Read more content
-  const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0).slice(0, 20);
+  const lines = content
+    .split(/\r?\n/)
+    .filter((l) => l.trim().length > 0)
+    .slice(0, 20);
   if (lines.length === 0) return ",";
 
   const separators = [",", "\t", "|", ";"];
   const totalCounts = { ",": 0, "\t": 0, "|": 0, ";": 0 };
 
-  lines.forEach(line => {
-    separators.forEach(sep => {
-      const count = (line.split(sep).length - 1);
+  lines.forEach((line) => {
+    separators.forEach((sep) => {
+      const count = line.split(sep).length - 1;
       totalCounts[sep] += count;
     });
   });
@@ -285,14 +288,7 @@ const detectSeparator = (buffer) => {
 // filePath: disk par file ka path (preferred — less memory)
 // buffer:   RAM buffer (fallback for backward compat)
 const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
-  // Buffer ya path — dono handle karo
-  let buffer;
-  const isPath = typeof bufferOrPath === 'string';
-  if (isPath) {
-    buffer = fs.readFileSync(bufferOrPath);
-  } else {
-    buffer = bufferOrPath;
-  }
+  const isPath = typeof bufferOrPath === "string";
   const records = [];
   let isHeaderDetected = false;
   let headerIndices = null;
@@ -348,7 +344,7 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
           if (d.length >= 10 && d.length <= 15) {
             let s = 0;
             if (d.length === 10) s += 20;
-            if (val.includes("-") && val.includes(":")) s -= 50; 
+            if (val.includes("-") && val.includes(":")) s -= 50;
             if (s > maxFallbackScore) {
               maxFallbackScore = s;
               bestFallbackIdx = i;
@@ -356,7 +352,7 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
           }
         }
         if (bestFallbackIdx !== -1 && maxFallbackScore >= 0) {
-           phone = String(values[bestFallbackIdx]);
+          phone = String(values[bestFallbackIdx]);
         }
       }
     } else {
@@ -389,7 +385,7 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
           if (digits.length === 10) score += 30;
           else if (digits.length === 11 && digits.startsWith("1")) score += 20;
           else if (digits.length >= 10 && digits.length <= 15) score += 10;
-          
+
           if (val.includes("-") && val.includes(":")) score -= 100; // Date/Time
           if (val.includes(" ") && val.split(" ").length > 2) score -= 50; // Too many spaces
           if (val.length > 25) score -= 40; // Too long for a phone number field
@@ -447,16 +443,28 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
     originalname.endsWith(".xls");
 
   if (isExcel) {
-    const workbook = xlsx.read(buffer, { type: "buffer" });
-    const jsonData = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {
-      defval: "",
-      header: 1,
-    });
+    let workbook;
+    if (isPath) {
+      workbook = xlsx.readFile(bufferOrPath); // Stream from disk directly to avoid holding massive buffer
+    } else {
+      workbook = xlsx.read(bufferOrPath, { type: "buffer" });
+    }
+    const jsonData = xlsx.utils.sheet_to_json(
+      workbook.Sheets[workbook.SheetNames[0]],
+      {
+        defval: "",
+        header: 1,
+      },
+    );
 
     for (let i = 0; i < jsonData.length; i++) {
       if (i === 0 && jsonData[i].length > 0) {
         const rowLower = jsonData[i].map((v) => String(v).trim().toLowerCase());
-        const hasHeader = rowLower.some(v => ["phone", "number", "name", "email", "disp", "status"].some(k => v.includes(k)));
+        const hasHeader = rowLower.some((v) =>
+          ["phone", "number", "name", "email", "disp", "status"].some((k) =>
+            v.includes(k),
+          ),
+        );
         if (hasHeader) {
           isHeaderDetected = true;
           headerIndices = guessIndices(rowLower);
@@ -468,22 +476,43 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
 
       // Yield occasionally to prevent event loop blocking for very large files
       if (i % 5000 === 0) {
-        await new Promise(resolve => setImmediate(resolve));
+        await new Promise((resolve) => setImmediate(resolve));
       }
     }
     return records;
   } else {
-    const detectedSeparator = detectSeparator(buffer);
-    console.log(`Detected separator for ${originalname}: [${detectedSeparator}]`);
+    let bufferForDetection;
+    if (isPath) {
+      const fd = fs.openSync(bufferOrPath, "r");
+      const tmpBuf = Buffer.alloc(8192);
+      const bytesRead = fs.readSync(fd, tmpBuf, 0, 8192, 0);
+      fs.closeSync(fd);
+      bufferForDetection = tmpBuf.subarray(0, bytesRead);
+    } else {
+      bufferForDetection = bufferOrPath;
+    }
+
+    const detectedSeparator = detectSeparator(bufferForDetection);
+    console.log(
+      `Detected separator for ${originalname}: [${detectedSeparator}]`,
+    );
 
     let isFirstRow = true;
-    const bufferStream = new stream.PassThrough();
-    bufferStream.end(buffer);
-    
-    const parser = bufferStream.pipe(csvParser({ headers: false, separator: detectedSeparator }));
-    
+    let streamToParse;
+
+    if (isPath) {
+      streamToParse = fs.createReadStream(bufferOrPath);
+    } else {
+      streamToParse = new stream.PassThrough();
+      streamToParse.end(bufferOrPath);
+    }
+
+    const parser = streamToParse.pipe(
+      csvParser({ headers: false, separator: detectedSeparator }),
+    );
+
     for await (const row of parser) {
-      const values = Object.values(row).map(v => String(v).trim());
+      const values = Object.values(row).map((v) => String(v).trim());
       if (values.length === 0 || (values.length === 1 && !values[0])) continue;
 
       if (isFirstRow) {
@@ -491,7 +520,11 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
         // Stricter header check: must have multiple columns to be a valid header for CSV/TXT
         if (values.length > 1) {
           const rowLower = values.map((v) => v.toLowerCase());
-          const hasHeader = rowLower.some(v => ["phone", "number", "name", "email", "disp", "status"].some(k => v.includes(k)));
+          const hasHeader = rowLower.some((v) =>
+            ["phone", "number", "name", "email", "disp", "status"].some((k) =>
+              v.includes(k),
+            ),
+          );
           if (hasHeader) {
             isHeaderDetected = true;
             headerIndices = guessIndices(rowLower);
@@ -505,10 +538,10 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
 
       // Yield occasionally to prevent event loop blocking
       if (records.length % 5000 === 0) {
-        await new Promise(resolve => setImmediate(resolve));
+        await new Promise((resolve) => setImmediate(resolve));
       }
     }
-    
+
     return records;
   }
 };

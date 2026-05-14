@@ -127,11 +127,17 @@ const DownloadLeads = () => {
                 a.href = url; a.setAttribute('download', `leads_${Date.now()}.csv`);
                 document.body.appendChild(a); a.click(); a.remove();
                 setSuccessMsg('Download started successfully!');
+                
+                // Refetch vendors to update stats
+                api.get('/vendors').then(v => setVendors(v.data)).catch(() => {});
             } else {
                 await api.post('/download/request', form);
                 setSuccessMsg('Request submitted! SuperAdmin will review it shortly.');
                 setForm({ states: [], campaign_id: '', vendor_id: '', quantity: 1000 });
                 fetchMyReqs();
+                
+                // Refetch vendors to update stats (though usually won't change until approved)
+                api.get('/vendors').then(v => setVendors(v.data)).catch(() => {});
             }
         } catch (err) {
             if (err.response?.data instanceof Blob) {
@@ -373,8 +379,26 @@ const DownloadLeads = () => {
                                 <span className="text-slate-500">Vendor</span>
                                 <span className="text-white font-medium">{selectedVendor?.name || '—'}</span>
                             </div>
+                            
+                            {selectedVendor && (
+                                <>
+                                    <div className="flex justify-between items-center py-2 border-b border-white/5">
+                                        <span className="text-slate-500">Vendor Total Leads</span>
+                                        <span className="text-white font-mono font-bold">{parseInt(selectedVendor.total_leads).toLocaleString()}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center py-2 border-b border-white/5">
+                                        <span className="text-slate-500">Already Downloaded</span>
+                                        <span className="text-orange-400 font-mono font-bold">{parseInt(selectedVendor.downloaded_leads).toLocaleString()}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center py-2 border-b border-white/5">
+                                        <span className="text-slate-500">Remaining Available</span>
+                                        <span className="text-emerald-400 font-mono font-bold">{parseInt(selectedVendor.available_leads).toLocaleString()}</span>
+                                    </div>
+                                </>
+                            )}
+
                             <div className="flex justify-between items-center py-2 border-b border-white/5">
-                                <span className="text-slate-500">Quantity</span>
+                                <span className="text-slate-500">Request Quantity</span>
                                 <span className="text-orange-400 font-mono font-bold">{form.quantity?.toLocaleString()}</span>
                             </div>
                             <div className="flex justify-between items-center py-2 border-b border-white/5">
