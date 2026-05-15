@@ -17,20 +17,32 @@ const createVendor = async (req, res) => {
 
 // GET /api/vendors
 const getVendors = async (req, res) => {
+  const includeCounts = req.query.counts === "true";
+
   try {
-    const result = await db.query(`
-            SELECT v.*, 
-                   COUNT(l.id) as total_leads,
-                   COUNT(CASE WHEN l.status = 'available' THEN 1 END) as available_leads,
-                   COUNT(CASE WHEN l.status = 'downloaded' THEN 1 END) as downloaded_leads
-            FROM vendors v
-            LEFT JOIN leads l ON v.vendor_id = l.vendor_id
-            GROUP BY v.vendor_id
-            ORDER BY v.created_at DESC
-        `);
+    let query;
+    if (includeCounts) {
+      query = `
+                SELECT v.*, 
+                       COUNT(l.id)::int as total_leads,
+                       COUNT(CASE WHEN l.status = 'available' THEN 1 END)::int as available_leads,
+                       COUNT(CASE WHEN l.status = 'downloaded' THEN 1 END)::int as downloaded_leads
+                FROM vendors v
+                LEFT JOIN leads l ON v.vendor_id = l.vendor_id
+                GROUP BY v.vendor_id
+                ORDER BY v.created_at DESC
+            `;
+    } else {
+      query = `
+                SELECT * FROM vendors 
+                ORDER BY created_at DESC
+            `;
+    }
+
+    const result = await db.query(query);
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    console.error("Error fetching vendors:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

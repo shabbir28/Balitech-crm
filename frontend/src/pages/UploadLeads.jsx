@@ -16,7 +16,7 @@ const UploadLeads = () => {
     const [campaigns, setCampaigns] = useState([]);
 
     useEffect(() => {
-        api.get('/vendors').then(res => setVendors(res.data)).catch(console.error);
+        api.get('/vendors?counts=false').then(res => setVendors(res.data)).catch(console.error);
         api.get('/campaigns').then(res => {
             // Only show active campaigns for uploading leads
             setCampaigns(res.data.filter(c => c.status === 'Active'));

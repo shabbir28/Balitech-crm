@@ -67,7 +67,7 @@ const uploadLeads = async (req, res) => {
 
         deduped.forEach((record) => {
           valueStrings.push(
-            `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6})`,
+            `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7})`,
           );
           values.push(
             record.name || null,
@@ -77,13 +77,14 @@ const uploadLeads = async (req, res) => {
             record.areaCode,
             vendor_id,
             record.disposition || null,
+            record.age || null,
           );
-          paramIndex += 7;
+          paramIndex += 8;
         });
 
         if (values.length > 0) {
           const query = `
-                        INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition)
+                        INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, age)
                         VALUES ${valueStrings.join(",")}
                         ON CONFLICT (phone) DO UPDATE
                         SET disposition = CASE

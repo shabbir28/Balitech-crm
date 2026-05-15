@@ -132,8 +132,8 @@ const LeadsTable = () => {
 
                 <div className="min-w-[1000px] relative z-10">
                     {/* Table Header */}
-                    <div className="grid grid-cols-[minmax(200px,1.5fr)_140px_minmax(200px,1.5fr)_100px_100px_140px_120px] p-5 border-b border-white/10 bg-[#0a0a0f]/80 backdrop-blur-md sticky top-0">
-                        {['Name', 'Phone', 'Email', 'Area Code', 'State', 'Disposition', 'Status'].map(h => (
+                    <div className="grid grid-cols-[minmax(200px,1.5fr)_140px_minmax(180px,1.2fr)_100px_100px_100px_140px_120px] p-5 border-b border-white/10 bg-[#0a0a0f]/80 backdrop-blur-md sticky top-0">
+                        {['Name', 'Phone', 'Email', 'Age', 'Area', 'State', 'Disposition', 'Status'].map(h => (
                             <span key={h} className="text-slate-400 text-[11px] font-bold uppercase tracking-widest pl-2">
                                 {h}
                             </span>
@@ -152,7 +152,7 @@ const LeadsTable = () => {
                             </div>
                         ) : (
                             leads.map((lead) => (
-                                <div key={lead.id} className="grid grid-cols-[minmax(200px,1.5fr)_140px_minmax(200px,1.5fr)_100px_100px_140px_120px] p-4 items-center hover:bg-white/5 transition-colors group cursor-default">
+                                <div key={lead.id} className="grid grid-cols-[minmax(200px,1.5fr)_140px_minmax(180px,1.2fr)_100px_100px_100px_140px_120px] p-4 items-center hover:bg-white/5 transition-colors group cursor-default">
                                     {/* Name */}
                                     <div className="flex items-center gap-3 pr-4 pl-2">
                                         <div className="w-9 h-9 rounded-full shrink-0 bg-brand-500/10 border border-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-xs shadow-inner group-hover:scale-110 transition-transform">
@@ -173,6 +173,11 @@ const LeadsTable = () => {
                                     {/* Email */}
                                     <div className="text-slate-500 text-[13px] pr-4 truncate font-medium">
                                         {lead.email || '—'}
+                                    </div>
+                                    
+                                    {/* Age */}
+                                    <div className="text-white text-[13px] font-bold">
+                                        {lead.age !== null && lead.age !== undefined ? lead.age : '—'}
                                     </div>
 
                                     {/* Area Code */}

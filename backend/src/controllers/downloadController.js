@@ -6,7 +6,7 @@ const { createNotification } = require("./notificationController");
 // ─────────────────────────────────────────────────────────────
 // HELPER: build WHERE clause from filters (shared logic)
 // ─────────────────────────────────────────────────────────────
-async function buildFilters(client, { vendor_id, campaign_id, states }) {
+async function buildFilters(client, { vendor_id, campaign_id, states, min_age, max_age }) {
   const filters = ["status = 'available'"];
   const params = [];
   let paramIdx = 1;
@@ -43,6 +43,16 @@ async function buildFilters(client, { vendor_id, campaign_id, states }) {
     }
   }
 
+  if (min_age !== undefined && min_age !== null && min_age !== '') {
+    filters.push(`age >= $${paramIdx++}`);
+    params.push(parseInt(min_age));
+  }
+
+  if (max_age !== undefined && max_age !== null && max_age !== '') {
+    filters.push(`age <= $${paramIdx++}`);
+    params.push(parseInt(max_age));
+  }
+
   return { filters, params, paramIdx };
 }
 
@@ -51,12 +61,14 @@ async function buildFilters(client, { vendor_id, campaign_id, states }) {
 // ─────────────────────────────────────────────────────────────
 async function executeDownload(
   client,
-  { vendor_id, campaign_id, states, quantity, user_id, approved_by_id },
+  { vendor_id, campaign_id, states, quantity, user_id, approved_by_id, min_age, max_age },
 ) {
   const { filters, params, paramIdx } = await buildFilters(client, {
     vendor_id,
     campaign_id,
     states,
+    min_age,
+    max_age
   });
   const whereClause = filters.join(" AND ");
 
@@ -76,7 +88,7 @@ async function executeDownload(
         SET status = 'downloaded', downloaded_at = CURRENT_TIMESTAMP
         FROM selected_leads sl
         WHERE l.id = sl.id
-        RETURNING l.name, l.phone, l.email, l.country_code, l.area_code, l.disposition
+        RETURNING l.name, l.phone, l.email, l.country_code, l.area_code, l.disposition, l.age
     `;
   params.push(quantity);
 
@@ -128,7 +140,7 @@ const downloadLeads = async (req, res) => {
 
   const client = await db.getClient();
   try {
-    const { vendor_id, quantity, states, campaign_id } = req.body;
+    const { vendor_id, quantity, states, campaign_id, min_age, max_age } = req.body;
     if (!quantity || quantity <= 0) {
       return res.status(400).json({ message: "Valid quantity is required" });
     }
@@ -140,6 +152,8 @@ const downloadLeads = async (req, res) => {
       states,
       quantity,
       user_id: req.user.id,
+      min_age,
+      max_age
     });
 
     if (rows.length === 0) {
@@ -159,6 +173,7 @@ const downloadLeads = async (req, res) => {
       "area_code",
       "state",
       "disposition",
+      "age",
     ];
     const csv = new Parser({ fields }).parse(rows);
     res.setHeader("Content-Type", "text/csv");
@@ -184,7 +199,7 @@ const downloadLeads = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 const createDownloadRequest = async (req, res) => {
   try {
-    const { vendor_id, quantity, states, campaign_id } = req.body;
+    const { vendor_id, quantity, states, campaign_id, min_age, max_age } = req.body;
 
     if (!vendor_id) {
       return res.status(400).json({ message: "Please select a vendor." });
@@ -195,8 +210,8 @@ const createDownloadRequest = async (req, res) => {
 
     const result = await db.query(
       `INSERT INTO download_requests
-               (admin_id, vendor_id, campaign_id, quantity, states)
-             VALUES ($1, $2, $3, $4, $5)
+               (admin_id, vendor_id, campaign_id, quantity, states, min_age, max_age)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
              RETURNING *`,
       [
         req.user.id,
@@ -204,6 +219,8 @@ const createDownloadRequest = async (req, res) => {
         campaign_id || null,
         quantity,
         states && states.length ? states : null,
+        min_age || null,
+        max_age || null,
       ],
     );
 
@@ -251,6 +268,8 @@ const getDownloadRequests = async (req, res) => {
                 dr.states,
                 dr.status,
                 dr.rejection_reason,
+                dr.min_age,
+                dr.max_age,
                 dr.requested_at,
                 dr.reviewed_at,
                 u.username  AS admin_username,
@@ -289,6 +308,8 @@ const getMyDownloadRequests = async (req, res) => {
                 dr.states,
                 dr.status,
                 dr.rejection_reason,
+                dr.min_age,
+                dr.max_age,
                 dr.requested_at,
                 dr.reviewed_at,
                 v.name AS vendor_name,
@@ -370,6 +391,8 @@ const reviewDownloadRequest = async (req, res) => {
       campaign_id: dlReq.campaign_id,
       states: dlReq.states,
       quantity: dlReq.quantity,
+      min_age: dlReq.min_age,
+      max_age: dlReq.max_age,
       user_id: dlReq.admin_id,
       approved_by_id: req.user.id, // ← the super_admin who approved
     });
@@ -400,6 +423,7 @@ const reviewDownloadRequest = async (req, res) => {
       "area_code",
       "state",
       "disposition",
+      "age",
     ];
     const csv = new Parser({ fields }).parse(rows);
 

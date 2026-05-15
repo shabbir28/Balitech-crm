@@ -122,6 +122,12 @@ const AcceptModal = ({ req, onConfirm, onCancel }) => (
                         <p className="text-sm text-white font-mono font-medium">{req.quantity?.toLocaleString()}</p>
                     </div>
                     <div>
+                        <p className="text-xs font-medium text-slate-500 uppercase mb-1">Age Range</p>
+                        <p className="text-sm text-white font-mono font-medium">
+                            {req.min_age || req.max_age ? `${req.min_age || 0} — ${req.max_age || '∞'}` : 'All Ages'}
+                        </p>
+                    </div>
+                    <div>
                         <p className="text-xs font-medium text-slate-500 uppercase mb-1">Filters Applied</p>
                         <p className="text-sm text-white font-medium truncate" title={req.states?.join(', ')}>
                             {req.states?.length ? `${req.states.length} States Selected` : 'None (National)'}
@@ -454,6 +460,18 @@ const DownloadRequests = () => {
                                                                     ) : (
                                                                         <p className="text-sm text-slate-500">National (No state filters applied)</p>
                                                                     )}
+                                                                </div>
+
+                                                                <div>
+                                                                    <h4 className="text-sm font-medium text-white mb-3">Demographic Filters</h4>
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="px-3 py-2 bg-white/5 rounded-lg border border-white/5">
+                                                                            <p className="text-[10px] text-slate-500 uppercase mb-0.5">Age Range</p>
+                                                                            <p className="text-sm text-slate-200 font-mono">
+                                                                                {req.min_age || req.max_age ? `${req.min_age || 0} — ${req.max_age || '∞'}` : 'All Ages'}
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
 
                                                                 {req.status === 'rejected' && req.rejection_reason && (

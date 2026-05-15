@@ -4,27 +4,33 @@ const db = require("../config/db");
 const getStats = async (req, res) => {
   try {
     const [
-      totalsResult,
+      leadsStatsResult,
+      otherTotalsResult,
       vendorWiseResult,
       campaignStatsResult,
       dncStatsResult,
-      leadStatusResult,
       recentSessionsResult,
     ] = await Promise.all([
-      // Overall Totals
+      // 1. Leads Overall Stats (Single Scan)
       db.query(`
                 SELECT
-                    (SELECT COUNT(*) FROM leads)                                   AS total_contacts,
-                    (SELECT COUNT(*) FROM vendors)                                 AS total_vendors,
-                    (SELECT COUNT(*) FROM leads WHERE status = 'downloaded')       AS total_downloaded,
-                    (SELECT COUNT(*) FROM leads WHERE status = 'available')        AS remaining_leads,
-                    (SELECT COUNT(*) FROM campaigns WHERE status = 'Active')       AS active_campaigns,
-                    (SELECT COUNT(*) FROM dnc_numbers WHERE dnc_type = 'DNC')      AS dnc_count,
-                    (SELECT COUNT(*) FROM dnc_numbers WHERE dnc_type = 'SALE')     AS sale_count,
-                    (SELECT COUNT(*) FROM upload_sessions)                         AS total_sessions
+                    COUNT(*)::int AS total_contacts,
+                    COUNT(CASE WHEN status = 'downloaded' THEN 1 END)::int AS total_downloaded,
+                    COUNT(CASE WHEN status = 'available' THEN 1 END)::int AS remaining_leads
+                FROM leads
             `),
 
-      // Vendor-wise lead counts
+      // 2. Other Totals
+      db.query(`
+                SELECT
+                    (SELECT COUNT(*) FROM vendors)::int                              AS total_vendors,
+                    (SELECT COUNT(*) FROM campaigns WHERE status = 'Active')::int    AS active_campaigns,
+                    (SELECT COUNT(*) FROM dnc_numbers WHERE dnc_type = 'DNC')::int   AS dnc_count,
+                    (SELECT COUNT(*) FROM dnc_numbers WHERE dnc_type = 'SALE')::int  AS sale_count,
+                    (SELECT COUNT(*) FROM upload_sessions)::int                      AS total_sessions
+            `),
+
+      // 3. Vendor-wise lead counts (Optimized with index)
       db.query(`
                 SELECT v.name, COUNT(l.id)::int AS count
                 FROM vendors v
@@ -34,7 +40,7 @@ const getStats = async (req, res) => {
                 LIMIT 8
             `),
 
-      // Campaign-wise lead counts (uses campaign_type column in leads)
+      // 4. Campaign-wise lead counts (Optimized with index)
       db.query(`
                 SELECT campaign_type AS name, COUNT(*)::int AS count
                 FROM leads
@@ -44,7 +50,7 @@ const getStats = async (req, res) => {
                 LIMIT 6
             `),
 
-      // DNC vs SALE breakdown per campaign
+      // 5. DNC vs SALE breakdown per campaign
       db.query(`
                 SELECT
                     COALESCE(c.name, 'Untagged') AS campaign,
@@ -60,15 +66,7 @@ const getStats = async (req, res) => {
                 LIMIT 6
             `),
 
-      // Lead status breakdown
-      db.query(`
-                SELECT status, COUNT(*)::int AS count
-                FROM leads
-                GROUP BY status
-                ORDER BY count DESC
-            `),
-
-      // Recent upload sessions (using real columns)
+      // 6. Recent upload sessions
       db.query(`
                 SELECT
                     s.id,
@@ -85,12 +83,27 @@ const getStats = async (req, res) => {
             `),
     ]);
 
+    // Construct totals object
+    const leadsStats = leadsStatsResult.rows[0];
+    const otherStats = otherTotalsResult.rows[0];
+    
+    const totals = {
+      ...leadsStats,
+      ...otherStats
+    };
+
+    // Construct lead status breakdown from leadsStats
+    const leadStatusBreakdown = [
+      { status: 'available', count: leadsStats.remaining_leads },
+      { status: 'downloaded', count: leadsStats.total_downloaded }
+    ];
+
     res.json({
-      totals: totalsResult.rows[0],
+      totals,
       vendorDistribution: vendorWiseResult.rows,
       campaignStats: campaignStatsResult.rows,
       dncStats: dncStatsResult.rows,
-      leadStatusBreakdown: leadStatusResult.rows,
+      leadStatusBreakdown,
       recentSessions: recentSessionsResult.rows,
     });
   } catch (err) {

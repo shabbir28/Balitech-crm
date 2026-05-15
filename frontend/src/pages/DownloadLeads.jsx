@@ -75,7 +75,7 @@ const DownloadLeads = () => {
     const [loadingV, setLoadingV]       = useState(true);
     const [loadingC, setLoadingC]       = useState(true);
 
-    const [form, setForm] = useState({ states: [], campaign_id: '', vendor_id: '', quantity: 1000 });
+    const [form, setForm] = useState({ states: [], campaign_id: '', vendor_id: '', quantity: 1000, min_age: '', max_age: '' });
     const [submitting, setSubmitting]   = useState(false);
     const [error, setError]             = useState('');
     const [successMsg, setSuccessMsg]   = useState('');
@@ -88,7 +88,7 @@ const DownloadLeads = () => {
     const [dlId, setDlId]               = useState(null);
 
     useEffect(() => {
-        Promise.all([api.get('/vendors'), api.get('/campaigns')])
+        Promise.all([api.get('/vendors?counts=true'), api.get('/campaigns')])
             .then(([v, c]) => { setVendors(v.data); setCampaigns(c.data.filter(x => x.status === 'Active')); })
             .catch(() => {})
             .finally(() => { setLoadingV(false); setLoadingC(false); });
@@ -129,15 +129,15 @@ const DownloadLeads = () => {
                 setSuccessMsg('Download started successfully!');
                 
                 // Refetch vendors to update stats
-                api.get('/vendors').then(v => setVendors(v.data)).catch(() => {});
+                api.get('/vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
             } else {
                 await api.post('/download/request', form);
                 setSuccessMsg('Request submitted! SuperAdmin will review it shortly.');
-                setForm({ states: [], campaign_id: '', vendor_id: '', quantity: 1000 });
+                setForm({ states: [], campaign_id: '', vendor_id: '', quantity: 1000, min_age: '', max_age: '' });
                 fetchMyReqs();
                 
                 // Refetch vendors to update stats (though usually won't change until approved)
-                api.get('/vendors').then(v => setVendors(v.data)).catch(() => {});
+                api.get('/vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
             }
         } catch (err) {
             if (err.response?.data instanceof Blob) {
@@ -268,19 +268,41 @@ const DownloadLeads = () => {
                                     </div>
                                 </Field>
 
-                                {/* Campaign */}
-                                <Field label="Campaign Filter" required hint="Select the campaign to export from">
-                                    <SelectInput
-                                        value={form.campaign_id}
-                                        onChange={e => setForm({ ...form, campaign_id: e.target.value })}
-                                        disabled={loadingC}
-                                        required
-                                    >
-                                        <option value="" disabled>{loadingC ? 'Loading...' : 'Choose a campaign...'}</option>
-                                        {campaigns.map(c => <option key={c.campaign_id} value={c.campaign_id}>{c.name}</option>)}
-                                    </SelectInput>
-                                </Field>
+                                {/* Age Range */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Field label="Min Age" hint="Optional">
+                                        <input
+                                            type="number" min="0" max="120"
+                                            value={form.min_age}
+                                            onChange={e => setForm({ ...form, min_age: e.target.value })}
+                                            className="w-full bg-[#0d0f1a] border border-white/8 hover:border-white/15 focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 text-white rounded-xl py-3.5 px-4 outline-none transition-all text-sm font-mono"
+                                            placeholder="25"
+                                        />
+                                    </Field>
+                                    <Field label="Max Age" hint="Optional">
+                                        <input
+                                            type="number" min="0" max="120"
+                                            value={form.max_age}
+                                            onChange={e => setForm({ ...form, max_age: e.target.value })}
+                                            className="w-full bg-[#0d0f1a] border border-white/8 hover:border-white/15 focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 text-white rounded-xl py-3.5 px-4 outline-none transition-all text-sm font-mono"
+                                            placeholder="65"
+                                        />
+                                    </Field>
+                                </div>
                             </div>
+
+                            {/* Campaign */}
+                            <Field label="Campaign Filter" required hint="Select the campaign to export from">
+                                <SelectInput
+                                    value={form.campaign_id}
+                                    onChange={e => setForm({ ...form, campaign_id: e.target.value })}
+                                    disabled={loadingC}
+                                    required
+                                >
+                                    <option value="" disabled>{loadingC ? 'Loading...' : 'Choose a campaign...'}</option>
+                                    {campaigns.map(c => <option key={c.campaign_id} value={c.campaign_id}>{c.name}</option>)}
+                                </SelectInput>
+                            </Field>
 
                             {/* Quantity */}
                             <Field label="Quantity" required hint="Max 50,000 per request recommended">
@@ -405,6 +427,10 @@ const DownloadLeads = () => {
                                 <span className="text-slate-500">States</span>
                                 <span className="text-white">{form.states.length > 0 ? `${form.states.length} selected` : 'All'}</span>
                             </div>
+                            <div className="flex justify-between items-center py-2 border-b border-white/5">
+                                <span className="text-slate-500">Age Range</span>
+                                <span className="text-white font-mono">{form.min_age || 0} — {form.max_age || '∞'}</span>
+                            </div>
                             <div className="flex justify-between items-center py-2">
                                 <span className="text-slate-500">Campaign</span>
                                 <span className="text-white">{campaigns.find(c => String(c.campaign_id) === String(form.campaign_id))?.name || 'All'}</span>
@@ -448,7 +474,7 @@ const DownloadLeads = () => {
                                 <table className="w-full text-sm">
                                     <thead>
                                         <tr className="border-b border-white/[0.06] bg-white/[0.02]">
-                                            {['#', 'Vendor', 'Quantity', 'States', 'Campaign', 'Requested', 'Status', 'Action'].map(h => (
+                                            {['#', 'Vendor', 'Quantity', 'Age Range', 'States', 'Campaign', 'Requested', 'Status', 'Action'].map(h => (
                                                 <th key={h} className="px-5 py-3.5 text-left text-[10px] font-bold text-slate-600 uppercase tracking-[0.12em] whitespace-nowrap">{h}</th>
                                             ))}
                                         </tr>
@@ -462,6 +488,11 @@ const DownloadLeads = () => {
                                                 </td>
                                                 <td className="px-5 py-4">
                                                     <span className="font-mono text-orange-400 font-bold">{req.quantity?.toLocaleString()}</span>
+                                                </td>
+                                                <td className="px-5 py-4 text-slate-400 text-xs font-mono whitespace-nowrap">
+                                                    {req.min_age || req.max_age 
+                                                        ? `${req.min_age || 0} — ${req.max_age || '∞'}`
+                                                        : <span className="text-slate-600">All Ages</span>}
                                                 </td>
                                                 <td className="px-5 py-4 text-slate-400 text-xs">
                                                     {req.states?.length > 0

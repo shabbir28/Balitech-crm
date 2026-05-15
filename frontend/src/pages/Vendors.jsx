@@ -25,7 +25,7 @@ const Vendors = () => {
 
     const fetchVendors = async () => {
         try {
-            const res = await api.get('/vendors');
+            const res = await api.get('/vendors?counts=false');
             setVendors(res.data);
         } catch (err) {
             console.error(err);

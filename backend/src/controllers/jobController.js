@@ -162,7 +162,7 @@ const createJob = async (req, res) => {
 
           filtered.forEach((record) => {
             valueStrings.push(
-              `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6})`,
+              `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7})`,
             );
             values.push(
               truncate(record.name, 150) || null,
@@ -172,14 +172,15 @@ const createJob = async (req, res) => {
               record.areaCode,
               session.vendor_id,
               truncate(record.disposition, 100) || null,
+              record.age || null,
             );
-            paramIndex += 7;
+            paramIndex += 8;
           });
         }
 
         if (values.length > 0) {
           const query = `
-                        INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition)
+                        INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, age)
                         VALUES ${valueStrings.join(",")}
                         ON CONFLICT (phone) DO UPDATE
                         SET disposition = CASE
@@ -537,7 +538,7 @@ const uploadFreshJob = async (req, res) => {
 
         for (const record of batch) {
           valueStrings.push(
-            `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7})`,
+            `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8})`,
           );
           values.push(
             truncate(record.name, 150) || null,
@@ -548,12 +549,13 @@ const uploadFreshJob = async (req, res) => {
             session.vendor_id,
             truncate(record.disposition, 100) || null,
             truncate(session.campaign_type, 50),
+            record.age || null,
           );
-          paramIndex += 8;
+          paramIndex += 9;
         }
 
         const query = `
-                    INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, campaign_type)
+                    INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, campaign_type, age)
                     VALUES ${valueStrings.join(",")}
                     ON CONFLICT (phone) DO NOTHING
                     RETURNING phone

@@ -99,6 +99,7 @@ const guessIndices = (rowLower) => {
   let lastNameIdx = -1;
   let emailIdx = -1;
   let dispIdx = -1;
+  let ageIdx = -1;
 
   const isPhoneHeader = (v) => {
     // Strong exact matches for phone-number columns
@@ -158,6 +159,10 @@ const guessIndices = (rowLower) => {
     // If header contains "status" but not "phone", treat as disposition
     if (v.includes("status") && !v.includes("phone")) return true;
     return false;
+  };
+
+  const isAgeHeader = (v) => {
+    return v === "age" || v === "customerage" || v === "insuredage";
   };
 
   const isNameHeader = (v) => {
@@ -241,6 +246,11 @@ const guessIndices = (rowLower) => {
 
     if (isDispositionHeader(v) && dispIdx === -1) {
       dispIdx = i;
+      return;
+    }
+
+    if (isAgeHeader(v) && ageIdx === -1) {
+      ageIdx = i;
     }
   });
 
@@ -252,6 +262,7 @@ const guessIndices = (rowLower) => {
     lastNameIdx,
     emailIdx,
     dispIdx,
+    ageIdx,
   };
 };
 
@@ -299,7 +310,8 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
     let phone = "",
       name = "",
       email = "",
-      disposition = "";
+      disposition = "",
+      age = null;
 
     if (isHeaderDetected && headerIndices) {
       if (headerIndices.phoneIdx !== -1)
@@ -329,6 +341,11 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
         email = String(values[headerIndices.emailIdx] || "").trim();
       if (headerIndices.dispIdx !== -1)
         disposition = String(values[headerIndices.dispIdx] || "").trim();
+      if (headerIndices.ageIdx !== -1) {
+        const rawAge = String(values[headerIndices.ageIdx] || "").trim();
+        const parsedAge = parseInt(rawAge);
+        if (!isNaN(parsedAge)) age = parsedAge;
+      }
 
       // Clean phone number initially
       let digitsOnly = phone ? phone.replace(/\D/g, "") : "";
@@ -429,6 +446,7 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
           phone: digitsOnly,
           email: email || null,
           disposition: disposition || null,
+          age: age || null,
         };
       }
     }
