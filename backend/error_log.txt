@@ -1,0 +1,6 @@
+2026-05-18T20:15:47.833Z [uploadFreshJob Outer Error]
+error: value too long for type character varying(255)
+    at C:\Users\shabb\OneDrive\Desktop\Bpo crm\backend\node_modules\pg-pool\index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async uploadFreshJob (C:\Users\shabb\OneDrive\Desktop\Bpo crm\backend\src\controllers\jobController.js:425:25)
+

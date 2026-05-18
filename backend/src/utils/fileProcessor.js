@@ -102,6 +102,10 @@ const guessIndices = (rowLower) => {
   let ageIdx = -1;
 
   const isPhoneHeader = (v) => {
+    // Explicitly ignore any source number / src_number column headers
+    if (v.includes("src") || v.includes("source")) {
+      return false;
+    }
     // Strong exact matches for phone-number columns
     if (
       v === "phone" ||
@@ -303,6 +307,7 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
   const records = [];
   let isHeaderDetected = false;
   let headerIndices = null;
+  const excludedIndices = new Set();
 
   const parseDataRow = (values) => {
     if (!values || values.length === 0) return null;
@@ -356,6 +361,7 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
         let maxFallbackScore = -1;
 
         for (let i = 0; i < values.length; i++) {
+          if (excludedIndices.has(i)) continue; // Ignore excluded columns (like src_number) in fallback
           const val = String(values[i] || "").trim();
           const d = val.replace(/\D/g, "");
           if (d.length >= 10 && d.length <= 15) {
@@ -486,6 +492,11 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
         if (hasHeader) {
           isHeaderDetected = true;
           headerIndices = guessIndices(rowLower);
+          rowLower.forEach((v, idx) => {
+            if (v.includes("src") || v.includes("source")) {
+              excludedIndices.add(idx);
+            }
+          });
           continue;
         }
       }
@@ -546,6 +557,11 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
           if (hasHeader) {
             isHeaderDetected = true;
             headerIndices = guessIndices(rowLower);
+            rowLower.forEach((v, idx) => {
+              if (v.includes("src") || v.includes("source")) {
+                excludedIndices.add(idx);
+              }
+            });
             continue;
           }
         }
