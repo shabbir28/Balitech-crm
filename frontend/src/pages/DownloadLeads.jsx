@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
+import { createPortal } from 'react-dom';
 import api from '../services/api';
 import { AuthContext } from '../context/AuthContext';
 import {
@@ -64,6 +65,174 @@ const SelectInput = ({ value, onChange, disabled, required, children }) => (
     </div>
 );
 
+// Helper function to trigger browser download of plain text content as a CSV file
+const downloadBlob = (content, filename) => {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+
+// ── Scrub Summary Modal Component ─────────────────────────────
+const ScrubSummaryModal = ({ data, onClose }) => {
+    if (!data) return null;
+
+    const { summary, goodCsv, badCsv } = data;
+
+    const handleDownloadGood = () => {
+        downloadBlob(goodCsv, summary.fileName || `leads_good_${Date.now()}.csv`);
+    };
+
+    const handleDownloadBad = () => {
+        if (!badCsv) return;
+        const badFileName = (summary.fileName || `leads_${Date.now()}.csv`).replace('.csv', '_bad_leads.csv');
+        downloadBlob(badCsv, badFileName);
+    };
+
+    return createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-sm animate-fade-in overflow-hidden">
+            <div className="relative w-full max-w-5xl bg-[#13151f] border border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden transform transition-all scale-100 flex flex-col max-h-[90vh] min-w-0">
+                
+                {/* Header */}
+                <div className="px-6 py-5 border-b border-white/[0.06] flex items-center justify-between bg-[#161824] w-full min-w-0">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
+                            <Sparkles className="h-5 w-5 text-white animate-pulse" />
+                        </div>
+                        <div className="min-w-0">
+                            <h2 className="text-lg font-black text-white tracking-tight truncate">Lead Scrubbing Complete</h2>
+                            <p className="text-xs text-slate-400 mt-0.5 truncate">Blacklist Alliance TCPA & DNC scrubbing summary results</p>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={onClose}
+                        className="text-slate-400 hover:text-white hover:bg-white/5 p-2 rounded-lg transition-colors shrink-0 ml-2"
+                    >
+                        <XCircle className="h-6 w-6" />
+                    </button>
+                </div>
+
+                {/* Body Content */}
+                <div className="p-6 overflow-y-auto overflow-x-hidden space-y-6 flex-1 w-full min-w-0">
+                    
+                    {/* Scrub details info block */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-950/40 p-4 border border-white/5 rounded-xl">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <Calendar className="h-5 w-5 text-slate-500 shrink-0" />
+                            <div className="min-w-0">
+                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Scrub Date & Time</p>
+                                <p className="text-sm font-semibold text-white truncate">{summary.scrubDate || new Date().toLocaleString()}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3 min-w-0">
+                            <Building2 className="h-5 w-5 text-slate-500 shrink-0" />
+                            <div className="min-w-0">
+                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Scrubbed File / Session</p>
+                                <p className="text-sm font-semibold text-brand-400 truncate" title={summary.fileName}>
+                                    {summary.fileName || 'leads_scrubbed.csv'}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Table Title */}
+                    <div className="w-full min-w-0">
+                        <h3 className="text-sm font-bold text-white mb-3">Scrub Statistics:</h3>
+                        <div className="border border-white/5 rounded-xl overflow-hidden bg-slate-950/20 w-full">
+                            <div className="overflow-x-auto w-full">
+                                <table className="w-full text-center text-xs min-w-[700px]">
+                                    <thead>
+                                        <tr className="border-b border-white/10 bg-[#161824] text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                            <th className="px-4 py-3.5 whitespace-nowrap">Total</th>
+                                            <th className="px-4 py-3.5 whitespace-nowrap">Blacklist</th>
+                                            <th className="px-4 py-3.5 whitespace-nowrap">Suppress</th>
+                                            <th className="px-4 py-3.5 whitespace-nowrap">State DNC</th>
+                                            <th className="px-4 py-3.5 whitespace-nowrap">Federal DNC</th>
+                                            <th className="px-4 py-3.5 whitespace-nowrap">Wireless</th>
+                                            <th className="px-4 py-3.5 whitespace-nowrap">Landline</th>
+                                            <th className="px-4 py-3.5 text-emerald-400 whitespace-nowrap">Good</th>
+                                            <th className="px-4 py-3.5 text-amber-500 whitespace-nowrap">Errors</th>
+                                            <th className="px-4 py-3.5 text-red-400 whitespace-nowrap">Bad Phone #</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5 font-mono text-sm font-bold">
+                                        <tr className="text-white">
+                                            <td className="px-4 py-4 text-slate-300 whitespace-nowrap">{summary.total?.toLocaleString()}</td>
+                                            <td className="px-4 py-4 text-red-400 whitespace-nowrap">{summary.blacklist?.toLocaleString()}</td>
+                                            <td className="px-4 py-4 text-slate-500 whitespace-nowrap">{summary.suppress?.toLocaleString() || 0}</td>
+                                            <td className="px-4 py-4 text-orange-400 whitespace-nowrap">{summary.stateDnc?.toLocaleString()}</td>
+                                            <td className="px-4 py-4 text-orange-500 whitespace-nowrap">{summary.federalDnc?.toLocaleString()}</td>
+                                            <td className="px-4 py-4 text-slate-500 whitespace-nowrap">{summary.wireless?.toLocaleString() || 0}</td>
+                                            <td className="px-4 py-4 text-slate-500 whitespace-nowrap">{summary.landline?.toLocaleString() || 0}</td>
+                                            <td className="px-4 py-4 bg-emerald-500/10 text-emerald-400 whitespace-nowrap">{summary.good?.toLocaleString()}</td>
+                                            <td className="px-4 py-4 text-amber-500 whitespace-nowrap">{summary.errors?.toLocaleString()}</td>
+                                            <td className="px-4 py-4 text-red-500 whitespace-nowrap">{summary.badPhone?.toLocaleString()}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Explanatory Note */}
+                    <div className="flex items-start gap-3 bg-blue-500/5 border border-blue-500/10 rounded-xl p-4 text-xs text-slate-400 leading-relaxed">
+                        <Info className="h-4.5 w-4.5 text-blue-400 shrink-0 mt-0.5" />
+                        <div>
+                            <span className="font-bold text-white block mb-0.5">Automated Compliance Routing:</span>
+                            All the bad numbers identified above (DNC, State/Federal matching, TCPA litigants) have been automatically saved into your CRM's DNC Module. The corresponding leads' dispositions in the main database have also been locked as <strong className="text-red-400">DNC</strong> so they will never be picked up for any future campaigns or exports.
+                        </div>
+                    </div>
+                </div>
+
+                {/* Footer Buttons */}
+                <div className="px-6 py-5 border-t border-white/[0.06] bg-[#161824] flex items-center justify-between flex-wrap gap-4 w-full min-w-0">
+                    {/* Bad download option */}
+                    {summary.blacklist + summary.stateDnc + summary.federalDnc + summary.badPhone > 0 ? (
+                        <button
+                            onClick={handleDownloadBad}
+                            className="flex items-center gap-2 px-4 py-3 bg-red-500/10 hover:bg-red-500/15 border border-red-500/20 hover:border-red-500/30 text-red-400 font-bold text-xs rounded-xl transition-all whitespace-nowrap"
+                        >
+                            <FileDown className="h-4 w-4 shrink-0" />
+                            Download Bad Data ({((summary.blacklist || 0) + (summary.stateDnc || 0) + (summary.federalDnc || 0) + (summary.badPhone || 0)).toLocaleString()} leads)
+                        </button>
+                    ) : (
+                        <div className="text-xs text-slate-500 italic">No bad/DNC records scrubbed in this run.</div>
+                    )}
+
+                    {/* Good download + close options */}
+                    <div className="flex items-center gap-3 sm:ml-auto flex-wrap">
+                        <button
+                            onClick={onClose}
+                            className="px-4 py-3 bg-white/5 hover:bg-white/8 border border-white/8 rounded-xl text-xs text-slate-300 font-bold transition-all whitespace-nowrap"
+                        >
+                            Close Summary
+                        </button>
+                        <button
+                            onClick={handleDownloadGood}
+                            disabled={!goodCsv || summary.good === 0}
+                            className={`flex items-center gap-2.5 px-6 py-3 rounded-xl font-bold text-xs transition-all whitespace-nowrap ${
+                                !goodCsv || summary.good === 0
+                                    ? 'bg-white/5 text-slate-500 border border-white/5 cursor-not-allowed'
+                                    : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 hover:-translate-y-0.5'
+                            }`}
+                        >
+                            <Download className="h-4 w-4 shrink-0" />
+                            Download Good Data ({summary.good?.toLocaleString()} leads)
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>,
+        document.body
+    );
+};
+
 // ─────────────────────────────────────────────────────────────
 const DownloadLeads = () => {
     const { user } = useContext(AuthContext);
@@ -86,6 +255,7 @@ const DownloadLeads = () => {
     const [myRequests, setMyRequests]   = useState([]);
     const [loadingReq, setLoadingReq]   = useState(false);
     const [dlId, setDlId]               = useState(null);
+    const [scrubSummaryData, setScrubSummaryData] = useState(null);
 
     useEffect(() => {
         Promise.all([api.get('/vendors?counts=true'), api.get('/campaigns')])
@@ -121,12 +291,9 @@ const DownloadLeads = () => {
         setSubmitting(true); setError(''); setSuccessMsg('');
         try {
             if (isSuperAdmin) {
-                const res = await api.post('/download', form, { responseType: 'blob' });
-                const url = window.URL.createObjectURL(new Blob([res.data]));
-                const a = document.createElement('a');
-                a.href = url; a.setAttribute('download', `leads_${Date.now()}.csv`);
-                document.body.appendChild(a); a.click(); a.remove();
-                setSuccessMsg('Download started successfully!');
+                const res = await api.post('/download', form);
+                setScrubSummaryData(res.data);
+                setSuccessMsg('Export scrubbing complete! View summary details below.');
                 
                 // Refetch vendors to update stats
                 api.get('/vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
@@ -140,21 +307,15 @@ const DownloadLeads = () => {
                 api.get('/vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
             }
         } catch (err) {
-            if (err.response?.data instanceof Blob) {
-                const txt = await err.response.data.text();
-                try { setError(JSON.parse(txt).message); } catch { setError('Request failed.'); }
-            } else { setError(err.response?.data?.message || 'Request failed.'); }
+            setError(err.response?.data?.message || 'Request failed.');
         } finally { setSubmitting(false); }
     };
 
     const handleDownloadCSV = async (req) => {
         setDlId(req.id);
         try {
-            const res = await api.get(`/download/requests/${req.id}/file`, { responseType: 'blob' });
-            const url = window.URL.createObjectURL(new Blob([res.data]));
-            const a = document.createElement('a');
-            a.href = url; a.setAttribute('download', `approved_leads_${req.id}.csv`);
-            document.body.appendChild(a); a.click(); a.remove();
+            const res = await api.get(`/download/requests/${req.id}/file`);
+            setScrubSummaryData(res.data);
         } catch { alert('Download failed. Try again.'); }
         finally { setDlId(null); }
     };
@@ -321,11 +482,11 @@ const DownloadLeads = () => {
                             </Field>
 
                             {/* Quantity */}
-                            <Field label="Quantity" required hint="Max 50,000 per request recommended">
+                            <Field label="Quantity" required hint="Max 100,000 per request recommended">
                                 <div className="relative">
                                     <Hash className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-600" />
                                     <input
-                                        type="number" min="1" max="50000" required
+                                        type="number" min="1" max="100000" required
                                         value={form.quantity}
                                         onChange={e => {
                                             const val = e.target.value;
@@ -562,6 +723,9 @@ const DownloadLeads = () => {
                     )}
                 </div>
             )}
+            
+            {/* ── Interactive Scrub Summary Dialog Modal ── */}
+            <ScrubSummaryModal data={scrubSummaryData} onClose={() => setScrubSummaryData(null)} />
         </div>
     );
 };

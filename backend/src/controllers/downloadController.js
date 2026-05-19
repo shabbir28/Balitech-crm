@@ -2,11 +2,15 @@ const db = require("../config/db");
 const { Parser } = require("json2csv");
 const { areaCodesMap } = require("../utils/areaCodes");
 const { createNotification } = require("./notificationController");
+const { scrubPhones } = require("../utils/blacklistAlliance");
 
 // ─────────────────────────────────────────────────────────────
 // HELPER: build WHERE clause from filters (shared logic)
 // ─────────────────────────────────────────────────────────────
-async function buildFilters(client, { vendor_id, campaign_id, states, min_age, max_age }) {
+async function buildFilters(
+  client,
+  { vendor_id, campaign_id, states, min_age, max_age },
+) {
   const filters = ["status = 'available'"];
   const params = [];
   let paramIdx = 1;
@@ -43,12 +47,12 @@ async function buildFilters(client, { vendor_id, campaign_id, states, min_age, m
     }
   }
 
-  if (min_age !== undefined && min_age !== null && min_age !== '') {
+  if (min_age !== undefined && min_age !== null && min_age !== "") {
     filters.push(`age >= $${paramIdx++}`);
     params.push(parseInt(min_age));
   }
 
-  if (max_age !== undefined && max_age !== null && max_age !== '') {
+  if (max_age !== undefined && max_age !== null && max_age !== "") {
     filters.push(`age <= $${paramIdx++}`);
     params.push(parseInt(max_age));
   }
@@ -61,14 +65,23 @@ async function buildFilters(client, { vendor_id, campaign_id, states, min_age, m
 // ─────────────────────────────────────────────────────────────
 async function executeDownload(
   client,
-  { vendor_id, campaign_id, states, quantity, user_id, approved_by_id, min_age, max_age },
+  {
+    vendor_id,
+    campaign_id,
+    states,
+    quantity,
+    user_id,
+    approved_by_id,
+    min_age,
+    max_age,
+  },
 ) {
   const { filters, params, paramIdx } = await buildFilters(client, {
     vendor_id,
     campaign_id,
     states,
     min_age,
-    max_age
+    max_age,
   });
   const whereClause = filters.join(" AND ");
 
@@ -94,6 +107,110 @@ async function executeDownload(
 
   const result = await client.query(updateQuery, params);
 
+  let finalRows = result.rows;
+  let badRowsWithState = [];
+  let blacklistCount = 0;
+  let stateDncCount = 0;
+  let federalDncCount = 0;
+  let badPhoneCount = 0;
+  let scrubErrors = 0;
+
+  if (result.rows.length > 0) {
+    const allPhones = result.rows.map((r) => r.phone);
+
+    try {
+      const scrubResult = await scrubPhones(allPhones);
+
+      // Classify the bad numbers
+      for (const item of scrubResult.bad) {
+        const typeLower = String(item.type || "").toLowerCase();
+        if (typeLower.includes("federal")) {
+          federalDncCount++;
+        } else if (typeLower.includes("state")) {
+          stateDncCount++;
+        } else if (typeLower.includes("invalid") || typeLower.includes("bad")) {
+          badPhoneCount++;
+        } else {
+          blacklistCount++;
+        }
+      }
+
+      if (scrubResult.bad.length > 0) {
+        const badPhones = scrubResult.bad.map((b) => b.phone);
+
+        // 1. Revert status back in leads table (set to available, downloaded_at to null, disposition to 'DNC')
+        await client.query(
+          `
+            UPDATE leads
+            SET status = 'available',
+                downloaded_at = null,
+                disposition = 'DNC'
+            WHERE phone = ANY($1::text[])
+          `,
+          [badPhones],
+        );
+
+        // 2. Add bad numbers to dnc_numbers table in a single high-performance batch insert
+        const valueStrings = [];
+        const insertValues = [];
+        let idx = 1;
+        for (const badItem of scrubResult.bad) {
+          valueStrings.push(
+            `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4})`,
+          );
+          insertValues.push(
+            badItem.phone,
+            "DNC",
+            "Blacklist Alliance API",
+            `Auto-Scrubbed on download. Reason: ${badItem.reason}`,
+            user_id || null,
+          );
+          idx += 5;
+        }
+
+        const insertDncQuery = `
+          INSERT INTO dnc_numbers (phone, dnc_type, source, notes, created_by)
+          VALUES ${valueStrings.join(",")}
+          ON CONFLICT (phone) DO UPDATE
+          SET dnc_type = EXCLUDED.dnc_type,
+              source = EXCLUDED.source,
+              notes = EXCLUDED.notes,
+              created_by = EXCLUDED.created_by
+        `;
+        await client.query(insertDncQuery, insertValues);
+
+        // 3. Prepare the bad rows return array
+        const badLeads = result.rows.filter((r) => badPhones.includes(r.phone));
+        badRowsWithState = badLeads.map((r) => {
+          const scrubInfo =
+            scrubResult.bad.find((b) => b.phone === r.phone) || {};
+          let code = r.area_code;
+          if (!code || code === "Unknown") {
+            const clean = r.phone ? String(r.phone).replace(/\D/g, "") : "";
+            if (clean.length === 11 && clean.startsWith("1"))
+              code = clean.substring(1, 4);
+            else if (clean.length === 10) code = clean.substring(0, 3);
+          }
+          return {
+            ...r,
+            state: areaCodesMap[code] || "Unknown",
+            dnc_type: scrubInfo.type || "DNC",
+            reason: scrubInfo.reason || "Blacklist Alliance Match",
+          };
+        });
+
+        // 4. Filter out bad leads so only good leads are downloaded
+        finalRows = result.rows.filter((r) => !badPhones.includes(r.phone));
+      }
+    } catch (scrubErr) {
+      console.error(
+        "[Blacklist Alliance] Scrubbing failed. Proceeding with original leads for safety.",
+        scrubErr.message,
+      );
+      scrubErrors = result.rows.length;
+    }
+  }
+
   // Log the download — include approved_by if it was a request approval
   await client.query(
     `INSERT INTO download_logs (user_id, vendor_id, country_code, area_code, quantity, approved_by)
@@ -103,25 +220,41 @@ async function executeDownload(
       vendor_id || null,
       null,
       null,
-      result.rows.length,
+      finalRows.length,
       approved_by_id || null,
     ],
   );
 
-  const rowsWithState = result.rows.map(r => {
+  const rowsWithState = finalRows.map((r) => {
     let code = r.area_code;
-    if (!code || code === 'Unknown') {
-      const clean = r.phone ? String(r.phone).replace(/\D/g, '') : '';
-      if (clean.length === 11 && clean.startsWith('1')) code = clean.substring(1, 4);
+    if (!code || code === "Unknown") {
+      const clean = r.phone ? String(r.phone).replace(/\D/g, "") : "";
+      if (clean.length === 11 && clean.startsWith("1"))
+        code = clean.substring(1, 4);
       else if (clean.length === 10) code = clean.substring(0, 3);
     }
     return {
       ...r,
-      state: areaCodesMap[code] || 'Unknown'
+      state: areaCodesMap[code] || "Unknown",
     };
   });
 
-  return rowsWithState;
+  return {
+    goodRows: rowsWithState,
+    badRows: badRowsWithState,
+    summary: {
+      total: result.rows.length,
+      blacklist: blacklistCount,
+      suppress: 0,
+      stateDnc: stateDncCount,
+      federalDnc: federalDncCount,
+      wireless: 0,
+      landline: 0,
+      good: finalRows.length,
+      errors: scrubErrors,
+      badPhone: badPhoneCount,
+    },
+  };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -140,23 +273,24 @@ const downloadLeads = async (req, res) => {
 
   const client = await db.getClient();
   try {
-    const { vendor_id, quantity, states, campaign_id, min_age, max_age } = req.body;
+    const { vendor_id, quantity, states, campaign_id, min_age, max_age } =
+      req.body;
     if (!quantity || quantity <= 0) {
       return res.status(400).json({ message: "Valid quantity is required" });
     }
 
     await client.query("BEGIN");
-    const rows = await executeDownload(client, {
-      vendor_id: (vendor_id && vendor_id !== "all") ? vendor_id : null,
-      campaign_id: (campaign_id && campaign_id !== "all") ? campaign_id : null,
+    const { goodRows, badRows, summary } = await executeDownload(client, {
+      vendor_id: vendor_id && vendor_id !== "all" ? vendor_id : null,
+      campaign_id: campaign_id && campaign_id !== "all" ? campaign_id : null,
       states,
       quantity,
       user_id: req.user.id,
       min_age,
-      max_age
+      max_age,
     });
 
-    if (rows.length === 0) {
+    if (goodRows.length === 0 && badRows.length === 0) {
       await client.query("ROLLBACK");
       return res
         .status(404)
@@ -165,7 +299,7 @@ const downloadLeads = async (req, res) => {
 
     await client.query("COMMIT");
 
-    const fields = [
+    const goodFields = [
       "name",
       "phone",
       "email",
@@ -175,13 +309,38 @@ const downloadLeads = async (req, res) => {
       "disposition",
       "age",
     ];
-    const csv = new Parser({ fields }).parse(rows);
-    res.setHeader("Content-Type", "text/csv");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="leads_download_${Date.now()}.csv"`,
-    );
-    return res.status(200).send(csv);
+    const badFields = [
+      "name",
+      "phone",
+      "email",
+      "country_code",
+      "area_code",
+      "state",
+      "disposition",
+      "age",
+      "dnc_type",
+      "reason",
+    ];
+
+    const goodCsv =
+      goodRows.length > 0
+        ? new Parser({ fields: goodFields }).parse(goodRows)
+        : "";
+    const badCsv =
+      badRows.length > 0
+        ? new Parser({ fields: badFields }).parse(badRows)
+        : "";
+
+    return res.status(200).json({
+      isScrubbed: true,
+      summary: {
+        fileName: `leads_download_${Date.now()}.csv`,
+        scrubDate: new Date().toLocaleString(),
+        ...summary,
+      },
+      goodCsv,
+      badCsv,
+    });
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("Direct Download Error:", err);
@@ -199,7 +358,8 @@ const downloadLeads = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 const createDownloadRequest = async (req, res) => {
   try {
-    const { vendor_id, quantity, states, campaign_id, min_age, max_age } = req.body;
+    const { vendor_id, quantity, states, campaign_id, min_age, max_age } =
+      req.body;
 
     if (!vendor_id) {
       return res.status(400).json({ message: "Please select a vendor." });
@@ -215,8 +375,8 @@ const createDownloadRequest = async (req, res) => {
              RETURNING *`,
       [
         req.user.id,
-        (vendor_id && vendor_id !== "all") ? vendor_id : null,
-        (campaign_id && campaign_id !== "all") ? campaign_id : null,
+        vendor_id && vendor_id !== "all" ? vendor_id : null,
+        campaign_id && campaign_id !== "all" ? campaign_id : null,
         quantity,
         states && states.length ? states : null,
         min_age || null,
@@ -386,7 +546,7 @@ const reviewDownloadRequest = async (req, res) => {
     await client.query("BEGIN");
     txnStarted = true;
 
-    const rows = await executeDownload(client, {
+    const { goodRows, badRows, summary } = await executeDownload(client, {
       vendor_id: dlReq.vendor_id,
       campaign_id: dlReq.campaign_id,
       states: dlReq.states,
@@ -397,7 +557,7 @@ const reviewDownloadRequest = async (req, res) => {
       approved_by_id: req.user.id, // ← the super_admin who approved
     });
 
-    if (rows.length === 0) {
+    if (goodRows.length === 0 && badRows.length === 0) {
       await client.query("ROLLBACK");
       txnStarted = false;
       // Mark as rejected due to no data available
@@ -415,7 +575,7 @@ const reviewDownloadRequest = async (req, res) => {
     }
 
     // Store CSV in the request row so admin can download it later
-    const fields = [
+    const goodFields = [
       "name",
       "phone",
       "email",
@@ -425,13 +585,44 @@ const reviewDownloadRequest = async (req, res) => {
       "disposition",
       "age",
     ];
-    const csv = new Parser({ fields }).parse(rows);
+    const badFields = [
+      "name",
+      "phone",
+      "email",
+      "country_code",
+      "area_code",
+      "state",
+      "disposition",
+      "age",
+      "dnc_type",
+      "reason",
+    ];
+
+    const goodCsv =
+      goodRows.length > 0
+        ? new Parser({ fields: goodFields }).parse(goodRows)
+        : "";
+    const badCsv =
+      badRows.length > 0
+        ? new Parser({ fields: badFields }).parse(badRows)
+        : "";
+
+    const serializedData = JSON.stringify({
+      isScrubbed: true,
+      summary: {
+        fileName: `approved_leads_${id}.csv`,
+        scrubDate: new Date().toLocaleString(),
+        ...summary,
+      },
+      goodCsv,
+      badCsv,
+    });
 
     await client.query(
       `UPDATE download_requests
              SET status='accepted', reviewed_at=NOW(), reviewed_by=$1, csv_data=$2
              WHERE id=$3`,
-      [req.user.id, csv, id],
+      [req.user.id, serializedData, id],
     );
 
     await client.query("COMMIT");
@@ -442,13 +633,13 @@ const reviewDownloadRequest = async (req, res) => {
       dlReq.admin_id,
       "download_request_accepted",
       "✅ Download Request Approved!",
-      `Your download request for ${rows.length.toLocaleString()} leads has been approved. You can now download your CSV file.`,
+      `Your download request for ${goodRows.length.toLocaleString()} leads has been approved. You can now download your CSV file.`,
       dlReq.id,
     );
 
     return res.json({
-      message: `Request accepted. ${rows.length} leads are ready for the admin to download.`,
-      lead_count: rows.length,
+      message: `Request accepted. ${goodRows.length} leads are ready for the admin to download.`,
+      lead_count: goodRows.length,
     });
   } catch (err) {
     if (txnStarted) await client.query("ROLLBACK").catch(() => {});
@@ -485,12 +676,30 @@ const executeApprovedDownload = async (req, res) => {
         .json({ message: "CSV data not available for this request." });
     }
 
-    res.setHeader("Content-Type", "text/csv");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="approved_leads_${id}_${Date.now()}.csv"`,
-    );
-    return res.status(200).send(dlReq.csv_data);
+    if (dlReq.csv_data.trim().startsWith("{")) {
+      return res.status(200).json(JSON.parse(dlReq.csv_data));
+    } else {
+      // Legacy compatibility
+      return res.status(200).json({
+        isScrubbed: false,
+        goodCsv: dlReq.csv_data,
+        badCsv: "",
+        summary: {
+          fileName: `approved_leads_${id}.csv`,
+          scrubDate: new Date(dlReq.reviewed_at || Date.now()).toLocaleString(),
+          total: dlReq.quantity,
+          blacklist: 0,
+          suppress: 0,
+          stateDnc: 0,
+          federalDnc: 0,
+          wireless: 0,
+          landline: 0,
+          good: dlReq.quantity,
+          errors: 0,
+          badPhone: 0,
+        },
+      });
+    }
   } catch (err) {
     console.error("Execute Approved Download Error:", err);
     return res.status(500).json({ message: "Server error" });
