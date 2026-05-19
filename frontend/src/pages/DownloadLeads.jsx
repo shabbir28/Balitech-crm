@@ -159,7 +159,21 @@ const DownloadLeads = () => {
         finally { setDlId(null); }
     };
 
-    const selectedVendor = vendors.find(v => String(v.vendor_id) === String(form.vendor_id));
+    let selectedVendor = null;
+    if (form.vendor_id === 'all') {
+        const totalLeads = vendors.reduce((acc, v) => acc + parseInt(v.total_leads || 0), 0);
+        const downloadedLeads = vendors.reduce((acc, v) => acc + parseInt(v.downloaded_leads || 0), 0);
+        const availableLeads = vendors.reduce((acc, v) => acc + parseInt(v.available_leads || 0), 0);
+        selectedVendor = {
+            vendor_id: 'all',
+            name: 'All Vendors',
+            total_leads: totalLeads,
+            downloaded_leads: downloadedLeads,
+            available_leads: availableLeads
+        };
+    } else {
+        selectedVendor = vendors.find(v => String(v.vendor_id) === String(form.vendor_id));
+    }
 
     return (
         <div className="min-h-screen" style={{ fontFamily: "'Inter', sans-serif" }}>
@@ -218,6 +232,7 @@ const DownloadLeads = () => {
                                     disabled={loadingV}
                                 >
                                     <option value="" disabled>{loadingV ? 'Loading...' : 'Choose a vendor...'}</option>
+                                    <option value="all">All Vendors</option>
                                     {vendors.map(v => (
                                         <option key={v.vendor_id} value={v.vendor_id}>
                                             {v.name}{v.available_leads != null ? ` — ${v.available_leads.toLocaleString()} available` : ''}
@@ -300,6 +315,7 @@ const DownloadLeads = () => {
                                     required
                                 >
                                     <option value="" disabled>{loadingC ? 'Loading...' : 'Choose a campaign...'}</option>
+                                    <option value="all">All Campaigns</option>
                                     {campaigns.map(c => <option key={c.campaign_id} value={c.campaign_id}>{c.name}</option>)}
                                 </SelectInput>
                             </Field>
@@ -484,7 +500,7 @@ const DownloadLeads = () => {
                                             <tr key={req.id} className="hover:bg-white/[0.02] transition-colors group">
                                                 <td className="px-5 py-4 text-slate-600 font-mono text-xs">{i + 1}</td>
                                                 <td className="px-5 py-4">
-                                                    <span className="font-semibold text-white">{req.vendor_name || '—'}</span>
+                                                    <span className="font-semibold text-white">{req.vendor_name || 'All Vendors'}</span>
                                                 </td>
                                                 <td className="px-5 py-4">
                                                     <span className="font-mono text-orange-400 font-bold">{req.quantity?.toLocaleString()}</span>

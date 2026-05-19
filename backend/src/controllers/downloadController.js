@@ -11,12 +11,12 @@ async function buildFilters(client, { vendor_id, campaign_id, states, min_age, m
   const params = [];
   let paramIdx = 1;
 
-  if (vendor_id) {
+  if (vendor_id && vendor_id !== "all") {
     filters.push(`vendor_id = $${paramIdx++}`);
     params.push(vendor_id);
   }
 
-  if (campaign_id) {
+  if (campaign_id && campaign_id !== "all") {
     const campRes = await client.query(
       "SELECT name FROM campaigns WHERE campaign_id = $1",
       [campaign_id],
@@ -147,8 +147,8 @@ const downloadLeads = async (req, res) => {
 
     await client.query("BEGIN");
     const rows = await executeDownload(client, {
-      vendor_id,
-      campaign_id,
+      vendor_id: (vendor_id && vendor_id !== "all") ? vendor_id : null,
+      campaign_id: (campaign_id && campaign_id !== "all") ? campaign_id : null,
       states,
       quantity,
       user_id: req.user.id,
@@ -215,8 +215,8 @@ const createDownloadRequest = async (req, res) => {
              RETURNING *`,
       [
         req.user.id,
-        vendor_id,
-        campaign_id || null,
+        (vendor_id && vendor_id !== "all") ? vendor_id : null,
+        (campaign_id && campaign_id !== "all") ? campaign_id : null,
         quantity,
         states && states.length ? states : null,
         min_age || null,

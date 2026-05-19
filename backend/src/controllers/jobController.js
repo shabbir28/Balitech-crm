@@ -186,6 +186,18 @@ const createJob = async (req, res) => {
                         SET disposition = CASE
                           WHEN EXCLUDED.disposition IS NOT NULL AND EXCLUDED.disposition <> '' THEN EXCLUDED.disposition
                           ELSE leads.disposition
+                        END,
+                        name = CASE
+                          WHEN EXCLUDED.name IS NOT NULL AND EXCLUDED.name <> '' THEN EXCLUDED.name
+                          ELSE leads.name
+                        END,
+                        email = CASE
+                          WHEN EXCLUDED.email IS NOT NULL AND EXCLUDED.email <> '' THEN EXCLUDED.email
+                          ELSE leads.email
+                        END,
+                        age = CASE
+                          WHEN EXCLUDED.age IS NOT NULL THEN EXCLUDED.age
+                          ELSE leads.age
                         END
                         RETURNING (xmax = 0) AS inserted
                     `;
@@ -517,21 +529,15 @@ const uploadFreshJob = async (req, res) => {
       const existingCount = existingSet.size;
       const freshCount = phonesNotDnc.length - existingCount;
 
-      const freshPhonesSet = new Set();
-      for (const p of phonesNotDnc) {
-        if (!existingSet.has(p)) freshPhonesSet.add(p);
-      }
+      const recordsToProcess = uniqueRecords.filter((r) => !dncSet.has(r.phone));
+      let updatedCount = 0;
 
-      const freshRecords = uniqueRecords.filter((r) =>
-        freshPhonesSet.has(r.phone),
-      );
-
-      // Insert only fresh records. Use DO NOTHING to avoid race-condition conflicts.
-      for (let i = 0; i < freshRecords.length; i += BATCH_SIZE) {
+      // Insert fresh records and update existing records with missing/new information
+      for (let i = 0; i < recordsToProcess.length; i += BATCH_SIZE) {
         if (i % 5000 === 0 && i > 0) {
           await new Promise((resolve) => setImmediate(resolve));
         }
-        const batch = freshRecords.slice(i, i + BATCH_SIZE);
+        const batch = recordsToProcess.slice(i, i + BATCH_SIZE);
         const valueStrings = [];
         const values = [];
         let paramIndex = 1;
@@ -557,12 +563,37 @@ const uploadFreshJob = async (req, res) => {
         const query = `
                     INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, campaign_type, age)
                     VALUES ${valueStrings.join(",")}
-                    ON CONFLICT (phone) DO NOTHING
-                    RETURNING phone
+                    ON CONFLICT (phone) DO UPDATE SET
+                      name = CASE
+                        WHEN EXCLUDED.name IS NOT NULL AND EXCLUDED.name <> '' THEN EXCLUDED.name
+                        ELSE leads.name
+                      END,
+                      email = CASE
+                        WHEN EXCLUDED.email IS NOT NULL AND EXCLUDED.email <> '' THEN EXCLUDED.email
+                        ELSE leads.email
+                      END,
+                      age = CASE
+                        WHEN EXCLUDED.age IS NOT NULL THEN EXCLUDED.age
+                        ELSE leads.age
+                      END,
+                      disposition = CASE
+                        WHEN EXCLUDED.disposition IS NOT NULL AND EXCLUDED.disposition <> '' THEN EXCLUDED.disposition
+                        ELSE leads.disposition
+                      END,
+                      campaign_type = CASE
+                        WHEN (leads.campaign_type IS NULL OR leads.campaign_type = '') AND EXCLUDED.campaign_type IS NOT NULL AND EXCLUDED.campaign_type <> '' THEN EXCLUDED.campaign_type
+                        ELSE leads.campaign_type
+                      END
+                    RETURNING (xmax = 0) AS inserted
                 `;
 
         const result = await client.query(query, values);
-        insertedCount += result.rows.length;
+        const insertedInBatch = result.rows.reduce(
+          (acc, r) => acc + (r.inserted ? 1 : 0),
+          0,
+        );
+        insertedCount += insertedInBatch;
+        updatedCount += result.rows.length - insertedInBatch;
       }
 
       await client.query("COMMIT");
@@ -580,7 +611,7 @@ const uploadFreshJob = async (req, res) => {
                     dnc_skipped_dnc     = $7,
                     dnc_skipped_sale    = $8,
                     inserted            = $9,
-                    updated             = 0
+                    updated             = $10
                 WHERE id = $2
             `,
         [
@@ -593,6 +624,7 @@ const uploadFreshJob = async (req, res) => {
           dncSkippedDnc,
           dncSkippedSale,
           insertedCount,
+          updatedCount,
         ],
       );
 
@@ -607,7 +639,7 @@ const uploadFreshJob = async (req, res) => {
         dnc_skipped_dnc: dncSkippedDnc,
         dnc_skipped_sale: dncSkippedSale,
         inserted: insertedCount,
-        updated: 0,
+        updated: updatedCount,
         duplicates_skipped: freshCount - insertedCount,
         existing_breakdown: existingBreakdown,
       });

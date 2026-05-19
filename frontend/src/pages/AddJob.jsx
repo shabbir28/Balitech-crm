@@ -534,6 +534,12 @@ const AddJob = () => {
                                                     )}
                                                 </div>
                                             </li>
+                                            {result.updated > 0 && (
+                                                <li className="flex justify-between border-b border-white/5 pb-3 animate-fade-in">
+                                                    <span className="text-slate-400 font-medium">Existing Updated with Info</span>
+                                                    <span className="font-bold text-sky-400">{result.updated}</span>
+                                                </li>
+                                            )}
                                             <li className="flex justify-between border-b border-white/5 pb-3">
                                                 <span className="text-slate-400 font-medium">DNC Skipped Total</span>
                                                 <span className="font-bold text-purple-400">{result.dnc_skipped || 0}</span>

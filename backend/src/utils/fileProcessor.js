@@ -100,6 +100,7 @@ const guessIndices = (rowLower) => {
   let emailIdx = -1;
   let dispIdx = -1;
   let ageIdx = -1;
+  let dobIdx = -1;
 
   const isPhoneHeader = (v) => {
     // Explicitly ignore any source number / src_number column headers
@@ -167,6 +168,23 @@ const guessIndices = (rowLower) => {
 
   const isAgeHeader = (v) => {
     return v === "age" || v === "customerage" || v === "insuredage";
+  };
+
+  const isDobHeader = (v) => {
+    return (
+      v === "dob" ||
+      v === "d.o.b" ||
+      v === "date_of_birth" ||
+      v === "dateofbirth" ||
+      v === "birth_date" ||
+      v === "birthdate" ||
+      v === "birth" ||
+      v === "birthday" ||
+      v.includes("date of birth") ||
+      v.includes("birth date") ||
+      v.includes("birth_date") ||
+      v.includes("birthdate")
+    );
   };
 
   const isNameHeader = (v) => {
@@ -255,6 +273,11 @@ const guessIndices = (rowLower) => {
 
     if (isAgeHeader(v) && ageIdx === -1) {
       ageIdx = i;
+      return;
+    }
+
+    if (isDobHeader(v) && dobIdx === -1) {
+      dobIdx = i;
     }
   });
 
@@ -267,6 +290,7 @@ const guessIndices = (rowLower) => {
     emailIdx,
     dispIdx,
     ageIdx,
+    dobIdx,
   };
 };
 
@@ -298,6 +322,78 @@ const detectSeparator = (buffer) => {
   }
 
   return maxCount > 0 ? bestSep : ",";
+};
+
+const calculateAgeFromDob = (dobVal) => {
+  if (dobVal === null || dobVal === undefined || dobVal === "") return null;
+
+  let birthDate = null;
+
+  if (dobVal instanceof Date) {
+    birthDate = dobVal;
+  }
+  else if (typeof dobVal === "number") {
+    if (dobVal > 1900 && dobVal < 2100) {
+      const currentYear = new Date().getFullYear();
+      return Math.max(0, currentYear - dobVal);
+    } else if (dobVal > 10000 && dobVal < 100000) {
+      birthDate = new Date((dobVal - 25569) * 86400 * 1000);
+    }
+  }
+  else if (typeof dobVal === "string") {
+    const clean = dobVal.trim();
+    if (!clean) return null;
+
+    const parsed = Date.parse(clean);
+    if (!isNaN(parsed)) {
+      birthDate = new Date(parsed);
+    } else {
+      const parts = clean.split(/[-/\.]/);
+      if (parts.length === 3) {
+        let month, day, year;
+        if (parts[0].length === 4) {
+          year = parseInt(parts[0], 10);
+          month = parseInt(parts[1], 10) - 1;
+          day = parseInt(parts[2], 10);
+        } else {
+          month = parseInt(parts[0], 10) - 1;
+          day = parseInt(parts[1], 10);
+          year = parseInt(parts[2], 10);
+
+          if (year < 100) {
+            year += year > 30 ? 1900 : 2000;
+          }
+        }
+
+        if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+          const testDate = new Date(year, month, day);
+          if (!isNaN(testDate.getTime())) {
+            birthDate = testDate;
+          }
+        }
+      } else if (clean.length === 4 && !isNaN(parseInt(clean))) {
+        const yr = parseInt(clean, 10);
+        if (yr > 1900 && yr < 2100) {
+          const currentYear = new Date().getFullYear();
+          return Math.max(0, currentYear - yr);
+        }
+      }
+    }
+  }
+
+  if (birthDate && !isNaN(birthDate.getTime())) {
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    if (age >= 0 && age <= 120) {
+      return age;
+    }
+  }
+
+  return null;
 };
 
 // filePath: disk par file ka path (preferred — less memory)
@@ -350,6 +446,14 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
         const rawAge = String(values[headerIndices.ageIdx] || "").trim();
         const parsedAge = parseInt(rawAge);
         if (!isNaN(parsedAge)) age = parsedAge;
+      }
+
+      if (headerIndices.dobIdx !== -1) {
+        const rawDob = values[headerIndices.dobIdx];
+        const calculatedAge = calculateAgeFromDob(rawDob);
+        if (calculatedAge !== null) {
+          age = calculatedAge;
+        }
       }
 
       // Clean phone number initially
