@@ -7,7 +7,7 @@ import {
     LayoutTemplate, Building2, Target, FolderUp, Scale, Layers,
     FileStack, ShieldBan, FolderDown, TerminalSquare, UserCheck,
     GitCompareArrows, ClipboardList, Bell, CheckCheck,
-    Download, CheckCircle2, XCircle, Users
+    Download, CheckCircle2, XCircle, Users, History
 } from 'lucide-react';
 
 // ─── Notification Bell Component ─────────────────────────────
@@ -357,6 +357,9 @@ const Layout = ({ children }) => {
                                 </NavLink>
                                 <NavLink to="/download" className={getClassName}>
                                     <FolderDown className="h-[15px] w-[15px] shrink-0" /><span>Download Data</span>
+                                </NavLink>
+                                <NavLink to="/already-downloaded" className={getClassName}>
+                                    <History className="h-[15px] w-[15px] shrink-0" /><span>Already Downloaded</span>
                                 </NavLink>
                                 <NavLink to="/logs" className={getClassName}>
                                     <TerminalSquare className="h-[15px] w-[15px] shrink-0" /><span>Logs</span>

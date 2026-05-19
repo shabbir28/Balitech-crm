@@ -22,6 +22,7 @@ import Campaigns from './pages/Campaigns';
 import AddCampaign from './pages/AddCampaign';
 import SecuritySettings from './pages/SecuritySettings';
 import CompareFiles from './pages/CompareFiles';
+import AlreadyDownloaded from './pages/AlreadyDownloaded';
 
 const ProtectedRoute = ({ children, roles }) => {
     const { user, loading } = useContext(AuthContext);
@@ -78,6 +79,7 @@ const AppRoutes = () => {
 
             {/* Download - super_admin, admin */}
             <Route path="/download" element={<ProtectedRoute roles={['super_admin', 'admin']}><DownloadLeads /></ProtectedRoute>} />
+            <Route path="/already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin']}><AlreadyDownloaded /></ProtectedRoute>} />
 
             {/* Users management - super_admin only */}
             <Route path="/users" element={<ProtectedRoute roles={['super_admin']}><Users /></ProtectedRoute>} />

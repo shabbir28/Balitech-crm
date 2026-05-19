@@ -4,6 +4,52 @@ const { areaCodesMap } = require("../utils/areaCodes");
 const { createNotification } = require("./notificationController");
 const { scrubPhones } = require("../utils/blacklistAlliance");
 
+const CSV_GOOD_FIELDS = [
+  "name",
+  "phone",
+  "email",
+  "country_code",
+  "area_code",
+  "state",
+  "disposition",
+  "age",
+];
+const CSV_BAD_FIELDS = [
+  ...CSV_GOOD_FIELDS,
+  "dnc_type",
+  "reason",
+];
+
+const serializeDownloadPayload = (goodRows, badRows, summary, fileName) => {
+  const goodCsv =
+    goodRows.length > 0
+      ? new Parser({ fields: CSV_GOOD_FIELDS }).parse(goodRows)
+      : "";
+  const badCsv =
+    badRows.length > 0
+      ? new Parser({ fields: CSV_BAD_FIELDS }).parse(badRows)
+      : "";
+
+  return JSON.stringify({
+    isScrubbed: true,
+    summary: {
+      fileName: fileName || `leads_download_${Date.now()}.csv`,
+      scrubDate: new Date().toLocaleString(),
+      ...summary,
+    },
+    goodCsv,
+    badCsv,
+  });
+};
+
+const saveDownloadLogPayload = async (logId, payload) => {
+  if (!logId || !payload) return;
+  await db.query(
+    `UPDATE download_logs SET csv_payload = $1 WHERE id = $2`,
+    [payload, logId],
+  );
+};
+
 // ─────────────────────────────────────────────────────────────
 // HELPER: build WHERE clause from filters (shared logic)
 // ─────────────────────────────────────────────────────────────
@@ -212,9 +258,13 @@ async function executeDownload(
   }
 
   // Log the download — include approved_by if it was a request approval
-  await client.query(
-    `INSERT INTO download_logs (user_id, vendor_id, country_code, area_code, quantity, approved_by)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+  const logRes = await client.query(
+    `INSERT INTO download_logs (
+       user_id, vendor_id, country_code, area_code, quantity, approved_by,
+       campaign_id, states, min_age, max_age
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     RETURNING id`,
     [
       user_id,
       vendor_id || null,
@@ -222,8 +272,17 @@ async function executeDownload(
       null,
       finalRows.length,
       approved_by_id || null,
+      campaign_id && campaign_id !== "all" ? campaign_id : null,
+      states && states.length > 0 ? states : null,
+      min_age !== undefined && min_age !== null && min_age !== ""
+        ? parseInt(min_age, 10)
+        : null,
+      max_age !== undefined && max_age !== null && max_age !== ""
+        ? parseInt(max_age, 10)
+        : null,
     ],
   );
+  const logId = logRes.rows[0]?.id || null;
 
   const rowsWithState = finalRows.map((r) => {
     let code = r.area_code;
@@ -240,6 +299,7 @@ async function executeDownload(
   });
 
   return {
+    logId,
     goodRows: rowsWithState,
     badRows: badRowsWithState,
     summary: {
@@ -280,7 +340,7 @@ const downloadLeads = async (req, res) => {
     }
 
     await client.query("BEGIN");
-    const { goodRows, badRows, summary } = await executeDownload(client, {
+    const { goodRows, badRows, summary, logId } = await executeDownload(client, {
       vendor_id: vendor_id && vendor_id !== "all" ? vendor_id : null,
       campaign_id: campaign_id && campaign_id !== "all" ? campaign_id : null,
       states,
@@ -299,47 +359,20 @@ const downloadLeads = async (req, res) => {
 
     await client.query("COMMIT");
 
-    const goodFields = [
-      "name",
-      "phone",
-      "email",
-      "country_code",
-      "area_code",
-      "state",
-      "disposition",
-      "age",
-    ];
-    const badFields = [
-      "name",
-      "phone",
-      "email",
-      "country_code",
-      "area_code",
-      "state",
-      "disposition",
-      "age",
-      "dnc_type",
-      "reason",
-    ];
+    const fileName = `leads_download_${Date.now()}.csv`;
+    const payload = serializeDownloadPayload(
+      goodRows,
+      badRows,
+      summary,
+      fileName,
+    );
+    await saveDownloadLogPayload(logId, payload);
 
-    const goodCsv =
-      goodRows.length > 0
-        ? new Parser({ fields: goodFields }).parse(goodRows)
-        : "";
-    const badCsv =
-      badRows.length > 0
-        ? new Parser({ fields: badFields }).parse(badRows)
-        : "";
-
+    const parsed = JSON.parse(payload);
     return res.status(200).json({
       isScrubbed: true,
-      summary: {
-        fileName: `leads_download_${Date.now()}.csv`,
-        scrubDate: new Date().toLocaleString(),
-        ...summary,
-      },
-      goodCsv,
-      badCsv,
+      logId,
+      ...parsed,
     });
   } catch (err) {
     await client.query("ROLLBACK");
@@ -546,7 +579,7 @@ const reviewDownloadRequest = async (req, res) => {
     await client.query("BEGIN");
     txnStarted = true;
 
-    const { goodRows, badRows, summary } = await executeDownload(client, {
+    const { goodRows, badRows, summary, logId } = await executeDownload(client, {
       vendor_id: dlReq.vendor_id,
       campaign_id: dlReq.campaign_id,
       states: dlReq.states,
@@ -575,48 +608,12 @@ const reviewDownloadRequest = async (req, res) => {
     }
 
     // Store CSV in the request row so admin can download it later
-    const goodFields = [
-      "name",
-      "phone",
-      "email",
-      "country_code",
-      "area_code",
-      "state",
-      "disposition",
-      "age",
-    ];
-    const badFields = [
-      "name",
-      "phone",
-      "email",
-      "country_code",
-      "area_code",
-      "state",
-      "disposition",
-      "age",
-      "dnc_type",
-      "reason",
-    ];
-
-    const goodCsv =
-      goodRows.length > 0
-        ? new Parser({ fields: goodFields }).parse(goodRows)
-        : "";
-    const badCsv =
-      badRows.length > 0
-        ? new Parser({ fields: badFields }).parse(badRows)
-        : "";
-
-    const serializedData = JSON.stringify({
-      isScrubbed: true,
-      summary: {
-        fileName: `approved_leads_${id}.csv`,
-        scrubDate: new Date().toLocaleString(),
-        ...summary,
-      },
-      goodCsv,
-      badCsv,
-    });
+    const serializedData = serializeDownloadPayload(
+      goodRows,
+      badRows,
+      summary,
+      `approved_leads_${id}.csv`,
+    );
 
     await client.query(
       `UPDATE download_requests
@@ -626,6 +623,7 @@ const reviewDownloadRequest = async (req, res) => {
     );
 
     await client.query("COMMIT");
+    await saveDownloadLogPayload(logId, serializedData);
     txnStarted = false;
 
     // Notify the admin that their request was approved
@@ -735,6 +733,236 @@ const getDownloadLogs = async (req, res) => {
   }
 };
 
+const formatDownloadedBy = (row) => {
+  const name = [row.user_first_name, row.user_last_name].filter(Boolean).join(" ").trim();
+  return name || row.username || "—";
+};
+
+const parseDownloadLogMeta = (row) => {
+  let fileName = null;
+  let cleanCount = parseInt(row.quantity, 10) || 0;
+  let dncCount = 0;
+  let canRedownload = false;
+  let canDownloadDnc = false;
+
+  if (row.csv_payload) {
+    try {
+      const payload = JSON.parse(row.csv_payload);
+      const summary = payload.summary || {};
+      fileName = summary.fileName || null;
+      cleanCount = parseInt(summary.good, 10);
+      if (Number.isNaN(cleanCount)) cleanCount = parseInt(row.quantity, 10) || 0;
+
+      dncCount =
+        (parseInt(summary.blacklist, 10) || 0) +
+        (parseInt(summary.stateDnc, 10) || 0) +
+        (parseInt(summary.federalDnc, 10) || 0) +
+        (parseInt(summary.badPhone, 10) || 0);
+
+      if (payload.badCsv && String(payload.badCsv).trim()) {
+        const badLines = String(payload.badCsv).trim().split("\n");
+        const badRows = Math.max(0, badLines.length - 1);
+        if (badRows > dncCount) dncCount = badRows;
+        canDownloadDnc = badRows > 0;
+      }
+
+      canRedownload = Boolean(payload.goodCsv && String(payload.goodCsv).trim());
+    } catch (_) {
+      canRedownload = false;
+      canDownloadDnc = false;
+    }
+  }
+
+  const statesList = Array.isArray(row.states) ? row.states.filter(Boolean) : [];
+
+  return {
+    id: row.id,
+    download_date: row.download_date,
+    downloaded_by: formatDownloadedBy(row),
+    vendor_name: row.vendor_name || "All Vendors",
+    vendor_id: row.vendor_id,
+    file_name: fileName || `download_${row.id}.csv`,
+    states: statesList,
+    states_label: statesList.length > 0 ? statesList.join(", ") : "All States",
+    dnc_removed: dncCount,
+    clean_count: cleanCount,
+    campaign_name: row.campaign_name || null,
+    can_redownload: canRedownload,
+    can_download_dnc: canDownloadDnc,
+    approved_by_username: row.approved_by_username || null,
+  };
+};
+
+// GET /api/download/already-downloaded/list — flat table for UI
+const getAlreadyDownloadedList = async (req, res) => {
+  try {
+    const { vendor_id, page = 1, limit = 100 } = req.query;
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10) || 100));
+    const offset = (pageNum - 1) * limitNum;
+
+    const params = [];
+    let where = "WHERE 1=1";
+    if (vendor_id && vendor_id !== "all") {
+      params.push(vendor_id);
+      where += ` AND dl.vendor_id = $${params.length}`;
+    }
+
+    const dataQuery = `
+      SELECT
+        dl.id,
+        dl.vendor_id,
+        dl.quantity,
+        dl.states,
+        dl.download_date,
+        dl.csv_payload,
+        COALESCE(v.name, 'All Vendors') AS vendor_name,
+        c.name AS campaign_name,
+        u.username,
+        u.first_name AS user_first_name,
+        u.last_name AS user_last_name,
+        ap.username AS approved_by_username
+      FROM download_logs dl
+      LEFT JOIN vendors v ON dl.vendor_id = v.vendor_id
+      LEFT JOIN campaigns c ON dl.campaign_id = c.campaign_id
+      LEFT JOIN users u ON dl.user_id = u.id
+      LEFT JOIN users ap ON dl.approved_by = ap.id
+      ${where}
+      ORDER BY dl.download_date DESC
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+    `;
+
+    const countQuery = `
+      SELECT COUNT(*)::int AS count
+      FROM download_logs dl
+      ${where}
+    `;
+
+    const [dataResult, countResult] = await Promise.all([
+      db.query(dataQuery, [...params, limitNum, offset]),
+      db.query(countQuery, params),
+    ]);
+
+    const data = dataResult.rows.map(parseDownloadLogMeta);
+
+    res.json({
+      data,
+      total: countResult.rows[0]?.count || 0,
+      page: pageNum,
+      limit: limitNum,
+    });
+  } catch (err) {
+    console.error("Already Downloaded List Error:", err);
+    res.status(500).json({ message: "Server error fetching download list" });
+  }
+};
+
+// GET /api/download/already-downloaded — vendors grouped with download counts
+const getAlreadyDownloadedSummary = async (req, res) => {
+  try {
+    const result = await db.query(`
+      SELECT
+        dl.vendor_id,
+        COALESCE(v.name, 'All Vendors') AS vendor_name,
+        COUNT(dl.id)::int AS download_count,
+        COALESCE(SUM(dl.quantity), 0)::int AS total_leads_downloaded,
+        MAX(dl.download_date) AS last_download_at,
+        BOOL_OR(dl.csv_payload IS NOT NULL AND dl.csv_payload <> '') AS has_stored_file
+      FROM download_logs dl
+      LEFT JOIN vendors v ON dl.vendor_id = v.vendor_id
+      GROUP BY dl.vendor_id, v.name
+      ORDER BY MAX(dl.download_date) DESC
+    `);
+    res.json({ data: result.rows });
+  } catch (err) {
+    console.error("Already Downloaded Summary Error:", err);
+    res.status(500).json({ message: "Server error fetching download history" });
+  }
+};
+
+// GET /api/download/already-downloaded/:vendorId/history — each download event
+const getVendorDownloadHistory = async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+    const isAll = vendorId === "all" || vendorId === "null";
+
+    const params = [];
+    let vendorFilter = "";
+    if (isAll) {
+      vendorFilter = "dl.vendor_id IS NULL";
+    } else {
+      vendorFilter = `dl.vendor_id = $1`;
+      params.push(vendorId);
+    }
+
+    const result = await db.query(
+      `
+      SELECT
+        dl.id,
+        dl.vendor_id,
+        dl.quantity,
+        dl.states,
+        dl.min_age,
+        dl.max_age,
+        dl.download_date,
+        dl.csv_payload IS NOT NULL AND dl.csv_payload <> '' AS can_redownload,
+        COALESCE(v.name, 'All Vendors') AS vendor_name,
+        c.name AS campaign_name,
+        u.username,
+        u.first_name AS user_first_name,
+        u.last_name AS user_last_name,
+        ap.username AS approved_by_username
+      FROM download_logs dl
+      LEFT JOIN vendors v ON dl.vendor_id = v.vendor_id
+      LEFT JOIN campaigns c ON dl.campaign_id = c.campaign_id
+      LEFT JOIN users u ON dl.user_id = u.id
+      LEFT JOIN users ap ON dl.approved_by = ap.id
+      WHERE ${vendorFilter}
+      ORDER BY dl.download_date DESC
+      `,
+      params,
+    );
+
+    res.json({
+      vendor_id: isAll ? null : vendorId,
+      vendor_name: result.rows[0]?.vendor_name || "Unknown",
+      download_count: result.rows.length,
+      history: result.rows,
+    });
+  } catch (err) {
+    console.error("Vendor Download History Error:", err);
+    res.status(500).json({ message: "Server error fetching vendor history" });
+  }
+};
+
+// GET /api/download/logs/:id/file — re-download stored CSV from history
+const getDownloadLogFile = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await db.query(
+      `SELECT csv_payload, quantity FROM download_logs WHERE id = $1`,
+      [id],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Download record not found" });
+    }
+
+    const row = result.rows[0];
+    if (!row.csv_payload) {
+      return res.status(404).json({
+        message:
+          "This download was recorded before file storage was enabled. Re-download is not available.",
+      });
+    }
+
+    return res.status(200).json(JSON.parse(row.csv_payload));
+  } catch (err) {
+    console.error("Get Download Log File Error:", err);
+    res.status(500).json({ message: "Server error loading download file" });
+  }
+};
+
 module.exports = {
   downloadLeads,
   createDownloadRequest,
@@ -743,4 +971,8 @@ module.exports = {
   reviewDownloadRequest,
   executeApprovedDownload,
   getDownloadLogs,
+  getAlreadyDownloadedSummary,
+  getAlreadyDownloadedList,
+  getVendorDownloadHistory,
+  getDownloadLogFile,
 };

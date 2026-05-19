@@ -7,7 +7,11 @@ const {
     getMyDownloadRequests,
     reviewDownloadRequest,
     executeApprovedDownload,
-    getDownloadLogs
+    getDownloadLogs,
+    getAlreadyDownloadedSummary,
+    getAlreadyDownloadedList,
+    getVendorDownloadHistory,
+    getDownloadLogFile,
 } = require('../controllers/downloadController');
 const auth = require('../middleware/auth');
 const authorizeRole = require('../middleware/role');
@@ -32,5 +36,31 @@ router.get('/requests/:id/file', auth, authorizeRole(['admin']), executeApproved
 
 // ── Both: view download logs ──────────────────────────────────
 router.get('/logs', auth, authorizeRole(['super_admin', 'admin']), getDownloadLogs);
+
+// ── Already Downloaded module ─────────────────────────────────
+router.get(
+  '/already-downloaded/list',
+  auth,
+  authorizeRole(['super_admin', 'admin']),
+  getAlreadyDownloadedList,
+);
+router.get(
+  '/already-downloaded',
+  auth,
+  authorizeRole(['super_admin', 'admin']),
+  getAlreadyDownloadedSummary,
+);
+router.get(
+  '/already-downloaded/:vendorId/history',
+  auth,
+  authorizeRole(['super_admin', 'admin']),
+  getVendorDownloadHistory,
+);
+router.get(
+  '/logs/:id/file',
+  auth,
+  authorizeRole(['super_admin', 'admin']),
+  getDownloadLogFile,
+);
 
 module.exports = router;
