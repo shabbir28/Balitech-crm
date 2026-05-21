@@ -54,6 +54,10 @@ app.get("/health", (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+// Nginx default keepalive is 75s — Node must be HIGHER to avoid premature connection drop
+server.keepAliveTimeout = 120 * 1000; // 120 seconds
+server.headersTimeout = 125 * 1000;   // must be > keepAliveTimeout

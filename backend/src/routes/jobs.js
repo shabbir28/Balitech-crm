@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { createJob, compareJob, uploadFreshJob } = require('../controllers/jobController');
+const { createJob, compareJob, uploadFreshJob, getJobStatus } = require('../controllers/jobController');
 const upload = require('../middleware/upload');
 const auth = require('../middleware/auth');
 const authorizeRole = require('../middleware/role');
@@ -21,5 +21,8 @@ router.post(
   upload.single('file'),
   uploadFreshJob
 );
+
+// Polling endpoint: frontend calls this every 2s after getting 202
+router.get('/:jobId/status', auth, getJobStatus);
 
 module.exports = router;

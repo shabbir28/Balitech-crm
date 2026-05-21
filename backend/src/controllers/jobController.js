@@ -1,18 +1,28 @@
+const path = require("path");
 const db = require("../config/db");
 const { processFileBuffer } = require("../utils/fileProcessor");
 const { parsePhone } = require("../utils/phoneParser");
 const { cleanupFile } = require("../middleware/upload");
+const {
+  lookupDncPhones,
+  lookupExistingLeads,
+  withSessionUploadLock,
+  isRetryableDbError,
+} = require("../utils/dbHelpers");
+const {
+  insertFreshLeadsBatches,
+  insertLeadsUpsertBatches,
+} = require("../utils/leadBulkInsert");
 
 const truncate = (val, max) => {
   if (typeof val !== "string") return val;
   return val.length > max ? val.substring(0, max) : val;
 };
 
-const chunkArray = (arr, size) => {
-  if (!Array.isArray(arr) || arr.length === 0) return [];
-  const out = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
+/** upload_jobs.file_name is VARCHAR(255); Windows paths can exceed that */
+const safeFileName = (originalName) => {
+  const base = path.basename(String(originalName || "upload"));
+  return truncate(base, 255);
 };
 
 const dedupeAndNormalizeRecords = (records) => {
@@ -70,7 +80,7 @@ const createJob = async (req, res) => {
             VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, 'Processing')
             RETURNING *
         `,
-      [session_id, req.file.originalname, req.file.size, importType],
+      [session_id, safeFileName(req.file.originalname), req.file.size, importType],
     );
     const job = jobResult.rows[0];
     console.log("Job created with ID:", job.id);
@@ -102,121 +112,30 @@ const createJob = async (req, res) => {
         });
     }
 
-    console.log("Starting DB transaction for", validRecords.length, "records");
-    const client = await db.getClient();
+    const uniqueRecords = dedupeAndNormalizeRecords(validRecords);
+    const uniquePhones = uniqueRecords.map((r) => r.phone);
+
+    const { dncSet, dncSkippedDnc, dncSkippedSale } = await lookupDncPhones(
+      db,
+      uniquePhones,
+    );
+    const recordsToInsert = uniqueRecords.filter((r) => !dncSet.has(r.phone));
+    const dncSkipped = uniqueRecords.length - recordsToInsert.length;
+
     let insertedCount = 0;
     let updatedCount = 0;
-    let duplicateCount = 0;
-    let dncSkipped = 0;
-    let dncSkippedDnc = 0;
-    let dncSkippedSale = 0;
 
     try {
-      await client.query("BEGIN");
-
-      const BATCH_SIZE = 1000;
-      for (let i = 0; i < validRecords.length; i += BATCH_SIZE) {
-        // Yield to event loop
-        if (i % 5000 === 0 && i > 0) {
-          await new Promise((resolve) => setImmediate(resolve));
-        }
-        const batch = validRecords.slice(i, i + BATCH_SIZE);
-
-        const valueStrings = [];
-        const values = [];
-        let paramIndex = 1;
-
-        // De-dupe within a single INSERT statement, otherwise Postgres throws:
-        // "ON CONFLICT DO UPDATE command cannot affect row a second time"
-        const deduped = new Map(); // phone -> record
-        batch.forEach((record) => {
-          const { phone, countryCode, areaCode } = parsePhone(record.phone);
-
-          if (!phone) return; // Skip invalid phones
-
-          deduped.set(phone, {
-            ...record,
-            phone,
-            countryCode,
-            areaCode,
-          });
+      await withSessionUploadLock(db, session_id, async (exec) => {
+        const counts = await insertLeadsUpsertBatches(exec, {
+          records: recordsToInsert,
+          session,
+          truncate,
         });
+        insertedCount = counts.insertedCount;
+        updatedCount = counts.updatedCount;
+      });
 
-        const uniqueRecords = Array.from(deduped.values());
-        const uniquePhones = uniqueRecords.map((r) => r.phone);
-
-        // Skip DNC numbers
-        if (uniquePhones.length > 0) {
-          const dncRes = await client.query(
-            "SELECT phone, dnc_type FROM dnc_numbers WHERE phone = ANY($1::text[])",
-            [uniquePhones],
-          );
-          const dncSet = new Set(dncRes.rows.map((r) => r.phone));
-          for (const row of dncRes.rows) {
-            if (row.dnc_type === "DNC") dncSkippedDnc += 1;
-            if (row.dnc_type === "SALE") dncSkippedSale += 1;
-          }
-
-          const filtered = uniqueRecords.filter((r) => !dncSet.has(r.phone));
-          dncSkipped += uniqueRecords.length - filtered.length;
-
-          filtered.forEach((record) => {
-            valueStrings.push(
-              `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7})`,
-            );
-            values.push(
-              truncate(record.name, 150) || null,
-              record.phone,
-              truncate(record.email, 150) || null,
-              record.countryCode,
-              record.areaCode,
-              session.vendor_id,
-              truncate(record.disposition, 100) || null,
-              record.age || null,
-            );
-            paramIndex += 8;
-          });
-        }
-
-        if (values.length > 0) {
-          const query = `
-                        INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, age)
-                        VALUES ${valueStrings.join(",")}
-                        ON CONFLICT (phone) DO UPDATE
-                        SET disposition = CASE
-                          WHEN EXCLUDED.disposition IS NOT NULL AND EXCLUDED.disposition <> '' THEN EXCLUDED.disposition
-                          ELSE leads.disposition
-                        END,
-                        name = CASE
-                          WHEN EXCLUDED.name IS NOT NULL AND EXCLUDED.name <> '' THEN EXCLUDED.name
-                          ELSE leads.name
-                        END,
-                        email = CASE
-                          WHEN EXCLUDED.email IS NOT NULL AND EXCLUDED.email <> '' THEN EXCLUDED.email
-                          ELSE leads.email
-                        END,
-                        age = CASE
-                          WHEN EXCLUDED.age IS NOT NULL THEN EXCLUDED.age
-                          ELSE leads.age
-                        END
-                        RETURNING (xmax = 0) AS inserted
-                    `;
-          const result = await client.query(query, values);
-          const insertedInBatch = result.rows.reduce(
-            (acc, r) => acc + (r.inserted ? 1 : 0),
-            0,
-          );
-          insertedCount += insertedInBatch;
-          updatedCount += result.rowCount - insertedInBatch;
-
-          const attempted = valueStrings.length;
-          duplicateCount += attempted - result.rowCount;
-        }
-      }
-
-      await client.query("COMMIT");
-
-      // Update job status
       await db.query(
         `
                 UPDATE upload_jobs 
@@ -239,20 +158,21 @@ const createJob = async (req, res) => {
       });
     } catch (err) {
       console.error("Inner Job Processing Error:", err);
-      await client.query("ROLLBACK");
       await db.query(
         `UPDATE upload_jobs SET status = 'Failed', error_message = $1, end_time = CURRENT_TIMESTAMP WHERE id = $2`,
         [err.message, job.id],
       );
       throw err;
-    } finally {
-      client.release();
     }
   } catch (err) {
     console.error("Job Create Error (Full Stack):", err);
-    res.status(500).json({
-      message: "Server error during job processing",
+    const status = isRetryableDbError(err) ? 503 : 500;
+    res.status(status).json({
+      message: isRetryableDbError(err)
+        ? "Database busy (deadlock). Please retry this file."
+        : "Server error during job processing",
       error: err.message,
+      retryable: isRetryableDbError(err),
       stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
   }
@@ -304,51 +224,17 @@ const compareJob = async (req, res) => {
         .json({ message: "No valid phone numbers found in file" });
     }
 
-    // 1) DNC classification
-    const dncSet = new Set();
-    let dncSkippedDnc = 0;
-    let dncSkippedSale = 0;
-
-    for (const chunk of chunkArray(uniquePhones, 5000)) {
-      // Yield to event loop
-      await new Promise((resolve) => setImmediate(resolve));
-
-      const dncRes = await db.query(
-        "SELECT phone, dnc_type FROM dnc_numbers WHERE phone = ANY($1::text[])",
-        [chunk],
-      );
-
-      for (const row of dncRes.rows) {
-        // dnc_numbers.phone is UNIQUE, so these counts are accurate per phone.
-        dncSet.add(row.phone);
-        if (row.dnc_type === "DNC") dncSkippedDnc += 1;
-        if (row.dnc_type === "SALE") dncSkippedSale += 1;
-      }
-    }
-
+    const { dncSet, dncSkippedDnc, dncSkippedSale } = await lookupDncPhones(
+      db,
+      uniquePhones,
+    );
     const dncSkipped = dncSet.size;
 
-    // 2) Existing leads classification (only for non-DNC numbers)
     const phonesNotDnc = uniquePhones.filter((p) => !dncSet.has(p));
-    const existingSet = new Set();
-
-    const existingBreakdown = {};
-    for (const chunk of chunkArray(phonesNotDnc, 5000)) {
-      await new Promise((resolve) => setImmediate(resolve));
-
-      const existingRes = await db.query(
-        "SELECT phone, COALESCE(campaign_type, 'Unknown Campaign') as vendor_name FROM leads WHERE phone = ANY($1::text[])",
-        [chunk],
-      );
-
-      for (const row of existingRes.rows) {
-        if (!existingSet.has(row.phone)) {
-          existingSet.add(row.phone);
-          const vName = row.vendor_name || "Unknown Campaign";
-          existingBreakdown[vName] = (existingBreakdown[vName] || 0) + 1;
-        }
-      }
-    }
+    const { existingSet, existingBreakdown } = await lookupExistingLeads(
+      db,
+      phonesNotDnc,
+    );
 
     const existingCount = existingSet.size;
     const freshCount = phonesNotDnc.length - existingCount;
@@ -391,6 +277,33 @@ const compareJob = async (req, res) => {
   }
 };
 
+/**
+ * Returns job status for polling (frontend polls this after 202 response)
+ */
+const getJobStatus = async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const result = await db.query(
+      `SELECT id, status, error_message, total_rows, fresh_count, existing_count,
+              duplicates_in_file, dnc_skipped, dnc_skipped_dnc, dnc_skipped_sale,
+              inserted, updated, start_time, end_time
+       FROM upload_jobs WHERE id = $1`,
+      [jobId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Job not found" });
+    }
+    return res.json(result.rows[0]);
+  } catch (err) {
+    console.error("getJobStatus error:", err);
+    return res.status(500).json({ message: "Error fetching job status" });
+  }
+};
+
+/**
+ * ASYNC upload: immediately returns 202 + job_id, processes in background.
+ * This prevents 504 Gateway Timeout for large files.
+ */
 const uploadFreshJob = async (req, res) => {
   let job = null;
   try {
@@ -422,7 +335,7 @@ const uploadFreshJob = async (req, res) => {
         `,
       [
         session_id,
-        req.file.originalname,
+        safeFileName(req.file.originalname),
         req.file.size,
         req.file.originalname.toLowerCase().endsWith(".csv")
           ? "CSV"
@@ -480,185 +393,91 @@ const uploadFreshJob = async (req, res) => {
     const uniquePhones = uniqueRecords.map((r) => r.phone);
     const duplicatesInFile = validRecords.length - uniqueRecords.length;
 
-    const BATCH_SIZE = 1000;
-    const client = await db.getClient();
+    // ── IMMEDIATELY respond with 202 so Nginx/proxy does NOT timeout ──────
+    res.status(202).json({
+      message: "Upload accepted — processing in background",
+      job_id: job.id,
+      status: "Processing",
+    });
 
-    let insertedCount = 0;
-    let dncSkippedDnc = 0;
-    let dncSkippedSale = 0;
-    const dncSet = new Set();
-    const existingSet = new Set();
-
-    try {
-      await client.query("BEGIN");
-
-      // DNC lookup (chunked to avoid very large params)
-      for (const chunk of chunkArray(uniquePhones, 5000)) {
-        const dncRes = await client.query(
-          "SELECT phone, dnc_type FROM dnc_numbers WHERE phone = ANY($1::text[])",
-          [chunk],
-        );
-
-        for (const row of dncRes.rows) {
-          dncSet.add(row.phone);
-          if (row.dnc_type === "DNC") dncSkippedDnc += 1;
-          if (row.dnc_type === "SALE") dncSkippedSale += 1;
-        }
-      }
-
-      const dncSkipped = dncSet.size;
-      const phonesNotDnc = uniquePhones.filter((p) => !dncSet.has(p));
-
-      const existingBreakdown = {};
-      // Existing leads lookup (only for non-DNC phones)
-      for (const chunk of chunkArray(phonesNotDnc, 5000)) {
-        const existingRes = await client.query(
-          "SELECT phone, COALESCE(campaign_type, 'Unknown Campaign') as vendor_name FROM leads WHERE phone = ANY($1::text[])",
-          [chunk],
-        );
-
-        for (const row of existingRes.rows) {
-          if (!existingSet.has(row.phone)) {
-            existingSet.add(row.phone);
-            const vName = row.vendor_name || "Unknown Campaign";
-            existingBreakdown[vName] = (existingBreakdown[vName] || 0) + 1;
-          }
-        }
-      }
-
-      const existingCount = existingSet.size;
-      const freshCount = phonesNotDnc.length - existingCount;
-
-      const recordsToProcess = uniqueRecords.filter((r) => !dncSet.has(r.phone));
-      let updatedCount = 0;
-
-      // Insert fresh records and update existing records with missing/new information
-      for (let i = 0; i < recordsToProcess.length; i += BATCH_SIZE) {
-        if (i % 5000 === 0 && i > 0) {
-          await new Promise((resolve) => setImmediate(resolve));
-        }
-        const batch = recordsToProcess.slice(i, i + BATCH_SIZE);
-        const valueStrings = [];
-        const values = [];
-        let paramIndex = 1;
-
-        for (const record of batch) {
-          valueStrings.push(
-            `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8})`,
+    // ── Process in background (non-blocking) ──────────────────────────────
+    setImmediate(async () => {
+      let insertedCount = 0;
+      const updatedCount = 0;
+      try {
+        const stats = await withSessionUploadLock(db, session_id, async (exec) => {
+          const { dncSet, dncSkippedDnc, dncSkippedSale } = await lookupDncPhones(
+            exec,
+            uniquePhones,
           );
-          values.push(
-            truncate(record.name, 150) || null,
-            record.phone,
-            truncate(record.email, 150) || null,
-            record.countryCode,
-            record.areaCode,
-            session.vendor_id,
-            truncate(record.disposition, 100) || null,
-            truncate(session.campaign_type, 50),
-            record.age || null,
+          const phonesNotDnc = uniquePhones.filter((p) => !dncSet.has(p));
+          const { existingSet, existingBreakdown } = await lookupExistingLeads(
+            exec,
+            phonesNotDnc,
           );
-          paramIndex += 9;
-        }
 
-        const query = `
-                    INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, campaign_type, age)
-                    VALUES ${valueStrings.join(",")}
-                    ON CONFLICT (phone) DO UPDATE SET
-                      name = CASE
-                        WHEN EXCLUDED.name IS NOT NULL AND EXCLUDED.name <> '' THEN EXCLUDED.name
-                        ELSE leads.name
-                      END,
-                      email = CASE
-                        WHEN EXCLUDED.email IS NOT NULL AND EXCLUDED.email <> '' THEN EXCLUDED.email
-                        ELSE leads.email
-                      END,
-                      age = CASE
-                        WHEN EXCLUDED.age IS NOT NULL THEN EXCLUDED.age
-                        ELSE leads.age
-                      END,
-                      disposition = CASE
-                        WHEN EXCLUDED.disposition IS NOT NULL AND EXCLUDED.disposition <> '' THEN EXCLUDED.disposition
-                        ELSE leads.disposition
-                      END,
-                      campaign_type = CASE
-                        WHEN (leads.campaign_type IS NULL OR leads.campaign_type = '') AND EXCLUDED.campaign_type IS NOT NULL AND EXCLUDED.campaign_type <> '' THEN EXCLUDED.campaign_type
-                        ELSE leads.campaign_type
-                      END
-                    RETURNING (xmax = 0) AS inserted
-                `;
+          const existingCount = existingSet.size;
+          const freshCount = phonesNotDnc.length - existingCount;
+          const freshRecords = uniqueRecords.filter(
+            (r) => !dncSet.has(r.phone) && !existingSet.has(r.phone),
+          );
 
-        const result = await client.query(query, values);
-        const insertedInBatch = result.rows.reduce(
-          (acc, r) => acc + (r.inserted ? 1 : 0),
-          0,
-        );
-        insertedCount += insertedInBatch;
-        updatedCount += result.rows.length - insertedInBatch;
-      }
+          const inserted = await insertFreshLeadsBatches(exec, {
+            records: freshRecords,
+            session,
+            truncate,
+          });
 
-      await client.query("COMMIT");
-
-      await db.query(
-        `
-                UPDATE upload_jobs
-                SET status = 'Completed',
-                    total_rows          = $1,
-                    end_time            = CURRENT_TIMESTAMP,
-                    fresh_count         = $3,
-                    existing_count      = $4,
-                    duplicates_in_file  = $5,
-                    dnc_skipped         = $6,
-                    dnc_skipped_dnc     = $7,
-                    dnc_skipped_sale    = $8,
-                    inserted            = $9,
-                    updated             = $10
-                WHERE id = $2
-            `,
-        [
-          validRecords.length,
-          job.id,
-          freshCount,
-          existingCount,
-          duplicatesInFile,
-          dncSet.size,
-          dncSkippedDnc,
-          dncSkippedSale,
-          insertedCount,
-          updatedCount,
-        ],
-      );
-
-      return res.json({
-        message: "Fresh upload completed",
-        total_processed: validRecords.length,
-        total_unique_phones: uniqueRecords.length,
-        duplicates_in_file: duplicatesInFile,
-        fresh_count: freshCount,
-        existing_count: existingCount,
-        dnc_skipped: dncSkipped,
-        dnc_skipped_dnc: dncSkippedDnc,
-        dnc_skipped_sale: dncSkippedSale,
-        inserted: insertedCount,
-        updated: updatedCount,
-        duplicates_skipped: freshCount - insertedCount,
-        existing_breakdown: existingBreakdown,
-      });
-    } catch (err) {
-      console.error("Inner Fresh Upload Error:", err);
-      await client.query("ROLLBACK");
-      await db.query(
-        `UPDATE upload_jobs SET status = 'Failed', error_message = $1, end_time = CURRENT_TIMESTAMP WHERE id = $2`,
-        [err.message, job.id],
-      );
-      return res
-        .status(500)
-        .json({
-          message: "Server error during fresh upload",
-          error: err.message,
+          return {
+            dncSet,
+            dncSkippedDnc,
+            dncSkippedSale,
+            existingCount,
+            freshCount,
+            existingBreakdown,
+            inserted,
+          };
         });
-    } finally {
-      client.release();
-    }
+
+        insertedCount = stats.inserted;
+
+        await db.query(
+          `UPDATE upload_jobs
+           SET status = 'Completed',
+               total_rows         = $1,
+               end_time           = CURRENT_TIMESTAMP,
+               fresh_count        = $3,
+               existing_count     = $4,
+               duplicates_in_file = $5,
+               dnc_skipped        = $6,
+               dnc_skipped_dnc    = $7,
+               dnc_skipped_sale   = $8,
+               inserted           = $9,
+               updated            = $10
+           WHERE id = $2`,
+          [
+            validRecords.length,
+            job.id,
+            stats.freshCount,
+            stats.existingCount,
+            duplicatesInFile,
+            stats.dncSet.size,
+            stats.dncSkippedDnc,
+            stats.dncSkippedSale,
+            insertedCount,
+            updatedCount,
+          ]
+        );
+        console.log(`[Job ${job.id}] Background processing complete. Inserted: ${insertedCount}`);
+      } catch (err) {
+        console.error(`[Job ${job.id}] Background processing failed:`, err);
+        await db.query(
+          `UPDATE upload_jobs SET status = 'Failed', error_message = $1, end_time = CURRENT_TIMESTAMP WHERE id = $2`,
+          [err.message, job.id]
+        ).catch(() => {});
+      }
+    });
+
   } catch (err) {
     console.error("Fresh Upload Error (Full Stack):", err);
     if (job?.id) {
@@ -669,12 +488,17 @@ const uploadFreshJob = async (req, res) => {
         )
         .catch(() => {});
     }
-    return res
-      .status(500)
-      .json({
-        message: "Server error during fresh upload",
+    // Only send error if response not already sent
+    if (!res.headersSent) {
+      const status = isRetryableDbError(err) ? 503 : 500;
+      return res.status(status).json({
+        message: isRetryableDbError(err)
+          ? "Database busy. Please retry this file."
+          : "Server error during fresh upload",
         error: err.message,
+        retryable: isRetryableDbError(err),
       });
+    }
   }
 };
 
@@ -682,10 +506,5 @@ module.exports = {
   createJob,
   compareJob,
   uploadFreshJob,
-};
-
-module.exports = {
-  createJob,
-  compareJob,
-  uploadFreshJob,
+  getJobStatus,
 };

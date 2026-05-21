@@ -7,6 +7,10 @@ const pool = new Pool({
   database: process.env.DB_NAME || "bpo_crm",
   password: process.env.DB_PASSWORD || "postgres",
   port: process.env.DB_PORT || 5432,
+  max: parseInt(process.env.DB_POOL_MAX, 10) || 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 15000,
+  statement_timeout: parseInt(process.env.DB_STATEMENT_TIMEOUT_MS, 10) || 0,
 });
 
 pool.on("error", (err) => {

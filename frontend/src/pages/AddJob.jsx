@@ -3,6 +3,87 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { UploadCloud, CheckCircle, ArrowRight, Settings, UserCircle, Database, ChevronRight, FileX, FileSpreadsheet, Server, Cpu } from 'lucide-react';
 
+const BULK_UPLOAD_TIMEOUT_MS = 5 * 60 * 1000; // 5 min just for the upload POST itself
+const DEADLOCK_RETRY_ATTEMPTS = 4;
+const DEADLOCK_RETRY_DELAY_MS = 800;
+const POLL_INTERVAL_MS = 2500; // poll every 2.5s
+const POLL_MAX_WAIT_MS = 30 * 60 * 1000; // give up polling after 30 min
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const postFileWithRetry = async (url, formData, fileLabel) => {
+    let lastErr;
+    for (let attempt = 1; attempt <= DEADLOCK_RETRY_ATTEMPTS; attempt++) {
+        try {
+            return await api.post(url, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                timeout: BULK_UPLOAD_TIMEOUT_MS,
+            });
+        } catch (err) {
+            lastErr = err;
+            const retryable =
+                err.response?.status === 503 ||
+                err.response?.data?.retryable === true;
+            if (!retryable || attempt >= DEADLOCK_RETRY_ATTEMPTS) {
+                err.failedFile = fileLabel;
+                throw err;
+            }
+            await sleep(DEADLOCK_RETRY_DELAY_MS * attempt);
+        }
+    }
+    lastErr.failedFile = fileLabel;
+    throw lastErr;
+};
+
+/**
+ * Upload fresh file → get job_id (202) → poll until Completed/Failed
+ * Returns the completed job data (same shape as old sync response)
+ */
+const uploadFreshAndPoll = async (formData, fileLabel, onStatusUpdate) => {
+    // Step 1: Submit the file — backend returns 202 immediately
+    const initRes = await api.post('/jobs/upload-fresh', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: BULK_UPLOAD_TIMEOUT_MS,
+    });
+
+    const jobId = initRes.data?.job_id;
+    if (!jobId) throw Object.assign(new Error('No job_id returned'), { failedFile: fileLabel });
+
+    // Step 2: Poll until done
+    const deadline = Date.now() + POLL_MAX_WAIT_MS;
+    while (Date.now() < deadline) {
+        await sleep(POLL_INTERVAL_MS);
+        const pollRes = await api.get(`/jobs/${jobId}/status`);
+        const job = pollRes.data;
+        if (onStatusUpdate) onStatusUpdate(job.status);
+
+        if (job.status === 'Completed') {
+            return {
+                total_processed: job.total_rows || 0,
+                total_unique_phones: job.total_rows || 0,
+                duplicates_in_file: job.duplicates_in_file || 0,
+                fresh_count: job.fresh_count || 0,
+                existing_count: job.existing_count || 0,
+                dnc_skipped: job.dnc_skipped || 0,
+                dnc_skipped_dnc: job.dnc_skipped_dnc || 0,
+                dnc_skipped_sale: job.dnc_skipped_sale || 0,
+                inserted: job.inserted || 0,
+                updated: job.updated || 0,
+                duplicates_skipped: (job.fresh_count || 0) - (job.inserted || 0),
+                existing_breakdown: {},
+            };
+        }
+        if (job.status === 'Failed') {
+            throw Object.assign(
+                new Error(job.error_message || 'Upload processing failed'),
+                { failedFile: fileLabel }
+            );
+        }
+        // status === 'Processing' → keep polling
+    }
+    throw Object.assign(new Error('Upload timed out waiting for processing'), { failedFile: fileLabel });
+};
+
 const AddJob = () => {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -56,15 +137,13 @@ const AddJob = () => {
 
         try {
             for (let i = 0; i < files.length; i++) {
-                setProgress(Math.round(((i) / files.length) * 100));
-                
+                const fileLabel = files[i]?.name || `File ${i + 1}`;
                 const formData = new FormData();
                 formData.append('file', files[i]);
                 formData.append('session_id', id);
 
-                const res = await api.post('/jobs/compare', formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
-                });
+                const res = await postFileWithRetry('/jobs/compare', formData, fileLabel);
+                setProgress(Math.round(((i + 1) / files.length) * 100));
 
                 aggregate.total_processed += res.data.total_processed || 0;
                 aggregate.total_unique_phones += res.data.total_unique_phones || 0;
@@ -91,7 +170,9 @@ const AddJob = () => {
             setCompareResult(aggregate);
             setStep(3); // Preview step
         } catch (err) {
-            setError(err.response?.data?.message || 'Server error comparing file(s)');
+            const detail = err.response?.data?.error || err.response?.data?.message;
+            const label = err.failedFile || 'Compare failed';
+            setError(detail ? `${label}: ${detail}` : (err.code === 'ECONNABORTED' ? 'Compare timed out — try fewer files at once' : 'Server error comparing file(s)'));
         } finally {
             setComparing(false);
         }
@@ -124,31 +205,32 @@ const AddJob = () => {
 
         try {
             for (let i = 0; i < files.length; i++) {
-                setProgress(Math.round(((i) / files.length) * 100));
-
+                const fileLabel = files[i]?.name || `File ${i + 1}`;
                 const formData = new FormData();
                 formData.append('file', files[i]);
                 formData.append('session_id', id);
 
-                const res = await api.post('/jobs/upload-fresh', formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
+                // Uses async polling — no 504 timeout possible
+                const data = await uploadFreshAndPoll(formData, fileLabel, (status) => {
+                    // Optional: show per-file status in UI
+                    console.log(`[${fileLabel}] Status: ${status}`);
                 });
+                setProgress(Math.round(((i + 1) / files.length) * 100));
 
-                aggregate.total_processed += res.data.total_processed || 0;
-                aggregate.total_unique_phones += res.data.total_unique_phones || 0;
-                aggregate.duplicates_in_file += res.data.duplicates_in_file || 0;
-                aggregate.fresh_count += res.data.fresh_count || 0;
-                aggregate.existing_count += res.data.existing_count || 0;
-                aggregate.dnc_skipped += res.data.dnc_skipped || 0;
-                aggregate.dnc_skipped_dnc += res.data.dnc_skipped_dnc || 0;
-                aggregate.dnc_skipped_sale += res.data.dnc_skipped_sale || 0;
+                aggregate.total_processed += data.total_processed || 0;
+                aggregate.total_unique_phones += data.total_unique_phones || 0;
+                aggregate.duplicates_in_file += data.duplicates_in_file || 0;
+                aggregate.fresh_count += data.fresh_count || 0;
+                aggregate.existing_count += data.existing_count || 0;
+                aggregate.dnc_skipped += data.dnc_skipped || 0;
+                aggregate.dnc_skipped_dnc += data.dnc_skipped_dnc || 0;
+                aggregate.dnc_skipped_sale += data.dnc_skipped_sale || 0;
+                aggregate.inserted += data.inserted || 0;
+                aggregate.updated += data.updated || 0;
+                aggregate.duplicates_skipped += data.duplicates_skipped || 0;
 
-                aggregate.inserted += res.data.inserted || 0;
-                aggregate.updated += res.data.updated || 0;
-                aggregate.duplicates_skipped += res.data.duplicates_skipped || 0;
-
-                if (res.data.existing_breakdown) {
-                    for (const [vendorName, count] of Object.entries(res.data.existing_breakdown)) {
+                if (data.existing_breakdown) {
+                    for (const [vendorName, count] of Object.entries(data.existing_breakdown)) {
                         aggregate.existing_breakdown[vendorName] = (aggregate.existing_breakdown[vendorName] || 0) + count;
                     }
                 }
@@ -156,9 +238,11 @@ const AddJob = () => {
 
             setProgress(100);
             setResult(aggregate);
-            setStep(4); // Import step finished
+            setStep(4);
         } catch (err) {
-            setError(err.response?.data?.message || 'Server error uploading fresh file(s)');
+            const detail = err.response?.data?.error || err.response?.data?.message || err.message;
+            const label = err.failedFile || 'Upload failed';
+            setError(detail ? `${label}: ${detail}` : 'Server error uploading fresh file(s)');
         } finally {
             setUploading(false);
         }
