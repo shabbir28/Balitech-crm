@@ -2,7 +2,7 @@ const db = require("../config/db");
 const { Parser } = require("json2csv");
 const { areaCodesMap } = require("../utils/areaCodes");
 const { createNotification } = require("./notificationController");
-const { scrubPhones } = require("../utils/blacklistAlliance");
+const { scrubPhones, normalizePhone } = require("../utils/blacklistAlliance");
 
 /**
  * Blacklist Alliance API is 1 HTTP call per phone. On big downloads (100k phones)
@@ -38,6 +38,7 @@ const CSV_BAD_FIELDS = [
   "dnc_type",
   "reason",
 ];
+const DNC_UPSERT_BATCH_SIZE = 3000;
 
 const serializeDownloadPayload = (goodRows, badRows, summary, fileName) => {
   const goodCsv =
@@ -69,15 +70,85 @@ const saveDownloadLogPayload = async (logId, payload) => {
   );
 };
 
+const upsertDncNumbersBatched = async ({
+  queryFn,
+  badItems,
+  createdBy,
+  notePrefix,
+}) => {
+  if (!Array.isArray(badItems) || badItems.length === 0) return;
+
+  for (let i = 0; i < badItems.length; i += DNC_UPSERT_BATCH_SIZE) {
+    const chunk = badItems.slice(i, i + DNC_UPSERT_BATCH_SIZE);
+    const valueStrings = [];
+    const insertValues = [];
+    let idx = 1;
+
+    for (const badItem of chunk) {
+      valueStrings.push(
+        `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4})`,
+      );
+      insertValues.push(
+        badItem.phone,
+        "DNC",
+        "Blacklist Alliance API",
+        `${notePrefix}${badItem.reason}`,
+        createdBy || null,
+      );
+      idx += 5;
+    }
+
+    await queryFn(
+      `
+        INSERT INTO dnc_numbers (phone, dnc_type, source, notes, created_by)
+        VALUES ${valueStrings.join(",")}
+        ON CONFLICT (phone) DO UPDATE
+        SET dnc_type = EXCLUDED.dnc_type,
+            source = EXCLUDED.source,
+            notes = EXCLUDED.notes,
+            created_by = EXCLUDED.created_by
+      `,
+      insertValues,
+    );
+  }
+};
+
+const markScrubFailed = async (logId, errMessage) => {
+  if (!logId) return;
+  try {
+    const { rows } = await db.query(
+      `SELECT csv_payload FROM download_logs WHERE id = $1`,
+      [logId],
+    );
+    const payload = rows[0]?.csv_payload ? JSON.parse(rows[0].csv_payload) : {};
+    payload.summary = {
+      ...(payload.summary || {}),
+      scrubPending: false,
+      scrubCompleted: false,
+      scrubFailed: true,
+      scrubError: errMessage || "Background scrub failed",
+    };
+    await saveDownloadLogPayload(logId, JSON.stringify(payload));
+  } catch (e) {
+    console.error("[Background Scrub] could not mark failed:", e.message);
+  }
+};
+
 const runBackgroundScrub = async ({ logId, exportedRows, userId, fileName }) => {
   if (!Array.isArray(exportedRows) || exportedRows.length === 0) return;
-  const normalizePhone = (p) => String(p || "").replace(/\D/g, "");
   try {
-    const phones = exportedRows.map((r) => normalizePhone(r.phone)).filter(Boolean);
+    const phones = exportedRows
+      .map((r) => normalizePhone(r.phone))
+      .filter((p) => p.length === 10);
     console.log(
       `[Background Scrub] start logId=${logId} phones=${phones.length}`,
     );
     const scrubResult = await scrubPhones(phones);
+    if (phones.length >= 200 && scrubResult.bad.length === phones.length) {
+      throw new Error(
+        "Suspicious scrub result: all numbers flagged DNC. Check BLACKLIST_ALLIANCE_API_KEY.",
+      );
+    }
     const badPhones = scrubResult.bad.map((x) => x.phone);
     const badPhoneSet = new Set(badPhones);
     const scrubInfoByPhone = new Map(scrubResult.bad.map((x) => [x.phone, x]));
@@ -107,34 +178,12 @@ const runBackgroundScrub = async ({ logId, exportedRows, userId, fileName }) => 
         [badPhones],
       );
 
-      const valueStrings = [];
-      const insertValues = [];
-      let idx = 1;
-      for (const badItem of scrubResult.bad) {
-        valueStrings.push(
-          `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4})`,
-        );
-        insertValues.push(
-          badItem.phone,
-          "DNC",
-          "Blacklist Alliance API",
-          `Background scrub. Reason: ${badItem.reason}`,
-          userId || null,
-        );
-        idx += 5;
-      }
-      await db.query(
-        `
-          INSERT INTO dnc_numbers (phone, dnc_type, source, notes, created_by)
-          VALUES ${valueStrings.join(",")}
-          ON CONFLICT (phone) DO UPDATE
-          SET dnc_type = EXCLUDED.dnc_type,
-              source = EXCLUDED.source,
-              notes = EXCLUDED.notes,
-              created_by = EXCLUDED.created_by
-        `,
-        insertValues,
-      );
+      await upsertDncNumbersBatched({
+        queryFn: db.query.bind(db),
+        badItems: scrubResult.bad,
+        createdBy: userId,
+        notePrefix: "Background scrub. Reason: ",
+      });
     }
 
     const finalGoodRows = [];
@@ -179,6 +228,7 @@ const runBackgroundScrub = async ({ logId, exportedRows, userId, fileName }) => 
     );
   } catch (err) {
     console.error("[Background Scrub] failed:", err.message);
+    await markScrubFailed(logId, err.message);
   }
 };
 
@@ -328,6 +378,15 @@ async function executeDownload(
       const scrubResult = skipApiScrub
         ? { good: allPhones, bad: [] }
         : await scrubPhones(allPhones);
+      if (
+        !skipApiScrub &&
+        allPhones.length >= 200 &&
+        scrubResult.bad.length === allPhones.length
+      ) {
+        throw new Error(
+          "Suspicious scrub result: all numbers flagged DNC. Check BLACKLIST_ALLIANCE_API_KEY.",
+        );
+      }
 
       for (const item of scrubResult.bad) {
         const typeLower = String(item.type || "").toLowerCase();
@@ -341,6 +400,7 @@ async function executeDownload(
       if (scrubResult.bad.length > 0) {
         const badPhones = scrubResult.bad.map((b) => b.phone);
         const badPhoneSet = new Set(badPhones); // O(1) lookups vs Array.includes
+        const isBadPhone = (rowPhone) => badPhoneSet.has(normalizePhone(rowPhone));
         const scrubInfoByPhone = new Map(
           scrubResult.bad.map((b) => [b.phone, b]),
         );
@@ -359,44 +419,21 @@ async function executeDownload(
             [badPhones],
           );
 
-          const valueStrings = [];
-          const insertValues = [];
-          let idx = 1;
-          for (const badItem of scrubResult.bad) {
-            valueStrings.push(
-              `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4})`,
-            );
-            insertValues.push(
-              badItem.phone,
-              "DNC",
-              "Blacklist Alliance API",
-              `Auto-Scrubbed on download. Reason: ${badItem.reason}`,
-              user_id || null,
-            );
-            idx += 5;
-          }
-
-          await client.query(
-            `
-              INSERT INTO dnc_numbers (phone, dnc_type, source, notes, created_by)
-              VALUES ${valueStrings.join(",")}
-              ON CONFLICT (phone) DO UPDATE
-              SET dnc_type = EXCLUDED.dnc_type,
-                  source = EXCLUDED.source,
-                  notes = EXCLUDED.notes,
-                  created_by = EXCLUDED.created_by
-            `,
-            insertValues,
-          );
+          await upsertDncNumbersBatched({
+            queryFn: client.query.bind(client),
+            badItems: scrubResult.bad,
+            createdBy: user_id,
+            notePrefix: "Auto-Scrubbed on download. Reason: ",
+          });
           await client.query("COMMIT");
         } catch (badErr) {
           await client.query("ROLLBACK").catch(() => {});
           throw badErr;
         }
 
-        const badLeads = result.rows.filter((r) => badPhoneSet.has(r.phone));
+        const badLeads = result.rows.filter((r) => isBadPhone(r.phone));
         badRowsWithState = badLeads.map((r) => {
-          const scrubInfo = scrubInfoByPhone.get(r.phone) || {};
+          const scrubInfo = scrubInfoByPhone.get(normalizePhone(r.phone)) || {};
           let code = r.area_code;
           if (!code || code === "Unknown") {
             const clean = r.phone ? String(r.phone).replace(/\D/g, "") : "";
@@ -412,7 +449,7 @@ async function executeDownload(
           };
         });
 
-        finalRows = result.rows.filter((r) => !badPhoneSet.has(r.phone));
+        finalRows = result.rows.filter((r) => !isBadPhone(r.phone));
       }
     } catch (scrubErr) {
       console.error(
@@ -962,6 +999,7 @@ const parseDownloadLogMeta = (row) => {
   let canDownloadDnc = false;
   let scrubPending = false;
   let scrubCompleted = true;
+  let scrubFailed = false;
 
   if (row.csv_payload) {
     try {
@@ -988,11 +1026,17 @@ const parseDownloadLogMeta = (row) => {
       scrubPending = summary.scrubPending === true;
       scrubCompleted =
         summary.scrubCompleted === true || summary.scrubPending !== true;
+      scrubFailed = summary.scrubFailed === true;
+      if (scrubFailed) {
+        scrubPending = false;
+        scrubCompleted = false;
+      }
     } catch (_) {
       canRedownload = false;
       canDownloadDnc = false;
       scrubPending = false;
       scrubCompleted = true;
+      scrubFailed = false;
     }
   }
 
@@ -1011,7 +1055,7 @@ const parseDownloadLogMeta = (row) => {
     clean_count: cleanCount,
     scrub_pending: scrubPending,
     scrub_completed: scrubCompleted,
-    scrub_status: scrubPending ? "pending" : "completed",
+    scrub_status: scrubPending ? "pending" : scrubFailed ? "failed" : "completed",
     campaign_name: row.campaign_name || null,
     can_redownload: canRedownload,
     can_download_dnc: canDownloadDnc,

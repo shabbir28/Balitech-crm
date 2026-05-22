@@ -135,6 +135,13 @@ const AlreadyDownloaded = () => {
                                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-amber-500/35 bg-amber-500/15 text-amber-300 text-[11px] font-bold">
                                                 Pending
                                             </span>
+                                        ) : row.scrub_status === 'failed' ? (
+                                            <span
+                                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-red-500/35 bg-red-500/15 text-red-300 text-[11px] font-bold"
+                                                title="Background scrub failed. Check backend logs."
+                                            >
+                                                Failed
+                                            </span>
                                         ) : (
                                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-emerald-500/35 bg-emerald-500/15 text-emerald-300 text-[11px] font-bold">
                                                 Completed
