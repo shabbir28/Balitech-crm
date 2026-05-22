@@ -1,8 +1,8 @@
-import React, { useContext, useState, useRef } from 'react';
+import React, { useContext, useState } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Lock, User, ArrowRight, ShieldCheck } from 'lucide-react';
-import ReCAPTCHA from "react-google-recaptcha";
+// import ReCAPTCHA from "react-google-recaptcha"; // disabled temporarily
 
 const Login = () => {
     const { login } = useContext(AuthContext);
@@ -10,26 +10,15 @@ const Login = () => {
     const [formData, setFormData] = useState({ username: '', password: '' });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    const [captchaToken, setCaptchaToken] = useState(null);
-    const recaptchaRef = useRef(null);
-
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!captchaToken) {
-            setError('Please verify the reCAPTCHA');
-            return;
-        }
         setLoading(true);
         setError('');
         try {
-            await login(formData.username, formData.password, captchaToken);
+            await login(formData.username, formData.password);
             navigate('/');
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to login');
-            if (recaptchaRef.current) {
-                recaptchaRef.current.reset();
-            }
-            setCaptchaToken(null);
         } finally {
             setLoading(false);
         }
@@ -108,6 +97,7 @@ const Login = () => {
                                 </div>
                             </div>
 
+                            {/* reCAPTCHA disabled temporarily
                             <div className="flex justify-center pt-2">
                                 <ReCAPTCHA
                                     ref={recaptchaRef}
@@ -116,6 +106,7 @@ const Login = () => {
                                     theme="dark"
                                 />
                             </div>
+                            */}
 
                             <div className="pt-2">
                                 <button

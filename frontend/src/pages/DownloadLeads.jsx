@@ -204,25 +204,13 @@ const ScrubSummaryModal = ({ data, onClose }) => {
                         <div className="text-xs text-slate-500 italic">No bad/DNC records scrubbed in this run.</div>
                     )}
 
-                    {/* Good download + close options */}
+                    {/* Close summary option */}
                     <div className="flex items-center gap-3 sm:ml-auto flex-wrap">
                         <button
                             onClick={onClose}
                             className="px-4 py-3 bg-white/5 hover:bg-white/8 border border-white/8 rounded-xl text-xs text-slate-300 font-bold transition-all whitespace-nowrap"
                         >
                             Close Summary
-                        </button>
-                        <button
-                            onClick={handleDownloadGood}
-                            disabled={!goodCsv || summary.good === 0}
-                            className={`flex items-center gap-2.5 px-6 py-3 rounded-xl font-bold text-xs transition-all whitespace-nowrap ${
-                                !goodCsv || summary.good === 0
-                                    ? 'bg-white/5 text-slate-500 border border-white/5 cursor-not-allowed'
-                                    : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 hover:-translate-y-0.5'
-                            }`}
-                        >
-                            <Download className="h-4 w-4 shrink-0" />
-                            Download Good Data ({summary.good?.toLocaleString()} leads)
                         </button>
                     </div>
                 </div>
@@ -291,9 +279,16 @@ const DownloadLeads = () => {
         setSubmitting(true); setError(''); setSuccessMsg('');
         try {
             if (isSuperAdmin) {
-                const res = await api.post('/download', form);
+                const useAsyncScrub = Number(form.quantity) >= 50000;
+                const body = { ...form, async_scrub: useAsyncScrub };
+                const timeoutMs = useAsyncScrub ? 8 * 60 * 1000 : 30 * 60 * 1000;
+                const res = await api.post('/download', body, { timeout: timeoutMs });
                 setScrubSummaryData(res.data);
-                setSuccessMsg('Export scrubbing complete! View summary details below.');
+                setSuccessMsg(
+                    useAsyncScrub
+                        ? 'CSV download ready. Blacklist scrub is running in background; DNC stats update after completion.'
+                        : 'Export scrubbing complete! View summary details below.'
+                );
                 
                 // Refetch vendors to update stats
                 api.get('/vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
@@ -307,7 +302,14 @@ const DownloadLeads = () => {
                 api.get('/vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
             }
         } catch (err) {
-            setError(err.response?.data?.message || 'Request failed.');
+            const status = err.response?.status;
+            if (status === 502 || status === 504) {
+                setError('Gateway timeout — the server is still processing. Try a smaller quantity, or ask SuperAdmin to increase nginx proxy_read_timeout.');
+            } else if (err.code === 'ECONNABORTED') {
+                setError('Request timed out on the client side. The download may still finish in the background — check Already Downloaded shortly.');
+            } else {
+                setError(err.response?.data?.message || 'Request failed.');
+            }
         } finally { setSubmitting(false); }
     };
 

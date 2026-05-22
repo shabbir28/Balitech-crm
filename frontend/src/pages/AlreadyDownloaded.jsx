@@ -111,6 +111,7 @@ const AlreadyDownloaded = () => {
                                 <th className="p-4">Download By</th>
                                 <th className="p-4">Vendor</th>
                                 <th className="p-4">File Name</th>
+                                <th className="p-4 text-center">Scrub Status</th>
                                 <th className="p-4">States</th>
                                 <th className="p-4 text-center" title="Click count to download DNC file">DNC Removed ↓</th>
                                 <th className="p-4 text-center">Clean Numbers</th>
@@ -120,15 +121,26 @@ const AlreadyDownloaded = () => {
                         </thead>
                         <tbody className="divide-y divide-white/5 text-slate-200">
                             {loading ? (
-                                <tr><td colSpan={9} className="p-12 text-center text-brand-400 animate-pulse">Loading...</td></tr>
+                                <tr><td colSpan={10} className="p-12 text-center text-brand-400 animate-pulse">Loading...</td></tr>
                             ) : rows.length === 0 ? (
-                                <tr><td colSpan={9} className="p-12 text-center text-slate-500">Koi download history nahi mili.</td></tr>
+                                <tr><td colSpan={10} className="p-12 text-center text-slate-500">Koi download history nahi mili.</td></tr>
                             ) : rows.map((row, index) => (
                                 <tr key={row.id} className="hover:bg-white/[0.02]">
                                     <td className="p-4 font-mono text-slate-400 font-bold">{index + 1}</td>
                                     <td className="p-4 font-medium text-white">{row.downloaded_by}</td>
                                     <td className="p-4 text-white font-semibold">{row.vendor_name}</td>
                                     <td className="p-4"><span className="font-mono text-xs text-brand-300 break-all">{row.file_name}</span></td>
+                                    <td className="p-4 text-center">
+                                        {row.scrub_status === 'pending' ? (
+                                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-amber-500/35 bg-amber-500/15 text-amber-300 text-[11px] font-bold">
+                                                Pending
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-emerald-500/35 bg-emerald-500/15 text-emerald-300 text-[11px] font-bold">
+                                                Completed
+                                            </span>
+                                        )}
+                                    </td>
                                     <td className="p-4 text-xs text-slate-300">{row.states_label}</td>
                                     <td className="p-4 text-center">
                                         {row.can_download_dnc && row.dnc_removed > 0 ? (

@@ -4,6 +4,25 @@ const { areaCodesMap } = require("../utils/areaCodes");
 const { createNotification } = require("./notificationController");
 const { scrubPhones } = require("../utils/blacklistAlliance");
 
+/**
+ * Blacklist Alliance API is 1 HTTP call per phone. On big downloads (100k phones)
+ * even at 100 concurrent it takes many minutes — way past any nginx proxy_read_timeout
+ * (default 60s) and causes 502 Bad Gateway.
+ *
+ * MAX_API_SCRUB_PHONES — above this size we skip the external API scrub.
+ *   - Local `dnc_numbers` filter (NOT EXISTS) still runs on every download.
+ *   - Set to 0 in .env to fully disable the external scrub.
+ */
+const MAX_API_SCRUB_PHONES = (() => {
+  const v = parseInt(process.env.MAX_API_SCRUB_PHONES, 10);
+  return Number.isFinite(v) && v >= 0 ? v : 5000;
+})();
+
+const AUTO_ASYNC_SCRUB_MIN = (() => {
+  const v = parseInt(process.env.AUTO_ASYNC_SCRUB_MIN, 10);
+  return Number.isFinite(v) && v > 0 ? v : 50000;
+})();
+
 const CSV_GOOD_FIELDS = [
   "name",
   "phone",
@@ -48,6 +67,119 @@ const saveDownloadLogPayload = async (logId, payload) => {
     `UPDATE download_logs SET csv_payload = $1 WHERE id = $2`,
     [payload, logId],
   );
+};
+
+const runBackgroundScrub = async ({ logId, exportedRows, userId, fileName }) => {
+  if (!Array.isArray(exportedRows) || exportedRows.length === 0) return;
+  const normalizePhone = (p) => String(p || "").replace(/\D/g, "");
+  try {
+    const phones = exportedRows.map((r) => normalizePhone(r.phone)).filter(Boolean);
+    console.log(
+      `[Background Scrub] start logId=${logId} phones=${phones.length}`,
+    );
+    const scrubResult = await scrubPhones(phones);
+    const badPhones = scrubResult.bad.map((x) => x.phone);
+    const badPhoneSet = new Set(badPhones);
+    const scrubInfoByPhone = new Map(scrubResult.bad.map((x) => [x.phone, x]));
+
+    let blacklist = 0;
+    let stateDnc = 0;
+    let federalDnc = 0;
+    let badPhone = 0;
+    for (const item of scrubResult.bad) {
+      const typeLower = String(item.type || "").toLowerCase();
+      if (typeLower.includes("federal")) federalDnc += 1;
+      else if (typeLower.includes("state")) stateDnc += 1;
+      else if (typeLower.includes("invalid") || typeLower.includes("bad"))
+        badPhone += 1;
+      else blacklist += 1;
+    }
+
+    if (badPhones.length > 0) {
+      await db.query(
+        `
+          UPDATE leads
+          SET status = 'available',
+              downloaded_at = null,
+              disposition = 'DNC'
+          WHERE phone = ANY($1::text[])
+        `,
+        [badPhones],
+      );
+
+      const valueStrings = [];
+      const insertValues = [];
+      let idx = 1;
+      for (const badItem of scrubResult.bad) {
+        valueStrings.push(
+          `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4})`,
+        );
+        insertValues.push(
+          badItem.phone,
+          "DNC",
+          "Blacklist Alliance API",
+          `Background scrub. Reason: ${badItem.reason}`,
+          userId || null,
+        );
+        idx += 5;
+      }
+      await db.query(
+        `
+          INSERT INTO dnc_numbers (phone, dnc_type, source, notes, created_by)
+          VALUES ${valueStrings.join(",")}
+          ON CONFLICT (phone) DO UPDATE
+          SET dnc_type = EXCLUDED.dnc_type,
+              source = EXCLUDED.source,
+              notes = EXCLUDED.notes,
+              created_by = EXCLUDED.created_by
+        `,
+        insertValues,
+      );
+    }
+
+    const finalGoodRows = [];
+    const finalBadRows = [];
+    for (const row of exportedRows) {
+      const np = normalizePhone(row.phone);
+      if (badPhoneSet.has(np)) {
+        const info = scrubInfoByPhone.get(np) || {};
+        finalBadRows.push({
+          ...row,
+          dnc_type: info.type || "DNC",
+          reason: info.reason || "Blacklist Alliance Match",
+        });
+      } else {
+        finalGoodRows.push(row);
+      }
+    }
+
+    const payload = serializeDownloadPayload(
+      finalGoodRows,
+      finalBadRows,
+      {
+        total: exportedRows.length,
+        blacklist,
+        suppress: 0,
+        stateDnc,
+        federalDnc,
+        wireless: 0,
+        landline: 0,
+        good: finalGoodRows.length,
+        errors: 0,
+        badPhone,
+        scrubPending: false,
+        scrubCompleted: true,
+      },
+      fileName,
+    );
+    await saveDownloadLogPayload(logId, payload);
+
+    console.log(
+      `[Background Scrub] done logId=${logId} bad=${finalBadRows.length}/${exportedRows.length}`,
+    );
+  } catch (err) {
+    console.error("[Background Scrub] failed:", err.message);
+  }
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -120,6 +252,8 @@ async function executeDownload(
     approved_by_id,
     min_age,
     max_age,
+    force_scrub = false,
+    async_scrub = false,
   },
 ) {
   const { filters, params, paramIdx } = await buildFilters(client, {
@@ -151,7 +285,11 @@ async function executeDownload(
     `;
   params.push(quantity);
 
+  // ── Phase 1 (SHORT transaction): claim rows + commit ──────────────────────
+  // We need the locks released ASAP so other downloads aren't blocked while we
+  // talk to the external Blacklist Alliance API (which can take minutes).
   const result = await client.query(updateQuery, params);
+  await client.query("COMMIT");
 
   let finalRows = result.rows;
   let badRowsWithState = [];
@@ -164,72 +302,101 @@ async function executeDownload(
   if (result.rows.length > 0) {
     const allPhones = result.rows.map((r) => r.phone);
 
-    try {
-      const scrubResult = await scrubPhones(allPhones);
+    // force_scrub (from request body) overrides MAX_API_SCRUB_PHONES — use it
+    // when you explicitly want to test/run the Blacklist Alliance API on a big batch.
+    const wouldSkip =
+      MAX_API_SCRUB_PHONES === 0 || allPhones.length > MAX_API_SCRUB_PHONES;
+    const skipApiScrub = async_scrub || (wouldSkip && !force_scrub);
 
-      // Classify the bad numbers
+    if (async_scrub) {
+      console.warn(
+        `[Download] async_scrub enabled for ${allPhones.length} phones; returning fast and scrubbing in background.`,
+      );
+    } else if (skipApiScrub) {
+      console.warn(
+        `[Download] Skipping Blacklist Alliance API scrub for ${allPhones.length} phones ` +
+          `(threshold ${MAX_API_SCRUB_PHONES}). Local dnc_numbers filter still applied. ` +
+          `Pass force_scrub=true in the request body to override.`,
+      );
+    } else if (force_scrub && wouldSkip) {
+      console.log(
+        `[Download] force_scrub=true — running API scrub on ${allPhones.length} phones (this can take several minutes).`,
+      );
+    }
+
+    try {
+      const scrubResult = skipApiScrub
+        ? { good: allPhones, bad: [] }
+        : await scrubPhones(allPhones);
+
       for (const item of scrubResult.bad) {
         const typeLower = String(item.type || "").toLowerCase();
-        if (typeLower.includes("federal")) {
-          federalDncCount++;
-        } else if (typeLower.includes("state")) {
-          stateDncCount++;
-        } else if (typeLower.includes("invalid") || typeLower.includes("bad")) {
+        if (typeLower.includes("federal")) federalDncCount++;
+        else if (typeLower.includes("state")) stateDncCount++;
+        else if (typeLower.includes("invalid") || typeLower.includes("bad"))
           badPhoneCount++;
-        } else {
-          blacklistCount++;
-        }
+        else blacklistCount++;
       }
 
       if (scrubResult.bad.length > 0) {
         const badPhones = scrubResult.bad.map((b) => b.phone);
-
-        // 1. Revert status back in leads table (set to available, downloaded_at to null, disposition to 'DNC')
-        await client.query(
-          `
-            UPDATE leads
-            SET status = 'available',
-                downloaded_at = null,
-                disposition = 'DNC'
-            WHERE phone = ANY($1::text[])
-          `,
-          [badPhones],
+        const badPhoneSet = new Set(badPhones); // O(1) lookups vs Array.includes
+        const scrubInfoByPhone = new Map(
+          scrubResult.bad.map((b) => [b.phone, b]),
         );
 
-        // 2. Add bad numbers to dnc_numbers table in a single high-performance batch insert
-        const valueStrings = [];
-        const insertValues = [];
-        let idx = 1;
-        for (const badItem of scrubResult.bad) {
-          valueStrings.push(
-            `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4})`,
+        // ── Phase 2 (SMALL new transaction): revert bad rows + add to DNC ───
+        await client.query("BEGIN");
+        try {
+          await client.query(
+            `
+              UPDATE leads
+              SET status = 'available',
+                  downloaded_at = null,
+                  disposition = 'DNC'
+              WHERE phone = ANY($1::text[])
+            `,
+            [badPhones],
           );
-          insertValues.push(
-            badItem.phone,
-            "DNC",
-            "Blacklist Alliance API",
-            `Auto-Scrubbed on download. Reason: ${badItem.reason}`,
-            user_id || null,
+
+          const valueStrings = [];
+          const insertValues = [];
+          let idx = 1;
+          for (const badItem of scrubResult.bad) {
+            valueStrings.push(
+              `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4})`,
+            );
+            insertValues.push(
+              badItem.phone,
+              "DNC",
+              "Blacklist Alliance API",
+              `Auto-Scrubbed on download. Reason: ${badItem.reason}`,
+              user_id || null,
+            );
+            idx += 5;
+          }
+
+          await client.query(
+            `
+              INSERT INTO dnc_numbers (phone, dnc_type, source, notes, created_by)
+              VALUES ${valueStrings.join(",")}
+              ON CONFLICT (phone) DO UPDATE
+              SET dnc_type = EXCLUDED.dnc_type,
+                  source = EXCLUDED.source,
+                  notes = EXCLUDED.notes,
+                  created_by = EXCLUDED.created_by
+            `,
+            insertValues,
           );
-          idx += 5;
+          await client.query("COMMIT");
+        } catch (badErr) {
+          await client.query("ROLLBACK").catch(() => {});
+          throw badErr;
         }
 
-        const insertDncQuery = `
-          INSERT INTO dnc_numbers (phone, dnc_type, source, notes, created_by)
-          VALUES ${valueStrings.join(",")}
-          ON CONFLICT (phone) DO UPDATE
-          SET dnc_type = EXCLUDED.dnc_type,
-              source = EXCLUDED.source,
-              notes = EXCLUDED.notes,
-              created_by = EXCLUDED.created_by
-        `;
-        await client.query(insertDncQuery, insertValues);
-
-        // 3. Prepare the bad rows return array
-        const badLeads = result.rows.filter((r) => badPhones.includes(r.phone));
+        const badLeads = result.rows.filter((r) => badPhoneSet.has(r.phone));
         badRowsWithState = badLeads.map((r) => {
-          const scrubInfo =
-            scrubResult.bad.find((b) => b.phone === r.phone) || {};
+          const scrubInfo = scrubInfoByPhone.get(r.phone) || {};
           let code = r.area_code;
           if (!code || code === "Unknown") {
             const clean = r.phone ? String(r.phone).replace(/\D/g, "") : "";
@@ -245,8 +412,7 @@ async function executeDownload(
           };
         });
 
-        // 4. Filter out bad leads so only good leads are downloaded
-        finalRows = result.rows.filter((r) => !badPhones.includes(r.phone));
+        finalRows = result.rows.filter((r) => !badPhoneSet.has(r.phone));
       }
     } catch (scrubErr) {
       console.error(
@@ -257,7 +423,7 @@ async function executeDownload(
     }
   }
 
-  // Log the download — include approved_by if it was a request approval
+  // ── Phase 3: log the download (single insert, no transaction needed) ──────
   const logRes = await client.query(
     `INSERT INTO download_logs (
        user_id, vendor_id, country_code, area_code, quantity, approved_by,
@@ -300,6 +466,7 @@ async function executeDownload(
 
   return {
     logId,
+    allPhones: result.rows.map((r) => r.phone),
     goodRows: rowsWithState,
     badRows: badRowsWithState,
     summary: {
@@ -313,6 +480,8 @@ async function executeDownload(
       good: finalRows.length,
       errors: scrubErrors,
       badPhone: badPhoneCount,
+      scrubPending: async_scrub === true,
+      scrubCompleted: async_scrub !== true,
     },
   };
 }
@@ -331,16 +500,34 @@ const downloadLeads = async (req, res) => {
     });
   }
 
+  // Disable Node's socket timeout — big downloads can legitimately take minutes.
+  // Reverse proxies (nginx) still apply their own timeouts; raise those in production.
+  if (typeof res.setTimeout === "function") res.setTimeout(0);
+  req.socket?.setKeepAlive?.(true, 30 * 1000);
+
   const client = await db.getClient();
   try {
-    const { vendor_id, quantity, states, campaign_id, min_age, max_age } =
-      req.body;
+    const {
+      vendor_id,
+      quantity,
+      states,
+      campaign_id,
+      min_age,
+      max_age,
+      force_scrub,
+      async_scrub,
+    } = req.body;
     if (!quantity || quantity <= 0) {
       return res.status(400).json({ message: "Valid quantity is required" });
     }
 
+    const forceScrub = force_scrub === true || force_scrub === "true";
+    const requestedAsync = async_scrub === true || async_scrub === "true";
+    const autoAsync = Number(quantity) >= AUTO_ASYNC_SCRUB_MIN;
+    const asyncScrub = requestedAsync || (autoAsync && !forceScrub);
+
     await client.query("BEGIN");
-    const { goodRows, badRows, summary, logId } = await executeDownload(client, {
+    const { goodRows, badRows, summary, logId, allPhones } = await executeDownload(client, {
       vendor_id: vendor_id && vendor_id !== "all" ? vendor_id : null,
       campaign_id: campaign_id && campaign_id !== "all" ? campaign_id : null,
       states,
@@ -348,34 +535,61 @@ const downloadLeads = async (req, res) => {
       user_id: req.user.id,
       min_age,
       max_age,
+      force_scrub: forceScrub,
+      async_scrub: asyncScrub,
     });
+    // executeDownload now commits internally; outer rollback is a no-op afterwards.
 
     if (goodRows.length === 0 && badRows.length === 0) {
-      await client.query("ROLLBACK");
       return res
         .status(404)
         .json({ message: "No available leads found matching criteria" });
     }
 
-    await client.query("COMMIT");
-
     const fileName = `leads_download_${Date.now()}.csv`;
-    const payload = serializeDownloadPayload(
-      goodRows,
-      badRows,
-      summary,
-      fileName,
-    );
-    await saveDownloadLogPayload(logId, payload);
 
-    const parsed = JSON.parse(payload);
-    return res.status(200).json({
+    // Build CSVs (this is the slowest CPU step for 100k rows — ~1-2s)
+    const goodCsv =
+      goodRows.length > 0
+        ? new Parser({ fields: CSV_GOOD_FIELDS }).parse(goodRows)
+        : "";
+    const badCsv =
+      badRows.length > 0
+        ? new Parser({ fields: CSV_BAD_FIELDS }).parse(badRows)
+        : "";
+
+    const responseBody = {
       isScrubbed: true,
       logId,
-      ...parsed,
-    });
+      summary: {
+        fileName,
+        scrubDate: new Date().toLocaleString(),
+        ...summary,
+      },
+      goodCsv,
+      badCsv,
+    };
+
+    // Persist a copy to download_logs so "Already Downloaded" can re-download.
+    // Run in the background — don't make the user wait on a second JSON.stringify.
+    saveDownloadLogPayload(logId, JSON.stringify(responseBody)).catch((err) =>
+      console.error("Failed to persist download payload:", err.message),
+    );
+
+    if (asyncScrub && Array.isArray(allPhones) && allPhones.length > 0) {
+      setImmediate(() =>
+        runBackgroundScrub({
+          logId,
+          exportedRows: goodRows,
+          userId: req.user.id,
+          fileName,
+        }),
+      );
+    }
+
+    return res.status(200).json(responseBody);
   } catch (err) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => {});
     console.error("Direct Download Error:", err);
     return res
       .status(500)
@@ -575,7 +789,10 @@ const reviewDownloadRequest = async (req, res) => {
       return res.json({ message: "Request rejected successfully." });
     }
 
-    // ── Accept ── (BEGIN transaction only for accepts)
+    // ── Accept ── executeDownload manages its own short transactions internally
+    if (typeof res.setTimeout === "function") res.setTimeout(0);
+    req.socket?.setKeepAlive?.(true, 30 * 1000);
+
     await client.query("BEGIN");
     txnStarted = true;
 
@@ -587,13 +804,12 @@ const reviewDownloadRequest = async (req, res) => {
       min_age: dlReq.min_age,
       max_age: dlReq.max_age,
       user_id: dlReq.admin_id,
-      approved_by_id: req.user.id, // ← the super_admin who approved
+      approved_by_id: req.user.id,
     });
+    // executeDownload already committed (phase 1/2). Outer tx is effectively done.
+    txnStarted = false;
 
     if (goodRows.length === 0 && badRows.length === 0) {
-      await client.query("ROLLBACK");
-      txnStarted = false;
-      // Mark as rejected due to no data available
       await db.query(
         `UPDATE download_requests
                  SET status='rejected', rejection_reason='No available leads found matching the criteria at time of approval.',
@@ -607,7 +823,6 @@ const reviewDownloadRequest = async (req, res) => {
       });
     }
 
-    // Store CSV in the request row so admin can download it later
     const serializedData = serializeDownloadPayload(
       goodRows,
       badRows,
@@ -615,15 +830,16 @@ const reviewDownloadRequest = async (req, res) => {
       `approved_leads_${id}.csv`,
     );
 
-    await client.query(
+    await db.query(
       `UPDATE download_requests
              SET status='accepted', reviewed_at=NOW(), reviewed_by=$1, csv_data=$2
              WHERE id=$3`,
       [req.user.id, serializedData, id],
     );
 
-    await client.query("COMMIT");
-    await saveDownloadLogPayload(logId, serializedData);
+    saveDownloadLogPayload(logId, serializedData).catch((err) =>
+      console.error("Failed to persist download payload:", err.message),
+    );
     txnStarted = false;
 
     // Notify the admin that their request was approved
@@ -744,6 +960,8 @@ const parseDownloadLogMeta = (row) => {
   let dncCount = 0;
   let canRedownload = false;
   let canDownloadDnc = false;
+  let scrubPending = false;
+  let scrubCompleted = true;
 
   if (row.csv_payload) {
     try {
@@ -767,9 +985,14 @@ const parseDownloadLogMeta = (row) => {
       }
 
       canRedownload = Boolean(payload.goodCsv && String(payload.goodCsv).trim());
+      scrubPending = summary.scrubPending === true;
+      scrubCompleted =
+        summary.scrubCompleted === true || summary.scrubPending !== true;
     } catch (_) {
       canRedownload = false;
       canDownloadDnc = false;
+      scrubPending = false;
+      scrubCompleted = true;
     }
   }
 
@@ -786,6 +1009,9 @@ const parseDownloadLogMeta = (row) => {
     states_label: statesList.length > 0 ? statesList.join(", ") : "All States",
     dnc_removed: dncCount,
     clean_count: cleanCount,
+    scrub_pending: scrubPending,
+    scrub_completed: scrubCompleted,
+    scrub_status: scrubPending ? "pending" : "completed",
     campaign_name: row.campaign_name || null,
     can_redownload: canRedownload,
     can_download_dnc: canDownloadDnc,
