@@ -10,17 +10,15 @@ const Login = () => {
     const [formData, setFormData] = useState({ username: '', password: '' });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    const [captchaToken, setCaptchaToken] = useState("dummy_token");
+    const [captchaToken, setCaptchaToken] = useState(null);
     const recaptchaRef = useRef(null);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        /*
         if (!captchaToken) {
             setError('Please complete the reCAPTCHA verification.');
             return;
         }
-        */
         setLoading(true);
         setError('');
         try {
@@ -31,7 +29,7 @@ const Login = () => {
             if (recaptchaRef.current) {
                 recaptchaRef.current.reset();
             }
-            // setCaptchaToken(null);
+            setCaptchaToken(null);
         } finally {
             setLoading(false);
         }
@@ -110,16 +108,14 @@ const Login = () => {
                                 </div>
                             </div>
 
-                            {/*
                             <div className="flex justify-center pt-2">
                                 <ReCAPTCHA
                                     ref={recaptchaRef}
-                                    sitekey="6LeKZc0sAAAAANwwnn5RDKJ3d9mBhmx0mwOZYAYz"
+                                    sitekey="6LeLzwctAAAAAIRVXWG_PUJcMegb1k1B-o_s4q1w"
                                     onChange={(token) => setCaptchaToken(token)}
                                     theme="dark"
                                 />
                             </div>
-                            */}
 
                             <div className="pt-2">
                                 <button
