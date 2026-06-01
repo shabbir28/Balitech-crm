@@ -5,6 +5,7 @@ const db = require("../config/db");
 const login = async (req, res) => {
   const { username, password, captchaToken } = req.body;
   try {
+    /*
     if (!captchaToken) {
       return res.status(400).json({ message: "reCAPTCHA token is missing" });
     }
@@ -24,6 +25,7 @@ const login = async (req, res) => {
         errors: verifyData["error-codes"],
       });
     }
+    */
 
     const { rows } = await db.query(
       "SELECT * FROM users WHERE (username = $1 OR email = $1) AND status != $2",
