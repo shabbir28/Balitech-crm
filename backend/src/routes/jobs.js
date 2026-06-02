@@ -5,11 +5,11 @@ const upload = require('../middleware/upload');
 const auth = require('../middleware/auth');
 const authorizeRole = require('../middleware/role');
 
-router.post('/', auth, authorizeRole(['super_admin', 'admin']), upload.single('file'), createJob);
+router.post('/', auth, authorizeRole(['super_admin', 'admin', 'data_entry']), upload.single('file'), createJob);
 router.post(
   '/compare',
   auth,
-  authorizeRole(['super_admin', 'admin']),
+  authorizeRole(['super_admin', 'admin', 'data_entry']),
   upload.single('file'),
   compareJob
 );
@@ -17,7 +17,7 @@ router.post(
 router.post(
   '/upload-fresh',
   auth,
-  authorizeRole(['super_admin', 'admin']),
+  authorizeRole(['super_admin', 'admin', 'data_entry']),
   upload.single('file'),
   uploadFreshJob
 );

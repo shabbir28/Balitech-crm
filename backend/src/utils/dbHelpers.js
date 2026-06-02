@@ -13,7 +13,10 @@ const isRetryableDbError = (err) => {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const withDeadlockRetry = async (fn, { maxAttempts = 5, baseDelayMs = 40 } = {}) => {
+const withDeadlockRetry = async (
+  fn,
+  { maxAttempts = 5, baseDelayMs = 40 } = {},
+) => {
   let lastErr;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {

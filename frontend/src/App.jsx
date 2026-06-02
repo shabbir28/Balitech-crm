@@ -61,8 +61,8 @@ const AppRoutes = () => {
             <Route path="/leads" element={<ProtectedRoute roles={['super_admin', 'admin']}><LeadsTable /></ProtectedRoute>} />
             <Route path="/logs" element={<ProtectedRoute roles={['super_admin', 'admin']}><Logs /></ProtectedRoute>} />
             <Route path="/sessions" element={<ProtectedRoute roles={['super_admin', 'admin']}><SessionsList /></ProtectedRoute>} />
-            <Route path="/sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin']}><SessionDetails /></ProtectedRoute>} />
-            <Route path="/sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin']}><AddJob /></ProtectedRoute>} />
+            <Route path="/sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><SessionDetails /></ProtectedRoute>} />
+            <Route path="/sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><AddJob /></ProtectedRoute>} />
             <Route path="/dnc" element={<ProtectedRoute roles={['super_admin', 'admin']}><Dnc /></ProtectedRoute>} />
 
             {/* Vendors - super_admin, admin, data_entry */}
@@ -72,7 +72,7 @@ const AppRoutes = () => {
             <Route path="/upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><UploadLeads /></ProtectedRoute>} />
 
             {/* Compare (DB compare flow) — UploadLeads detects /compare path and sets isCompareMode=true */}
-            <Route path="/compare" element={<ProtectedRoute roles={['super_admin', 'admin']}><UploadLeads /></ProtectedRoute>} />
+            <Route path="/compare" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><UploadLeads /></ProtectedRoute>} />
 
             {/* Compare File (new module) - super_admin, admin */}
             <Route path="/compare-file" element={<ProtectedRoute roles={['super_admin', 'admin']}><CompareFiles /></ProtectedRoute>} />
