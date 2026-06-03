@@ -5,7 +5,7 @@ import { AuthContext } from '../context/AuthContext';
 import {
     Send, Download, AlertCircle, ChevronDown, Check,
     Clock, CheckCircle2, XCircle, RefreshCw, FileDown,
-    Building2, Hash, Calendar, Info, Sparkles, ArrowRight
+    Building2, Hash, Calendar, Info, Sparkles, ArrowRight, BarChart3, MapPin
 } from 'lucide-react';
 
 const US_STATES = [
@@ -41,27 +41,27 @@ const fmtDate = (d) => d ? new Date(d).toLocaleString('en-US', { dateStyle: 'med
 
 // ── Custom Select ─────────────────────────────────────────────
 const Field = ({ label, required, hint, children }) => (
-    <div className="space-y-2">
-        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-[0.12em]">
+    <div className="space-y-2.5">
+        <label className="flex items-center gap-1.5 text-[11px] font-black text-slate-400 uppercase tracking-widest">
             {label}{required && <span className="text-orange-500">*</span>}
         </label>
         {children}
-        {hint && <p className="text-[11px] text-slate-600 leading-relaxed">{hint}</p>}
+        {hint && <p className="text-[11px] text-slate-500 font-medium">{hint}</p>}
     </div>
 );
 
 const SelectInput = ({ value, onChange, disabled, required, children }) => (
-    <div className="relative">
+    <div className="relative group">
         <select
             value={value}
             onChange={onChange}
             disabled={disabled}
             required={required}
-            className="w-full bg-[#0d0f1a] border border-white/8 text-white rounded-xl py-3.5 px-4 pr-10 appearance-none focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500/50 transition-all cursor-pointer text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:border-white/15"
+            className="w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 text-white rounded-xl py-3.5 px-4 pr-10 appearance-none focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500/60 transition-all cursor-pointer text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:border-brand-500/30 shadow-inner group-hover:bg-[#0a0c14]/80"
         >
             {children}
         </select>
-        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+        <ChevronDown className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-hover:text-brand-400 transition-colors" />
     </div>
 );
 
@@ -82,11 +82,9 @@ const downloadBlob = (content, filename) => {
 const ScrubSummaryModal = ({ data, onClose }) => {
     if (!data) return null;
 
-    const { summary, goodCsv, badCsv } = data;
+    const { summary, badCsv } = data;
 
-    const handleDownloadGood = () => {
-        downloadBlob(goodCsv, summary.fileName || `leads_good_${Date.now()}.csv`);
-    };
+
 
     const handleDownloadBad = () => {
         if (!badCsv) return;
@@ -245,12 +243,38 @@ const DownloadLeads = () => {
     const [dlId, setDlId]               = useState(null);
     const [scrubSummaryData, setScrubSummaryData] = useState(null);
 
+    const [stateCounts, setStateCounts] = useState({});
+    const [loadingCounts, setLoadingCounts] = useState(false);
+
     useEffect(() => {
         Promise.all([api.get('/vendors?counts=true'), api.get('/campaigns')])
             .then(([v, c]) => { setVendors(v.data); setCampaigns(c.data.filter(x => x.status === 'Active')); })
             .catch(() => {})
             .finally(() => { setLoadingV(false); setLoadingC(false); });
     }, []);
+
+    // Fetch state counts whenever filters change and a vendor is selected
+    useEffect(() => {
+        if (form.vendor_id) {
+            const timeoutId = setTimeout(() => {
+                setLoadingCounts(true);
+                api.post('/download/state-counts', {
+                    vendor_id: form.vendor_id,
+                    campaign_id: form.campaign_id,
+                    states: form.states,
+                    min_age: form.min_age,
+                    max_age: form.max_age
+                })
+                .then(res => setStateCounts(res.data))
+                .catch(err => console.error('Failed to fetch state counts', err))
+                .finally(() => setLoadingCounts(false));
+            }, 500); // debounce to avoid too many requests while typing age/quantity
+            return () => clearTimeout(timeoutId);
+        } else {
+            const timeoutId = setTimeout(() => setStateCounts({}), 0);
+            return () => clearTimeout(timeoutId);
+        }
+    }, [form.vendor_id, form.campaign_id, form.states, form.min_age, form.max_age]);
 
     const fetchMyReqs = async () => {
         if (!isAdmin) return;
@@ -342,31 +366,32 @@ const DownloadLeads = () => {
         <div className="min-h-screen" style={{ fontFamily: "'Inter', sans-serif" }}>
 
             {/* ── Page hero ─────────────────────────────────── */}
-            <div className="relative mb-8 overflow-hidden rounded-2xl bg-gradient-to-br from-[#1a1040] via-[#16112e] to-[#0f0f1a] border border-white/8 p-8">
+            <div className="relative mb-8 overflow-hidden rounded-3xl bg-gradient-to-br from-[#120a2e] via-[#0d0a1c] to-[#0a0714] border border-white/5 p-8 shadow-2xl">
                 {/* Decorative blobs */}
-                <div className="absolute -top-16 -right-16 w-64 h-64 bg-purple-600/20 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-brand-500/15 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-brand-500/10 rounded-full blur-[100px] pointer-events-none opacity-50 translate-x-1/3 -translate-y-1/3" />
+                <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-violet-600/10 rounded-full blur-[100px] pointer-events-none opacity-40 -translate-x-1/3 translate-y-1/3" />
 
                 <div className="relative z-10 flex items-start justify-between flex-wrap gap-4">
-                    <div className="flex items-center gap-4">
-                        <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-orange-500 to-pink-600 flex items-center justify-center shadow-[0_8px_24px_rgba(249,115,22,0.35)]">
-                            {isSuperAdmin ? <Download className="h-7 w-7 text-white" /> : <Send className="h-7 w-7 text-white" />}
+                    <div className="flex items-center gap-5">
+                        <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-brand-400/20 to-violet-600/20 border border-white/10 flex items-center justify-center shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl relative overflow-hidden group">
+                            <div className="absolute inset-0 bg-gradient-to-br from-brand-400 to-violet-600 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                            {isSuperAdmin ? <Download className="h-8 w-8 text-white relative z-10" /> : <Send className="h-8 w-8 text-white relative z-10" />}
                         </div>
                         <div>
-                            <h1 className="text-2xl font-black text-white tracking-tight">
+                            <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white via-white/90 to-white/50 tracking-tight">
                                 {isSuperAdmin ? 'Export Data' : 'Download Request'}
                             </h1>
-                            <p className="text-slate-400 text-sm mt-0.5">
+                            <p className="text-slate-400 text-sm mt-1 font-medium max-w-lg leading-relaxed">
                                 {isSuperAdmin
-                                    ? 'Directly export targeted leads as CSV'
-                                    : 'Submit a request — SuperAdmin will approve & prepare your data'}
+                                    ? 'Directly export targeted leads as CSV using advanced demographic filters.'
+                                    : 'Submit a request to extract specific datasets. A SuperAdmin will review and prepare your data.'}
                             </p>
                         </div>
                     </div>
                     {isAdmin && (
-                        <div className="flex items-center gap-2 px-4 py-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                        <div className="flex items-center gap-2 px-4 py-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl backdrop-blur-md">
                             <Info className="h-4 w-4 text-blue-400 shrink-0" />
-                            <p className="text-xs text-blue-300 font-medium">Requires SuperAdmin approval</p>
+                            <p className="text-xs text-blue-300 font-medium tracking-wide uppercase">Approval Required</p>
                         </div>
                     )}
                 </div>
@@ -378,10 +403,12 @@ const DownloadLeads = () => {
                 <div className="xl:col-span-3 space-y-6">
 
                     {/* Form card */}
-                    <div className="bg-[#13151f] border border-white/[0.07] rounded-2xl overflow-hidden shadow-2xl">
+                    <div className="bg-[#13151f]/70 backdrop-blur-2xl border border-white/[0.07] rounded-3xl overflow-hidden shadow-[0_8px_40px_rgba(0,0,0,0.3)] relative">
+                        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-50" />
+                        
                         {/* Card header */}
-                        <div className="px-6 py-5 border-b border-white/[0.06] flex items-center gap-3">
-                            <Sparkles className="h-4 w-4 text-orange-400" />
+                        <div className="px-6 py-5 border-b border-white/[0.06] flex items-center gap-3 bg-white/[0.02]">
+                            <Sparkles className="h-4 w-4 text-brand-400" />
                             <span className="font-bold text-white text-sm">Configure Download Parameters</span>
                         </div>
 
@@ -418,12 +445,12 @@ const DownloadLeads = () => {
                                         <button
                                             type="button"
                                             onClick={() => setStateOpen(o => !o)}
-                                            className="w-full bg-[#0d0f1a] border border-white/8 hover:border-white/15 text-white rounded-xl py-3.5 px-4 flex justify-between items-center transition-all text-sm"
+                                            className="w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 hover:bg-[#0a0c14]/80 hover:border-brand-500/30 text-white rounded-xl py-3.5 px-4 flex justify-between items-center transition-all text-sm group shadow-inner"
                                         >
                                             <span className={form.states.length === 0 ? 'text-slate-500' : 'text-white font-medium'}>
                                                 {form.states.length === 0 ? 'Any state...' : `${form.states.length} state${form.states.length > 1 ? 's' : ''} selected`}
                                             </span>
-                                            <ChevronDown className={`h-4 w-4 text-slate-500 transition-transform ${stateOpen ? 'rotate-180' : ''}`} />
+                                            <ChevronDown className={`h-4 w-4 text-slate-500 group-hover:text-brand-400 transition-transform ${stateOpen ? 'rotate-180 text-brand-400' : ''}`} />
                                         </button>
                                         {stateOpen && (
                                             <div className="absolute z-50 w-full mt-1.5 bg-[#16192a] border border-white/10 rounded-xl shadow-2xl max-h-60 overflow-auto">
@@ -453,7 +480,7 @@ const DownloadLeads = () => {
                                             type="number" min="0" max="120"
                                             value={form.min_age}
                                             onChange={e => setForm({ ...form, min_age: e.target.value })}
-                                            className="w-full bg-[#0d0f1a] border border-white/8 hover:border-white/15 focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 text-white rounded-xl py-3.5 px-4 outline-none transition-all text-sm font-mono"
+                                            className="w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 hover:bg-[#0a0c14]/80 hover:border-brand-500/30 focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/20 text-white rounded-xl py-3.5 px-4 outline-none transition-all text-sm font-mono shadow-inner"
                                             placeholder="25"
                                         />
                                     </Field>
@@ -462,7 +489,7 @@ const DownloadLeads = () => {
                                             type="number" min="0" max="120"
                                             value={form.max_age}
                                             onChange={e => setForm({ ...form, max_age: e.target.value })}
-                                            className="w-full bg-[#0d0f1a] border border-white/8 hover:border-white/15 focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 text-white rounded-xl py-3.5 px-4 outline-none transition-all text-sm font-mono"
+                                            className="w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 hover:bg-[#0a0c14]/80 hover:border-brand-500/30 focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/20 text-white rounded-xl py-3.5 px-4 outline-none transition-all text-sm font-mono shadow-inner"
                                             placeholder="65"
                                         />
                                     </Field>
@@ -494,7 +521,7 @@ const DownloadLeads = () => {
                                             const val = e.target.value;
                                             setForm({ ...form, quantity: val === '' ? '' : parseInt(val) });
                                         }}
-                                        className="w-full bg-[#0d0f1a] border border-white/8 hover:border-white/15 focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20 text-white rounded-xl py-3.5 pl-11 pr-4 outline-none transition-all text-sm font-mono"
+                                        className="w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 hover:bg-[#0a0c14]/80 hover:border-brand-500/30 focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/20 text-white rounded-xl py-3.5 pl-11 pr-4 outline-none transition-all text-sm font-mono shadow-inner"
                                         placeholder="1000"
                                     />
                                 </div>
@@ -542,82 +569,135 @@ const DownloadLeads = () => {
                 <div className="xl:col-span-2 space-y-4">
 
                     {/* Info card */}
-                    <div className="bg-[#13151f] border border-white/[0.07] rounded-2xl p-5">
-                        <h3 className="font-bold text-white text-sm mb-4 flex items-center gap-2">
-                            <Info className="h-4 w-4 text-blue-400" />
-                            {isSuperAdmin ? 'Export Info' : 'How It Works'}
+                    <div className="bg-[#13151f]/80 backdrop-blur-xl border border-white/[0.07] rounded-2xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+                        <h3 className="font-bold text-white text-sm mb-5 flex items-center gap-2">
+                            <Info className="h-4.5 w-4.5 text-blue-400" />
+                            {isSuperAdmin ? 'Export Workflow' : 'How It Works'}
                         </h3>
                         {isAdmin ? (
-                            <div className="space-y-3">
+                            <div className="space-y-4">
                                 {[
-                                    { step: '1', label: 'Fill out the form', desc: 'Select vendor, quantity and any filters' },
-                                    { step: '2', label: 'Submit request', desc: 'Your request goes to SuperAdmin for review' },
-                                    { step: '3', label: 'Get notified', desc: 'You\'ll receive a notification when approved' },
-                                    { step: '4', label: 'Download CSV', desc: 'Click Download CSV in the requests table below' },
+                                    { step: '1', label: 'Configure Filters', desc: 'Select vendor, quantity and targeted demographics' },
+                                    { step: '2', label: 'Submit Request', desc: 'Your export request is sent for SuperAdmin review' },
+                                    { step: '3', label: 'Processing', desc: 'Leads are automatically scrubbed against DNC lists' },
+                                    { step: '4', label: 'Download CSV', desc: 'Securely download your clean data file' },
                                 ].map(s => (
-                                    <div key={s.step} className="flex items-start gap-3">
-                                        <div className="h-6 w-6 rounded-lg bg-brand-500/20 border border-brand-500/30 text-brand-400 text-xs font-black flex items-center justify-center shrink-0">{s.step}</div>
+                                    <div key={s.step} className="flex items-start gap-3.5 group">
+                                        <div className="h-7 w-7 rounded-xl bg-brand-500/10 border border-brand-500/20 text-brand-400 text-xs font-black flex items-center justify-center shrink-0 group-hover:bg-brand-500 group-hover:text-white transition-all shadow-sm shadow-brand-500/10">{s.step}</div>
                                         <div>
-                                            <p className="text-sm font-semibold text-white">{s.label}</p>
-                                            <p className="text-xs text-slate-500 mt-0.5">{s.desc}</p>
+                                            <p className="text-[13px] font-bold text-white mb-0.5">{s.label}</p>
+                                            <p className="text-[11px] text-slate-500 leading-relaxed">{s.desc}</p>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         ) : (
-                            <div className="space-y-2 text-sm text-slate-400">
+                            <div className="space-y-3 text-[13px] text-slate-400 leading-relaxed">
                                 <p>As <strong className="text-white">SuperAdmin</strong>, your downloads are <strong className="text-orange-400">instant</strong> — no approval needed.</p>
-                                <p className="mt-2">Leads are immediately marked as <code className="text-xs bg-white/5 px-1.5 py-0.5 rounded text-orange-300">downloaded</code> and deducted from the pool.</p>
+                                <p>Leads are immediately marked as <code className="text-[11px] bg-white/5 px-1.5 py-0.5 rounded text-orange-300 font-mono">downloaded</code> and deducted from the available pool.</p>
+                                <p>Automatic <strong className="text-emerald-400">DNC scrubbing</strong> occurs in the background for large batches.</p>
                             </div>
                         )}
                     </div>
 
-                    {/* Selected summary */}
-                    <div className="bg-[#13151f] border border-white/[0.07] rounded-2xl p-5 space-y-3">
-                        <h3 className="font-bold text-white text-sm">Request Summary</h3>
-                        <div className="space-y-2 text-sm">
-                            <div className="flex justify-between items-center py-2 border-b border-white/5">
-                                <span className="text-slate-500">Vendor</span>
-                                <span className="text-white font-medium">{selectedVendor?.name || '—'}</span>
+                    {/* Selected summary & State Breakdown */}
+                    <div className="bg-gradient-to-b from-[#161824] to-[#13151f] border border-white/[0.07] rounded-2xl p-6 shadow-2xl relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-brand-500/5 rounded-full blur-3xl pointer-events-none" />
+                        
+                        <h3 className="font-bold text-white text-sm flex items-center gap-2 mb-5">
+                            <BarChart3 className="h-4.5 w-4.5 text-brand-400" />
+                            Data Availability Overview
+                        </h3>
+                        
+                        <div className="space-y-3 text-[13px]">
+                            <div className="flex justify-between items-center p-3 rounded-xl bg-white/5 border border-white/5">
+                                <span className="text-slate-400 font-medium">Selected Vendor</span>
+                                <span className="text-white font-bold tracking-wide">{selectedVendor?.name || '—'}</span>
                             </div>
                             
                             {selectedVendor && (
-                                <>
-                                    <div className="flex justify-between items-center py-2 border-b border-white/5">
-                                        <span className="text-slate-500">Vendor Total Leads</span>
-                                        <span className="text-white font-mono font-bold">{parseInt(selectedVendor.total_leads).toLocaleString()}</span>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 flex flex-col justify-center items-center text-center">
+                                        <span className="text-[10px] text-emerald-400/80 font-bold uppercase tracking-wider mb-1">Available Leads</span>
+                                        <span className="text-emerald-400 font-mono font-black text-lg">{parseInt(selectedVendor.available_leads).toLocaleString()}</span>
                                     </div>
-                                    <div className="flex justify-between items-center py-2 border-b border-white/5">
-                                        <span className="text-slate-500">Already Downloaded</span>
-                                        <span className="text-orange-400 font-mono font-bold">{parseInt(selectedVendor.downloaded_leads).toLocaleString()}</span>
+                                    <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 flex flex-col justify-center items-center text-center">
+                                        <span className="text-[10px] text-orange-400/80 font-bold uppercase tracking-wider mb-1">Downloaded</span>
+                                        <span className="text-orange-400 font-mono font-black text-lg">{parseInt(selectedVendor.downloaded_leads).toLocaleString()}</span>
                                     </div>
-                                    <div className="flex justify-between items-center py-2 border-b border-white/5">
-                                        <span className="text-slate-500">Remaining Available</span>
-                                        <span className="text-emerald-400 font-mono font-bold">{parseInt(selectedVendor.available_leads).toLocaleString()}</span>
-                                    </div>
-                                </>
+                                </div>
                             )}
 
-                            <div className="flex justify-between items-center py-2 border-b border-white/5">
-                                <span className="text-slate-500">Request Quantity</span>
-                                <span className="text-orange-400 font-mono font-bold">{form.quantity?.toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between items-center py-2 border-b border-white/5">
-                                <span className="text-slate-500">States</span>
-                                <span className="text-white">{form.states.length > 0 ? `${form.states.length} selected` : 'All'}</span>
-                            </div>
-                            <div className="flex justify-between items-center py-2 border-b border-white/5">
-                                <span className="text-slate-500">Age Range</span>
-                                <span className="text-white font-mono">{form.min_age || 0} — {form.max_age || '∞'}</span>
-                            </div>
-                            <div className="flex justify-between items-center py-2">
-                                <span className="text-slate-500">Campaign</span>
-                                <span className="text-white">{campaigns.find(c => String(c.campaign_id) === String(form.campaign_id))?.name || 'All'}</span>
-                            </div>
+                            {/* State Breakdown Section */}
+                            {form.vendor_id && (
+                                <div className="mt-6 pt-5 border-t border-white/10">
+                                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
+                                        <h4 className="text-[11px] font-black text-slate-300 uppercase tracking-widest flex items-center gap-1.5">
+                                            <MapPin className="h-3.5 w-3.5 text-brand-400" />
+                                            State Breakdown
+                                        </h4>
+                                        
+                                        {/* Header right controls */}
+                                        <div className="flex items-center gap-3">
+                                            {loadingCounts && <div className="h-3 w-3 border-2 border-brand-500/30 border-t-brand-400 rounded-full animate-spin" />}
+                                            {Object.keys(stateCounts).length > 0 && (
+                                                <div className="text-[10px] text-slate-400 font-bold bg-white/[0.03] px-2 py-1 rounded border border-white/5">
+                                                    Total: <span className="text-emerald-400">{Object.values(stateCounts).reduce((a, b) => a + b, 0).toLocaleString()}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {!loadingCounts && Object.keys(stateCounts).length === 0 && (
+                                        <div className="text-center py-6 bg-white/[0.02] rounded-xl border border-white/5 border-dashed">
+                                            <p className="text-xs text-slate-500">No leads found for these filters.</p>
+                                        </div>
+                                    )}
+
+                                    {/* Scrollable grid of mini-cards */}
+                                    <div className="max-h-[350px] overflow-y-auto custom-scrollbar pr-1.5">
+                                        <div className="grid grid-cols-4 gap-1.5">
+                                            {Object.entries(stateCounts)
+                                                .sort((a, b) => b[1] - a[1]) // Sort by count descending
+                                                .map(([state, count]) => {
+                                                    const maxCount = Math.max(...Object.values(stateCounts));
+                                                    const pct = maxCount > 0 ? (count / maxCount) * 100 : 0;
+                                                    const stateName = US_STATES.find(s => s.abbr === state)?.name || state;
+
+                                                    return (
+                                                        <div key={state} className="group relative bg-[#0a0c14]/50 border border-white/5 hover:border-brand-500/30 rounded-xl p-2 overflow-hidden transition-all duration-300 shadow-sm hover:shadow-brand-500/10 hover:bg-[#0a0c14]/80 flex flex-col justify-between min-h-[56px]">
+                                                            {/* Progress bar indicator at bottom */}
+                                                            <div 
+                                                                className="absolute bottom-0 left-0 h-[2px] bg-gradient-to-r from-brand-500 to-violet-500 transition-all duration-1000 ease-out z-0 opacity-80" 
+                                                                style={{ width: `${pct}%` }}
+                                                            />
+                                                            
+                                                            <div className="relative z-10 flex justify-between items-start mb-0.5">
+                                                                <span className="text-[10px] font-black text-white leading-none">{state}</span>
+                                                            </div>
+                                                            
+                                                            <div className="relative z-10">
+                                                                <div className={`font-mono font-black text-[11px] tracking-tight leading-none ${count > 0 ? 'text-emerald-400' : 'text-slate-600'}`}>
+                                                                    {count.toLocaleString()}
+                                                                </div>
+                                                                <div className="text-[7px] text-slate-500 font-bold uppercase tracking-widest mt-0.5 truncate max-w-full">
+                                                                    {stateName}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                         </div>
                     </div>
                 </div>
             </div>
+
+
 
             {/* ── MY REQUESTS TABLE (Admin only) ──────────────── */}
             {isAdmin && (

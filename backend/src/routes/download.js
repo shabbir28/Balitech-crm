@@ -12,6 +12,7 @@ const {
     getAlreadyDownloadedList,
     getVendorDownloadHistory,
     getDownloadLogFile,
+    getStateCounts,
 } = require('../controllers/downloadController');
 const auth = require('../middleware/auth');
 const authorizeRole = require('../middleware/role');
@@ -61,6 +62,14 @@ router.get(
   auth,
   authorizeRole(['super_admin', 'admin']),
   getDownloadLogFile,
+);
+
+// ── Both: Get state counts ────────────────────────────────────
+router.post(
+  '/state-counts',
+  auth,
+  authorizeRole(['super_admin', 'admin']),
+  getStateCounts,
 );
 
 module.exports = router;

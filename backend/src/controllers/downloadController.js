@@ -1233,6 +1233,55 @@ const getDownloadLogFile = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────
+// POST /api/download/state-counts
+// Return available leads count mapped by state
+// ─────────────────────────────────────────────────────────────
+const getStateCounts = async (req, res) => {
+  try {
+    const { vendor_id, campaign_id, states, min_age, max_age } = req.body;
+    const client = await db.getClient();
+    try {
+      const { filters, params } = await buildFilters(client, {
+        vendor_id,
+        campaign_id,
+        states,
+        min_age,
+        max_age,
+      });
+      const whereClause = filters.join(" AND ");
+
+      const query = `
+        SELECT area_code, COUNT(id)::int as count 
+        FROM leads 
+        WHERE ${whereClause} 
+        GROUP BY area_code
+      `;
+      const result = await client.query(query, params);
+      
+      const stateCounts = {};
+      for (const row of result.rows) {
+        let stateAbbr = areaCodesMap[row.area_code] || "Unknown";
+        stateCounts[stateAbbr] = (stateCounts[stateAbbr] || 0) + row.count;
+      }
+      
+      // If specific states were requested, ensure they are all in the response (even if 0)
+      if (states && Array.isArray(states) && states.length > 0) {
+        for (const s of states) {
+           if (stateCounts[s] === undefined) stateCounts[s] = 0;
+        }
+      }
+
+      res.json(stateCounts);
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error("Get State Counts Error:", err);
+    res.status(500).json({ message: "Server error getting state counts" });
+  }
+};
+
 module.exports = {
   downloadLeads,
   createDownloadRequest,
@@ -1245,4 +1294,5 @@ module.exports = {
   getAlreadyDownloadedList,
   getVendorDownloadHistory,
   getDownloadLogFile,
+  getStateCounts,
 };
