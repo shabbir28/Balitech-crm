@@ -8,6 +8,7 @@ const Login = () => {
     const { login } = useContext(AuthContext);
     const navigate = useNavigate();
     const [formData, setFormData] = useState({ username: '', password: '' });
+    const [captchaToken, setCaptchaToken] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -15,16 +16,15 @@ const Login = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        /*
         if (!captchaToken) {
             setError('Please complete the reCAPTCHA verification.');
             return;
         }
-        */
+        
         setLoading(true);
         setError('');
         try {
-            await login(formData.username, formData.password, "dummy-token-while-disabled");
+            await login(formData.username, formData.password, captchaToken);
             navigate('/');
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to login');
@@ -111,12 +111,12 @@ const Login = () => {
                             </div>
 
                             <div className="flex justify-center pt-2">
-                                {/* <ReCAPTCHA
+                                <ReCAPTCHA
                                     ref={recaptchaRef}
                                     sitekey="6LeLzwctAAAAAIRVXWG_PUJcMegb1k1B-o_s4q1w"
                                     onChange={(token) => setCaptchaToken(token)}
                                     theme="dark"
-                                /> */}
+                                />
                             </div>
 
                             <div className="pt-2">
