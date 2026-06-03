@@ -11,13 +11,19 @@ const POLL_MAX_WAIT_MS = 30 * 60 * 1000; // give up polling after 30 min
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const postFileWithRetry = async (url, formData, fileLabel) => {
+const postFileWithRetry = async (url, formData, fileLabel, onUploadProgress) => {
     let lastErr;
     for (let attempt = 1; attempt <= DEADLOCK_RETRY_ATTEMPTS; attempt++) {
         try {
             return await api.post(url, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
                 timeout: BULK_UPLOAD_TIMEOUT_MS,
+                onUploadProgress: (progressEvent) => {
+                    if (onUploadProgress && progressEvent.total) {
+                        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                        onUploadProgress(percentCompleted);
+                    }
+                }
             });
         } catch (err) {
             lastErr = err;
@@ -39,11 +45,17 @@ const postFileWithRetry = async (url, formData, fileLabel) => {
  * Upload fresh file → get job_id (202) → poll until Completed/Failed
  * Returns the completed job data (same shape as old sync response)
  */
-const uploadFreshAndPoll = async (formData, fileLabel, onStatusUpdate) => {
+const uploadFreshAndPoll = async (formData, fileLabel, onStatusUpdate, onUploadProgress) => {
     // Step 1: Submit the file — backend returns 202 immediately
     const initRes = await api.post('/jobs/upload-fresh', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: BULK_UPLOAD_TIMEOUT_MS,
+        onUploadProgress: (progressEvent) => {
+            if (onUploadProgress && progressEvent.total) {
+                const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                onUploadProgress(percentCompleted);
+            }
+        }
     });
 
     const jobId = initRes.data?.job_id;
@@ -94,6 +106,7 @@ const AddJob = () => {
     const [comparing, setComparing] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [progress, setProgress] = useState(0);
+    const [fileProgresses, setFileProgresses] = useState({});
     const [error, setError] = useState('');
     const [result, setResult] = useState(null);
     const [compareResult, setCompareResult] = useState(null);
@@ -121,6 +134,7 @@ const AddJob = () => {
         setError('');
         setCompareResult(null);
         setResult(null);
+        setFileProgresses({});
 
         const aggregate = {
             total_processed: 0,
@@ -142,7 +156,9 @@ const AddJob = () => {
                 formData.append('file', files[i]);
                 formData.append('session_id', id);
 
-                const res = await postFileWithRetry('/jobs/compare', formData, fileLabel);
+                const res = await postFileWithRetry('/jobs/compare', formData, fileLabel, (percent) => {
+                    setFileProgresses(prev => ({ ...prev, [i]: percent }));
+                });
                 setProgress(Math.round(((i + 1) / files.length) * 100));
 
                 aggregate.total_processed += res.data.total_processed || 0;
@@ -187,6 +203,7 @@ const AddJob = () => {
         setUploading(true);
         setError('');
         setResult(null);
+        setFileProgresses({});
 
         const aggregate = {
             total_processed: 0,
@@ -214,6 +231,8 @@ const AddJob = () => {
                 const data = await uploadFreshAndPoll(formData, fileLabel, (status) => {
                     // Optional: show per-file status in UI
                     console.log(`[${fileLabel}] Status: ${status}`);
+                }, (percent) => {
+                    setFileProgresses(prev => ({ ...prev, [i]: percent }));
                 });
                 setProgress(Math.round(((i + 1) / files.length) * 100));
 
@@ -343,12 +362,25 @@ const AddJob = () => {
                                             </div>
                                             <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-2 cursor-default">
                                                 {files.map((f, i) => (
-                                                    <div key={i} className="flex justify-between items-center bg-[#1e1e2d] border border-white/5 py-3 px-4 rounded-xl hover:bg-white/5 transition-colors">
-                                                        <div className="flex items-center gap-3">
-                                                            <FileSpreadsheet className="w-4 h-4 text-brand-400" />
-                                                            <span className="text-slate-200 truncate text-[14px] font-medium max-w-[200px] sm:max-w-xs">{f.name}</span>
+                                                    <div key={i} className="flex flex-col bg-[#1e1e2d] border border-white/5 py-3 px-4 rounded-xl hover:bg-white/5 transition-colors">
+                                                        <div className="flex justify-between items-center">
+                                                            <div className="flex items-center gap-3">
+                                                                <FileSpreadsheet className="w-4 h-4 text-brand-400" />
+                                                                <span className="text-slate-200 truncate text-[14px] font-medium max-w-[200px] sm:max-w-xs">{f.name}</span>
+                                                            </div>
+                                                            <span className="text-slate-500 text-xs font-mono bg-[#0a0a0f] px-2 py-1 rounded-md border border-white/5">{formatBytes(f.size)}</span>
                                                         </div>
-                                                        <span className="text-slate-500 text-xs font-mono bg-[#0a0a0f] px-2 py-1 rounded-md border border-white/5">{formatBytes(f.size)}</span>
+                                                        {fileProgresses[i] !== undefined && (
+                                                            <div className="mt-3 w-full">
+                                                                <div className="flex justify-between items-center mb-1">
+                                                                    <span className="text-[9px] font-bold text-brand-400 uppercase tracking-widest">{fileProgresses[i] === 100 ? 'Processing...' : 'Uploading'}</span>
+                                                                    <span className="text-[10px] font-bold text-slate-400">{fileProgresses[i]}%</span>
+                                                                </div>
+                                                                <div className="w-full bg-[#0a0a0f] rounded-full h-1 overflow-hidden border border-white/5">
+                                                                    <div className="bg-brand-500 h-full rounded-full transition-all duration-300" style={{ width: `${fileProgresses[i]}%` }}></div>
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 ))}
                                             </div>
@@ -450,14 +482,21 @@ const AddJob = () => {
                                     
                                     {/* Data Stream base */}
                                     <div className="absolute bottom-10 w-full h-16 flex justify-center items-end gap-3 opacity-40">
-                                        {[...Array(6)].map((_, i) => (
+                                        {[
+                                            { h: 45, d: 1.5 },
+                                            { h: 25, d: 2.1 },
+                                            { h: 55, d: 1.2 },
+                                            { h: 35, d: 2.8 },
+                                            { h: 60, d: 1.7 },
+                                            { h: 30, d: 2.4 }
+                                        ].map((bar, i) => (
                                             <div 
                                                 key={i} 
                                                 className="w-1.5 rounded-t-full" 
                                                 style={{ 
-                                                    height: `${Math.random() * 40 + 20}px`,
+                                                    height: `${bar.h}px`,
                                                     backgroundColor: i % 2 === 0 ? '#3b82f6' : '#10b981',
-                                                    animation: `pulse ${Math.random() * 2 + 1}s infinite alternate`
+                                                    animation: `pulse ${bar.d}s infinite alternate`
                                                 }}
                                             ></div>
                                         ))}
