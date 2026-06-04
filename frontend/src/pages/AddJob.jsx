@@ -152,33 +152,42 @@ const AddJob = () => {
         try {
             for (let i = 0; i < files.length; i++) {
                 const fileLabel = files[i]?.name || `File ${i + 1}`;
-                const formData = new FormData();
-                formData.append('file', files[i]);
-                formData.append('session_id', id);
+                try {
+                    const formData = new FormData();
+                    formData.append('file', files[i]);
+                    formData.append('session_id', id);
 
-                const res = await postFileWithRetry('/jobs/compare', formData, fileLabel, (percent) => {
-                    setFileProgresses(prev => ({ ...prev, [i]: percent }));
-                });
-                setProgress(Math.round(((i + 1) / files.length) * 100));
+                    const res = await postFileWithRetry('/jobs/compare', formData, fileLabel, (percent) => {
+                        setFileProgresses(prev => ({ ...prev, [i]: percent }));
+                    });
+                    setProgress(Math.round(((i + 1) / files.length) * 100));
 
-                aggregate.total_processed += res.data.total_processed || 0;
-                aggregate.total_unique_phones += res.data.total_unique_phones || 0;
-                aggregate.duplicates_in_file += res.data.duplicates_in_file || 0;
-                aggregate.fresh_count += res.data.fresh_count || 0;
-                aggregate.existing_count += res.data.existing_count || 0;
-                aggregate.dnc_skipped += res.data.dnc_skipped || 0;
-                aggregate.dnc_skipped_dnc += res.data.dnc_skipped_dnc || 0;
-                aggregate.dnc_skipped_sale += res.data.dnc_skipped_sale || 0;
+                    aggregate.total_processed += res.data.total_processed || 0;
+                    aggregate.total_unique_phones += res.data.total_unique_phones || 0;
+                    aggregate.duplicates_in_file += res.data.duplicates_in_file || 0;
+                    aggregate.fresh_count += res.data.fresh_count || 0;
+                    aggregate.existing_count += res.data.existing_count || 0;
+                    aggregate.dnc_skipped += res.data.dnc_skipped || 0;
+                    aggregate.dnc_skipped_dnc += res.data.dnc_skipped_dnc || 0;
+                    aggregate.dnc_skipped_sale += res.data.dnc_skipped_sale || 0;
 
-                if (res.data.existing_breakdown) {
-                    for (const [vendorName, count] of Object.entries(res.data.existing_breakdown)) {
-                        aggregate.existing_breakdown[vendorName] = (aggregate.existing_breakdown[vendorName] || 0) + count;
+                    if (res.data.existing_breakdown) {
+                        for (const [vendorName, count] of Object.entries(res.data.existing_breakdown)) {
+                            aggregate.existing_breakdown[vendorName] = (aggregate.existing_breakdown[vendorName] || 0) + count;
+                        }
                     }
-                }
 
-                if (Array.isArray(res.data.fresh_sample)) {
-                    aggregate.fresh_sample.push(...res.data.fresh_sample);
-                    aggregate.fresh_sample = aggregate.fresh_sample.slice(0, 25);
+                    if (Array.isArray(res.data.fresh_sample)) {
+                        aggregate.fresh_sample.push(...res.data.fresh_sample);
+                        aggregate.fresh_sample = aggregate.fresh_sample.slice(0, 25);
+                    }
+                } catch (fileErr) {
+                    console.error(`Error comparing file ${fileLabel}:`, fileErr);
+                    const detail = fileErr.response?.data?.error || fileErr.response?.data?.message || fileErr.message;
+                    aggregate.failed_files = aggregate.failed_files || [];
+                    aggregate.failed_files.push({ name: fileLabel, error: detail });
+                    setFileProgresses(prev => ({ ...prev, [i]: -1 }));
+                    setProgress(Math.round(((i + 1) / files.length) * 100));
                 }
             }
             
@@ -223,35 +232,44 @@ const AddJob = () => {
         try {
             for (let i = 0; i < files.length; i++) {
                 const fileLabel = files[i]?.name || `File ${i + 1}`;
-                const formData = new FormData();
-                formData.append('file', files[i]);
-                formData.append('session_id', id);
+                try {
+                    const formData = new FormData();
+                    formData.append('file', files[i]);
+                    formData.append('session_id', id);
 
-                // Uses async polling — no 504 timeout possible
-                const data = await uploadFreshAndPoll(formData, fileLabel, (status) => {
-                    // Optional: show per-file status in UI
-                    console.log(`[${fileLabel}] Status: ${status}`);
-                }, (percent) => {
-                    setFileProgresses(prev => ({ ...prev, [i]: percent }));
-                });
-                setProgress(Math.round(((i + 1) / files.length) * 100));
+                    // Uses async polling — no 504 timeout possible
+                    const data = await uploadFreshAndPoll(formData, fileLabel, (status) => {
+                        // Optional: show per-file status in UI
+                        console.log(`[${fileLabel}] Status: ${status}`);
+                    }, (percent) => {
+                        setFileProgresses(prev => ({ ...prev, [i]: percent }));
+                    });
+                    setProgress(Math.round(((i + 1) / files.length) * 100));
 
-                aggregate.total_processed += data.total_processed || 0;
-                aggregate.total_unique_phones += data.total_unique_phones || 0;
-                aggregate.duplicates_in_file += data.duplicates_in_file || 0;
-                aggregate.fresh_count += data.fresh_count || 0;
-                aggregate.existing_count += data.existing_count || 0;
-                aggregate.dnc_skipped += data.dnc_skipped || 0;
-                aggregate.dnc_skipped_dnc += data.dnc_skipped_dnc || 0;
-                aggregate.dnc_skipped_sale += data.dnc_skipped_sale || 0;
-                aggregate.inserted += data.inserted || 0;
-                aggregate.updated += data.updated || 0;
-                aggregate.duplicates_skipped += data.duplicates_skipped || 0;
+                    aggregate.total_processed += data.total_processed || 0;
+                    aggregate.total_unique_phones += data.total_unique_phones || 0;
+                    aggregate.duplicates_in_file += data.duplicates_in_file || 0;
+                    aggregate.fresh_count += data.fresh_count || 0;
+                    aggregate.existing_count += data.existing_count || 0;
+                    aggregate.dnc_skipped += data.dnc_skipped || 0;
+                    aggregate.dnc_skipped_dnc += data.dnc_skipped_dnc || 0;
+                    aggregate.dnc_skipped_sale += data.dnc_skipped_sale || 0;
+                    aggregate.inserted += data.inserted || 0;
+                    aggregate.updated += data.updated || 0;
+                    aggregate.duplicates_skipped += data.duplicates_skipped || 0;
 
-                if (data.existing_breakdown) {
-                    for (const [vendorName, count] of Object.entries(data.existing_breakdown)) {
-                        aggregate.existing_breakdown[vendorName] = (aggregate.existing_breakdown[vendorName] || 0) + count;
+                    if (data.existing_breakdown) {
+                        for (const [vendorName, count] of Object.entries(data.existing_breakdown)) {
+                            aggregate.existing_breakdown[vendorName] = (aggregate.existing_breakdown[vendorName] || 0) + count;
+                        }
                     }
+                } catch (fileErr) {
+                    console.error(`Error uploading file ${fileLabel}:`, fileErr);
+                    const detail = fileErr.response?.data?.error || fileErr.response?.data?.message || fileErr.message;
+                    aggregate.failed_files = aggregate.failed_files || [];
+                    aggregate.failed_files.push({ name: fileLabel, error: detail });
+                    setFileProgresses(prev => ({ ...prev, [i]: -1 }));
+                    setProgress(Math.round(((i + 1) / files.length) * 100));
                 }
             }
 
@@ -373,11 +391,15 @@ const AddJob = () => {
                                                         {fileProgresses[i] !== undefined && (
                                                             <div className="mt-3 w-full">
                                                                 <div className="flex justify-between items-center mb-1">
-                                                                    <span className="text-[9px] font-bold text-brand-400 uppercase tracking-widest">{fileProgresses[i] === 100 ? 'Processing...' : 'Uploading'}</span>
-                                                                    <span className="text-[10px] font-bold text-slate-400">{fileProgresses[i]}%</span>
+                                                                    <span className={`text-[9px] font-bold uppercase tracking-widest ${fileProgresses[i] === -1 ? 'text-red-400' : 'text-brand-400'}`}>
+                                                                        {fileProgresses[i] === -1 ? 'Failed' : fileProgresses[i] === 100 ? 'Processing...' : 'Uploading'}
+                                                                    </span>
+                                                                    <span className={`text-[10px] font-bold ${fileProgresses[i] === -1 ? 'text-red-400' : 'text-slate-400'}`}>
+                                                                        {fileProgresses[i] === -1 ? 'Error' : `${fileProgresses[i]}%`}
+                                                                    </span>
                                                                 </div>
                                                                 <div className="w-full bg-[#0a0a0f] rounded-full h-1 overflow-hidden border border-white/5">
-                                                                    <div className="bg-brand-500 h-full rounded-full transition-all duration-300" style={{ width: `${fileProgresses[i]}%` }}></div>
+                                                                    <div className={`${fileProgresses[i] === -1 ? 'bg-red-500' : 'bg-brand-500'} h-full rounded-full transition-all duration-300`} style={{ width: fileProgresses[i] === -1 ? '100%' : `${fileProgresses[i]}%` }}></div>
                                                                 </div>
                                                             </div>
                                                         )}
@@ -574,6 +596,22 @@ const AddJob = () => {
                                         </div>
                                     )}
 
+                                    {compareResult.failed_files && compareResult.failed_files.length > 0 && (
+                                        <div className="mb-6 bg-red-500/10 p-5 rounded-2xl border border-red-500/20">
+                                            <p className="text-red-400 font-bold text-[12px] uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                <FileX className="w-4 h-4" /> Skipped / Failed Files
+                                            </p>
+                                            <div className="flex flex-col gap-2 max-h-40 overflow-y-auto custom-scrollbar">
+                                                {compareResult.failed_files.map((errItem, idx) => (
+                                                    <div key={idx} className="bg-[#1e1e2d] text-slate-300 text-[12px] px-3 py-2 rounded-md border border-red-500/10 flex flex-col sm:flex-row justify-between gap-2">
+                                                        <span className="font-bold text-red-300 truncate w-full sm:w-1/3" title={errItem.name}>{errItem.name}</span>
+                                                        <span className="text-red-400/80 truncate w-full sm:w-2/3 sm:text-right" title={errItem.error}>{errItem.error}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <div className="flex items-center justify-between gap-4 mt-8 pt-6 border-t border-white/5">
                                         <button
                                             onClick={() => setStep(1)}
@@ -675,6 +713,23 @@ const AddJob = () => {
                                             </li>
                                         </ul>
                                     </div>
+
+                                    {result.failed_files && result.failed_files.length > 0 && (
+                                        <div className="bg-[#1e1e2d]/80 backdrop-blur-md border border-red-500/20 rounded-3xl p-6 sm:p-8 text-left mb-8 shadow-2xl">
+                                            <p className="text-red-400 font-bold text-[12px] uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                <FileX className="w-4 h-4" /> Skipped / Failed Files
+                                            </p>
+                                            <div className="flex flex-col gap-2 max-h-40 overflow-y-auto custom-scrollbar">
+                                                {result.failed_files.map((errItem, idx) => (
+                                                    <div key={idx} className="bg-[#0a0a0f] text-slate-300 text-[12px] px-3 py-2 rounded-md border border-red-500/10 flex flex-col sm:flex-row justify-between gap-2">
+                                                        <span className="font-bold text-red-300 truncate w-full sm:w-1/3" title={errItem.name}>{errItem.name}</span>
+                                                        <span className="text-red-400/80 truncate w-full sm:w-2/3 sm:text-right" title={errItem.error}>{errItem.error}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <button 
                                         onClick={() => navigate(`/sessions/${id}`)}
                                         className="bg-[#0a0a0f] border border-white/10 hover:bg-white/5 text-slate-200 px-8 py-4 rounded-xl font-bold transition-all w-full shadow-sm active:scale-[0.98] text-[14px]"
