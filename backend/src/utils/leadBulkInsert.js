@@ -49,7 +49,7 @@ const insertFreshLeadsBatches = async (
     const query = `
       INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, campaign_type, age, job_id)
       VALUES ${valueStrings.join(",")}
-      ON CONFLICT (phone, workspace) DO NOTHING
+      ON CONFLICT (phone) DO NOTHING
     `;
 
     const result = await withDeadlockRetry(() => exec.query(query, values));
@@ -82,7 +82,7 @@ const insertLeadsUpsertBatches = async (
 
     for (const record of batch) {
       valueStrings.push(
-        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9})`,
+        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8})`,
       );
       values.push(
         truncate(record.name, 150) || null,
@@ -103,7 +103,7 @@ const insertLeadsUpsertBatches = async (
     const query = `
       INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, age, job_id)
       VALUES ${valueStrings.join(",")}
-      ON CONFLICT (phone, workspace) DO UPDATE SET
+      ON CONFLICT (phone) DO UPDATE SET
         disposition = CASE
           WHEN EXCLUDED.disposition IS NOT NULL AND EXCLUDED.disposition <> '' THEN EXCLUDED.disposition
           ELSE leads.disposition
