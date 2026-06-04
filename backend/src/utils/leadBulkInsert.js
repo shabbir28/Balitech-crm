@@ -10,7 +10,7 @@ const sortByPhone = (records) =>
  */
 const insertFreshLeadsBatches = async (
   exec,
-  { records, session, truncate, batchSize = DEFAULT_BATCH },
+  { records, session, truncate, batchSize = DEFAULT_BATCH, job_id },
 ) => {
   const sorted = sortByPhone(records);
   let insertedCount = 0;
@@ -27,7 +27,7 @@ const insertFreshLeadsBatches = async (
 
     for (const record of batch) {
       valueStrings.push(
-        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8})`,
+        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9})`,
       );
       values.push(
         truncate(record.name, 150) || null,
@@ -39,16 +39,17 @@ const insertFreshLeadsBatches = async (
         truncate(record.disposition, 100) || null,
         truncate(session.campaign_type, 50),
         record.age || null,
+        job_id || null,
       );
-      paramIndex += 9;
+      paramIndex += 10;
     }
 
     if (valueStrings.length === 0) continue;
 
     const query = `
-      INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, campaign_type, age)
+      INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, campaign_type, age, job_id)
       VALUES ${valueStrings.join(",")}
-      ON CONFLICT (phone) DO NOTHING
+      ON CONFLICT (phone, workspace) DO NOTHING
     `;
 
     const result = await withDeadlockRetry(() => exec.query(query, values));
@@ -63,7 +64,7 @@ const insertFreshLeadsBatches = async (
  */
 const insertLeadsUpsertBatches = async (
   exec,
-  { records, session, truncate, batchSize = DEFAULT_BATCH },
+  { records, session, truncate, batchSize = DEFAULT_BATCH, job_id },
 ) => {
   const sorted = sortByPhone(records);
   let insertedCount = 0;
@@ -81,7 +82,7 @@ const insertLeadsUpsertBatches = async (
 
     for (const record of batch) {
       valueStrings.push(
-        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7})`,
+        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9})`,
       );
       values.push(
         truncate(record.name, 150) || null,
@@ -92,16 +93,17 @@ const insertLeadsUpsertBatches = async (
         session.vendor_id,
         truncate(record.disposition, 100) || null,
         record.age || null,
+        job_id || null,
       );
-      paramIndex += 8;
+      paramIndex += 9;
     }
 
     if (valueStrings.length === 0) continue;
 
     const query = `
-      INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, age)
+      INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, age, job_id)
       VALUES ${valueStrings.join(",")}
-      ON CONFLICT (phone) DO UPDATE SET
+      ON CONFLICT (phone, workspace) DO UPDATE SET
         disposition = CASE
           WHEN EXCLUDED.disposition IS NOT NULL AND EXCLUDED.disposition <> '' THEN EXCLUDED.disposition
           ELSE leads.disposition
@@ -117,7 +119,8 @@ const insertLeadsUpsertBatches = async (
         age = CASE
           WHEN EXCLUDED.age IS NOT NULL THEN EXCLUDED.age
           ELSE leads.age
-        END
+        END,
+        job_id = COALESCE(EXCLUDED.job_id, leads.job_id)
       RETURNING (xmax = 0) AS inserted
     `;
 

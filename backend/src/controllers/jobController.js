@@ -131,6 +131,7 @@ const createJob = async (req, res) => {
           records: recordsToInsert,
           session,
           truncate,
+          job_id: job.id,
         });
         insertedCount = counts.insertedCount;
         updatedCount = counts.updatedCount;
@@ -426,6 +427,7 @@ const uploadFreshJob = async (req, res) => {
             records: freshRecords,
             session,
             truncate,
+            job_id: job.id,
           });
 
           return {

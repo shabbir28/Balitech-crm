@@ -86,7 +86,7 @@ const uploadLeads = async (req, res) => {
           const query = `
                         INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, age)
                         VALUES ${valueStrings.join(",")}
-                        ON CONFLICT (phone) DO UPDATE
+                        ON CONFLICT (phone, workspace) DO UPDATE
                         SET disposition = CASE
                           WHEN EXCLUDED.disposition IS NOT NULL AND EXCLUDED.disposition <> '' THEN EXCLUDED.disposition
                           ELSE leads.disposition

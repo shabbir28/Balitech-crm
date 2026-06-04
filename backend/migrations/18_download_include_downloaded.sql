@@ -1,0 +1,2 @@
+ALTER TABLE download_requests
+  ADD COLUMN IF NOT EXISTS include_downloaded BOOLEAN NOT NULL DEFAULT FALSE;

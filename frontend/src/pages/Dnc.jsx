@@ -1,6 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
-import { Database, Search, UploadCloud, Trash2, ShieldAlert, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Database, Search, UploadCloud, Trash2, ShieldAlert, CheckCircle2, AlertCircle, FolderDown, Hash } from 'lucide-react';
+
+const downloadBlob = (content, filename) => {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+};
 
 const Dnc = () => {
     const [type, setType] = useState('DNC');
@@ -14,6 +24,15 @@ const Dnc = () => {
 
     const [deleteConfirmId, setDeleteConfirmId] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
+
+    const [downloadCampaign, setDownloadCampaign] = useState('');
+    const [downloadType, setDownloadType] = useState('ALL');
+    const [downloadQty, setDownloadQty] = useState(1000);
+    const [exportCount, setExportCount] = useState(null);
+    const [loadingExportCount, setLoadingExportCount] = useState(false);
+    const [downloading, setDownloading] = useState(false);
+    const [downloadError, setDownloadError] = useState('');
+    const [downloadSuccess, setDownloadSuccess] = useState('');
 
     const queryString = useMemo(() => {
         return `/dnc?page=1&limit=50&type=${encodeURIComponent(type)}&search=${encodeURIComponent(search)}`;
@@ -41,6 +60,66 @@ const Dnc = () => {
             .then(res => setCampaigns(res.data.filter(c => c.status === 'Active')))
             .catch(e => console.error('Failed to load campaigns', e));
     }, []);
+
+    useEffect(() => {
+        if (!downloadCampaign) {
+            setExportCount(null);
+            return;
+        }
+        const timer = setTimeout(() => {
+            setLoadingExportCount(true);
+            setDownloadError('');
+            api.get(`/dnc/export-count?campaign_id=${encodeURIComponent(downloadCampaign)}&type=${encodeURIComponent(downloadType)}`)
+                .then(res => {
+                    const count = res.data.count || 0;
+                    setExportCount(count);
+                    if (downloadQty > count && count > 0) {
+                        setDownloadQty(count);
+                    }
+                })
+                .catch(() => setExportCount(0))
+                .finally(() => setLoadingExportCount(false));
+        }, 400);
+        return () => clearTimeout(timer);
+    }, [downloadCampaign, downloadType]);
+
+    const handleDownloadDnc = async () => {
+        if (!downloadCampaign) {
+            setDownloadError('Please select a campaign.');
+            return;
+        }
+        if (exportCount === 0) {
+            setDownloadError(
+                'No records to export for this campaign and type. Try “All Campaigns” or “No campaign linked”, or re-import with the campaign selected.'
+            );
+            return;
+        }
+        const qty = parseInt(downloadQty, 10);
+        if (!qty || qty <= 0) {
+            setDownloadError('Enter a valid quantity.');
+            return;
+        }
+        if (exportCount != null && qty > exportCount) {
+            setDownloadError(`Quantity cannot exceed available (${exportCount.toLocaleString()}).`);
+            return;
+        }
+        setDownloading(true);
+        setDownloadError('');
+        setDownloadSuccess('');
+        try {
+            const res = await api.post('/dnc/download', {
+                campaign_id: downloadCampaign,
+                type: downloadType,
+                quantity: qty,
+            });
+            downloadBlob(res.data.csv, res.data.fileName || `dnc_export_${Date.now()}.csv`);
+            setDownloadSuccess(`Downloaded ${res.data.count?.toLocaleString()} record(s).`);
+        } catch (err) {
+            setDownloadError(err.response?.data?.message || 'Download failed.');
+        } finally {
+            setDownloading(false);
+        }
+    };
 
     const openDeleteConfirm = (id) => {
         setDeleteConfirmId(id);
@@ -112,6 +191,114 @@ const Dnc = () => {
                             className="bg-transparent border-none text-white text-[13px] outline-none w-full ml-3 placeholder:text-slate-600 font-medium"
                         />
                     </div>
+                </div>
+            </div>
+
+            {/* Download Section */}
+            <div className="bg-[#1e1e2d] rounded-2xl border border-violet-500/20 p-6 shadow-xl relative mb-8">
+                <div className="absolute top-0 right-0 w-40 h-40 bg-violet-500/10 rounded-full blur-[60px] pointer-events-none overflow-hidden rounded-2xl" />
+                <div className="relative z-10 min-w-0">
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2 mb-1">
+                        <FolderDown className="w-5 h-5 text-violet-400 shrink-0" /> Download DNC / SALE Numbers
+                    </h2>
+                    <p className="text-xs text-slate-500 mb-5 font-medium">
+                        Export by campaign (newest first). Numbers added by BLA scrub follow the campaign selected on Download Data.
+                        If a single campaign shows 0, try &quot;No campaign linked&quot; for older BLA entries.
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_120px_minmax(140px,auto)] gap-4 items-end">
+                        <div className="min-w-0">
+                            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 min-h-[18px] leading-tight">
+                                Campaign <span className="text-rose-500">*</span>
+                            </label>
+                            <select
+                                value={downloadCampaign}
+                                onChange={(e) => setDownloadCampaign(e.target.value)}
+                                className="bg-[#0a0a0f] border border-white/10 rounded-xl px-4 py-0 text-white text-[13px] w-full h-11 box-border outline-none focus:border-violet-500/50"
+                            >
+                                <option value="">Select campaign…</option>
+                                <option value="all">All Campaigns</option>
+                                <option value="unassigned">No campaign linked</option>
+                                {campaigns.map(c => (
+                                    <option key={c.campaign_id} value={c.campaign_id}>{c.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="min-w-0">
+                            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 min-h-[18px] leading-tight">
+                                Record type
+                            </label>
+                            <select
+                                value={downloadType}
+                                onChange={(e) => setDownloadType(e.target.value)}
+                                className="bg-[#0a0a0f] border border-white/10 rounded-xl px-4 py-0 text-white text-[13px] w-full h-11 box-border outline-none focus:border-violet-500/50"
+                            >
+                                <option value="ALL">DNC + SALE (both)</option>
+                                <option value="DNC">DNC only</option>
+                                <option value="SALE">SALE only</option>
+                            </select>
+                        </div>
+
+                        <div className="min-w-0 md:max-w-none xl:max-w-[140px]">
+                            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 min-h-[18px] leading-tight">
+                                Quantity <span className="text-rose-500">*</span>
+                            </label>
+                            <div className="relative h-11">
+                                <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={exportCount ?? 500000}
+                                    value={downloadQty}
+                                    onChange={(e) => {
+                                        const v = e.target.value;
+                                        setDownloadQty(v === '' ? '' : parseInt(v, 10));
+                                    }}
+                                    className="w-full h-11 bg-[#0a0a0f] border border-white/10 rounded-xl py-0 pl-10 pr-4 text-white text-[13px] font-mono box-border outline-none focus:border-violet-500/50"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="min-w-0 sm:col-span-2 xl:col-span-1">
+                            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 min-h-[18px] leading-tight invisible" aria-hidden="true">
+                                Export
+                            </label>
+                            <button
+                                type="button"
+                                onClick={handleDownloadDnc}
+                                disabled={downloading || !downloadCampaign || loadingExportCount || exportCount === 0}
+                                title={exportCount === 0 ? 'No records available for this selection' : undefined}
+                                className="w-full flex items-center justify-center gap-2 h-11 px-4 rounded-xl text-[13px] font-bold bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-violet-500 hover:to-indigo-500 transition-all"
+                            >
+                                {downloading ? (
+                                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" />
+                                ) : (
+                                    <FolderDown className="w-4 h-4 shrink-0" />
+                                )}
+                                <span className="truncate">{downloading ? 'Exporting…' : 'Download CSV'}</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {downloadCampaign && (
+                        <p className="text-[11px] text-slate-500 mt-3">
+                            {loadingExportCount ? 'Checking availability…' : (
+                                <>Available for export: <span className="text-violet-400 font-bold">{(exportCount ?? 0).toLocaleString()}</span></>
+                            )}
+                        </p>
+                    )}
+
+                    {downloadError && (
+                        <p className="mt-4 text-sm text-red-400 flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 shrink-0" /> {downloadError}
+                        </p>
+                    )}
+                    {downloadSuccess && (
+                        <p className="mt-4 text-sm text-emerald-400 flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 shrink-0" /> {downloadSuccess}
+                        </p>
+                    )}
                 </div>
             </div>
 

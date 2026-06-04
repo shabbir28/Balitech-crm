@@ -12,7 +12,10 @@ const {
     getAlreadyDownloadedList,
     getVendorDownloadHistory,
     getDownloadLogFile,
+    getDownloadLogSummary,
     getStateCounts,
+    downloadJobFile,
+    getJobStats,
 } = require('../controllers/downloadController');
 const auth = require('../middleware/auth');
 const authorizeRole = require('../middleware/role');
@@ -58,6 +61,12 @@ router.get(
   getVendorDownloadHistory,
 );
 router.get(
+  '/logs/:id/summary',
+  auth,
+  authorizeRole(['super_admin', 'admin']),
+  getDownloadLogSummary,
+);
+router.get(
   '/logs/:id/file',
   auth,
   authorizeRole(['super_admin', 'admin']),
@@ -70,6 +79,22 @@ router.post(
   auth,
   authorizeRole(['super_admin', 'admin']),
   getStateCounts,
+);
+
+// ── Both: Download leads from a specific upload job/file ────────
+router.get(
+  '/job/:jobId/file',
+  auth,
+  authorizeRole(['super_admin', 'admin']),
+  downloadJobFile,
+);
+
+// ── Both: Get stats for a specific upload job/file ─────────────────
+router.get(
+  '/job/:jobId/stats',
+  auth,
+  authorizeRole(['super_admin', 'admin']),
+  getJobStats,
 );
 
 module.exports = router;

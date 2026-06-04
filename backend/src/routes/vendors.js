@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { createVendor, getVendors, updateVendor, deleteVendor } = require('../controllers/vendorController');
+const { createVendor, getVendors, updateVendor, deleteVendor, getVendorFiles } = require('../controllers/vendorController');
 const auth = require('../middleware/auth');
 const authorizeRole = require('../middleware/role');
 
@@ -9,6 +9,9 @@ router.use(auth);
 
 // super_admin, admin, data_entry can view vendors (data_entry needs it for vendor add)
 router.get('/', authorizeRole(['super_admin', 'admin', 'data_entry']), getVendors);
+
+// Get vendor files list
+router.get('/:id/files', authorizeRole(['super_admin', 'admin']), getVendorFiles);
 
 // super_admin, admin, and data_entry can create vendors
 router.post('/', authorizeRole(['super_admin', 'admin', 'data_entry']), createVendor);

@@ -75,6 +75,7 @@ const upsertDncNumbersBatched = async ({
   badItems,
   createdBy,
   notePrefix,
+  campaignId = null,
 }) => {
   if (!Array.isArray(badItems) || badItems.length === 0) return;
 
@@ -86,7 +87,7 @@ const upsertDncNumbersBatched = async ({
 
     for (const badItem of chunk) {
       valueStrings.push(
-        `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4})`,
+        `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4}, $${idx + 5})`,
       );
       insertValues.push(
         badItem.phone,
@@ -94,19 +95,21 @@ const upsertDncNumbersBatched = async ({
         "Blacklist Alliance API",
         `${notePrefix}${badItem.reason}`,
         createdBy || null,
+        campaignId || null,
       );
-      idx += 5;
+      idx += 6;
     }
 
     await queryFn(
       `
-        INSERT INTO dnc_numbers (phone, dnc_type, source, notes, created_by)
+        INSERT INTO dnc_numbers (phone, dnc_type, source, notes, created_by, campaign_id)
         VALUES ${valueStrings.join(",")}
         ON CONFLICT (phone) DO UPDATE
         SET dnc_type = EXCLUDED.dnc_type,
             source = EXCLUDED.source,
             notes = EXCLUDED.notes,
-            created_by = EXCLUDED.created_by
+            created_by = EXCLUDED.created_by,
+            campaign_id = COALESCE(EXCLUDED.campaign_id, dnc_numbers.campaign_id)
       `,
       insertValues,
     );
@@ -134,7 +137,13 @@ const markScrubFailed = async (logId, errMessage) => {
   }
 };
 
-const runBackgroundScrub = async ({ logId, exportedRows, userId, fileName }) => {
+const runBackgroundScrub = async ({
+  logId,
+  exportedRows,
+  userId,
+  fileName,
+  campaignId = null,
+}) => {
   if (!Array.isArray(exportedRows) || exportedRows.length === 0) return;
   try {
     const phones = exportedRows
@@ -183,6 +192,7 @@ const runBackgroundScrub = async ({ logId, exportedRows, userId, fileName }) => 
         badItems: scrubResult.bad,
         createdBy: userId,
         notePrefix: "Background scrub. Reason: ",
+        campaignId,
       });
     }
 
@@ -237,13 +247,58 @@ const runBackgroundScrub = async ({ logId, exportedRows, userId, fileName }) => 
 // ─────────────────────────────────────────────────────────────
 async function buildFilters(
   client,
-  { vendor_id, campaign_id, states, min_age, max_age },
+  {
+    vendor_id,
+    campaign_id,
+    states,
+    min_age,
+    max_age,
+    job_id,
+    include_downloaded,
+  },
 ) {
-  const filters = ["status = 'available'"];
+  const includeAllVendorLeads =
+    include_downloaded === true || include_downloaded === "true";
+
+  // Re-download mode: all leads for this vendor (any status), not only "downloaded"
+  const filters = includeAllVendorLeads ? [] : ["status = 'available'"];
   const params = [];
   let paramIdx = 1;
 
-  if (vendor_id && vendor_id !== "all") {
+  if (job_id && job_id !== "") {
+    // Check if there are any leads with this job_id
+    const jobCheck = await client.query(
+      `SELECT 1 FROM leads WHERE job_id = $1 LIMIT 1`,
+      [job_id]
+    );
+    if (jobCheck.rows.length > 0) {
+      filters.push(`job_id = $${paramIdx++}`);
+      params.push(job_id);
+    } else {
+      // Fallback: get job created_at and vendor_id
+      const jobRes = await client.query(
+        `SELECT j.created_at, s.vendor_id 
+         FROM upload_jobs j
+         JOIN upload_sessions s ON j.session_id = s.id
+         WHERE j.id = $1`,
+        [job_id]
+      );
+      if (jobRes.rows.length > 0) {
+        const job = jobRes.rows[0];
+        filters.push(`vendor_id = $${paramIdx++}`);
+        params.push(job.vendor_id);
+
+        filters.push(`uploaded_at >= $${paramIdx++}::timestamp with time zone - INTERVAL '5 minutes'`);
+        params.push(job.created_at);
+
+        filters.push(`uploaded_at <= $${paramIdx++}::timestamp with time zone + INTERVAL '5 minutes'`);
+        params.push(job.created_at);
+      } else {
+        filters.push(`job_id = $${paramIdx++}`);
+        params.push(job_id);
+      }
+    }
+  } else if (vendor_id && vendor_id !== "all") {
     filters.push(`vendor_id = $${paramIdx++}`);
     params.push(vendor_id);
   }
@@ -304,6 +359,8 @@ async function executeDownload(
     max_age,
     force_scrub = false,
     async_scrub = false,
+    job_id,
+    include_downloaded = false,
   },
 ) {
   const { filters, params, paramIdx } = await buildFilters(client, {
@@ -312,17 +369,26 @@ async function executeDownload(
     states,
     min_age,
     max_age,
+    job_id,
+    include_downloaded,
   });
-  const whereClause = filters.join(" AND ");
+  const includeAllVendorLeads =
+    include_downloaded === true || include_downloaded === "true";
+
+  const whereParts = [...filters];
+  if (!includeAllVendorLeads) {
+    whereParts.push(
+      `NOT EXISTS (SELECT 1 FROM dnc_numbers d WHERE d.phone = leads.phone)`,
+    );
+  }
+  const whereClause =
+    whereParts.length > 0 ? whereParts.join(" AND ") : "1=1";
 
   const updateQuery = `
         WITH selected_leads AS (
             SELECT id 
             FROM leads 
-            WHERE ${whereClause} 
-              AND NOT EXISTS (
-                SELECT 1 FROM dnc_numbers d WHERE d.phone = leads.phone
-              )
+            WHERE ${whereClause}
             ORDER BY uploaded_at ASC
             FOR UPDATE SKIP LOCKED
             LIMIT $${paramIdx}
@@ -424,6 +490,7 @@ async function executeDownload(
             badItems: scrubResult.bad,
             createdBy: user_id,
             notePrefix: "Auto-Scrubbed on download. Reason: ",
+            campaignId: campaign_id || null,
           });
           await client.query("COMMIT");
         } catch (badErr) {
@@ -553,9 +620,20 @@ const downloadLeads = async (req, res) => {
       max_age,
       force_scrub,
       async_scrub,
+      job_id,
+      include_downloaded,
     } = req.body;
     if (!quantity || quantity <= 0) {
       return res.status(400).json({ message: "Valid quantity is required" });
+    }
+    if (
+      (include_downloaded === true || include_downloaded === "true") &&
+      (!vendor_id || vendor_id === "all")
+    ) {
+      return res.status(400).json({
+        message:
+          "Re-download mode requires a specific vendor (not All Vendors).",
+      });
     }
 
     const forceScrub = force_scrub === true || force_scrub === "true";
@@ -574,13 +652,18 @@ const downloadLeads = async (req, res) => {
       max_age,
       force_scrub: forceScrub,
       async_scrub: asyncScrub,
+      job_id,
+      include_downloaded,
     });
     // executeDownload now commits internally; outer rollback is a no-op afterwards.
 
     if (goodRows.length === 0 && badRows.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "No available leads found matching criteria" });
+      return res.status(404).json({
+        message:
+          include_downloaded === true || include_downloaded === "true"
+            ? "No leads found to re-download for this vendor (check filters)."
+            : "No available leads found matching criteria",
+      });
     }
 
     const fileName = `leads_download_${Date.now()}.csv`;
@@ -620,6 +703,8 @@ const downloadLeads = async (req, res) => {
           exportedRows: goodRows,
           userId: req.user.id,
           fileName,
+          campaignId:
+            campaign_id && campaign_id !== "all" ? campaign_id : null,
         }),
       );
     }
@@ -642,8 +727,16 @@ const downloadLeads = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 const createDownloadRequest = async (req, res) => {
   try {
-    const { vendor_id, quantity, states, campaign_id, min_age, max_age } =
-      req.body;
+    const {
+      vendor_id,
+      quantity,
+      states,
+      campaign_id,
+      min_age,
+      max_age,
+      job_id,
+      include_downloaded,
+    } = req.body;
 
     if (!vendor_id) {
       return res.status(400).json({ message: "Please select a vendor." });
@@ -651,11 +744,20 @@ const createDownloadRequest = async (req, res) => {
     if (!quantity || quantity <= 0) {
       return res.status(400).json({ message: "Valid quantity is required." });
     }
+    if (
+      (include_downloaded === true || include_downloaded === "true") &&
+      (!vendor_id || vendor_id === "all")
+    ) {
+      return res.status(400).json({
+        message:
+          "Re-download mode requires a specific vendor (not All Vendors).",
+      });
+    }
 
     const result = await db.query(
       `INSERT INTO download_requests
-               (admin_id, vendor_id, campaign_id, quantity, states, min_age, max_age)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
+               (admin_id, vendor_id, campaign_id, quantity, states, min_age, max_age, job_id, include_downloaded)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
              RETURNING *`,
       [
         req.user.id,
@@ -665,6 +767,8 @@ const createDownloadRequest = async (req, res) => {
         states && states.length ? states : null,
         min_age || null,
         max_age || null,
+        job_id || null,
+        include_downloaded === true || include_downloaded === "true",
       ],
     );
 
@@ -842,6 +946,8 @@ const reviewDownloadRequest = async (req, res) => {
       max_age: dlReq.max_age,
       user_id: dlReq.admin_id,
       approved_by_id: req.user.id,
+      job_id: dlReq.job_id,
+      include_downloaded: dlReq.include_downloaded,
     });
     // executeDownload already committed (phase 1/2). Outer tx is effectively done.
     txnStarted = false;
@@ -1205,6 +1311,47 @@ const getVendorDownloadHistory = async (req, res) => {
   }
 };
 
+// GET /api/download/logs/:id/summary — lightweight poll for background BLA scrub (large exports)
+const getDownloadLogSummary = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await db.query(
+      `SELECT csv_payload FROM download_logs WHERE id = $1`,
+      [id],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Download record not found" });
+    }
+
+    const row = result.rows[0];
+    if (!row.csv_payload) {
+      return res.status(404).json({
+        message: "No stored scrub data for this download yet.",
+      });
+    }
+
+    const payload = JSON.parse(row.csv_payload);
+    const summary = payload.summary || {};
+    const scrubPending = summary.scrubPending === true;
+    const scrubFailed = summary.scrubFailed === true;
+    const scrubCompleted =
+      summary.scrubCompleted === true ||
+      (!scrubPending && !scrubFailed);
+
+    return res.status(200).json({
+      summary,
+      scrubPending,
+      scrubCompleted,
+      scrubFailed,
+      scrubError: summary.scrubError || null,
+    });
+  } catch (err) {
+    console.error("Get Download Log Summary Error:", err);
+    res.status(500).json({ message: "Server error loading scrub summary" });
+  }
+};
+
 // GET /api/download/logs/:id/file — re-download stored CSV from history
 const getDownloadLogFile = async (req, res) => {
   try {
@@ -1239,7 +1386,15 @@ const getDownloadLogFile = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 const getStateCounts = async (req, res) => {
   try {
-    const { vendor_id, campaign_id, states, min_age, max_age } = req.body;
+    const {
+      vendor_id,
+      campaign_id,
+      states,
+      min_age,
+      max_age,
+      job_id,
+      include_downloaded,
+    } = req.body;
     const client = await db.getClient();
     try {
       const { filters, params } = await buildFilters(client, {
@@ -1248,6 +1403,8 @@ const getStateCounts = async (req, res) => {
         states,
         min_age,
         max_age,
+        job_id,
+        include_downloaded,
       });
       const whereClause = filters.join(" AND ");
 
@@ -1282,6 +1439,152 @@ const getStateCounts = async (req, res) => {
   }
 };
 
+// GET /api/download/job/:jobId/file
+const downloadJobFile = async (req, res) => {
+  const { jobId } = req.params;
+  try {
+    const jobRes = await db.query(
+      `SELECT j.id, j.file_name, j.created_at, s.vendor_id, v.name as vendor_name
+       FROM upload_jobs j
+       JOIN upload_sessions s ON j.session_id = s.id
+       JOIN vendors v ON s.vendor_id = v.vendor_id
+       WHERE j.id = $1`,
+      [jobId]
+    );
+
+    if (jobRes.rows.length === 0) {
+      return res.status(404).json({ message: "Upload job not found" });
+    }
+
+    const job = jobRes.rows[0];
+
+    // Query leads of this job
+    let leadsRes = await db.query(
+      `SELECT name, phone, email, country_code, area_code, disposition, age, status, uploaded_at
+       FROM leads
+       WHERE job_id = $1
+       ORDER BY id ASC`,
+      [jobId]
+    );
+
+    // Fallback if no leads have this job_id (old jobs before this migration)
+    if (leadsRes.rows.length === 0) {
+      leadsRes = await db.query(
+        `SELECT name, phone, email, country_code, area_code, disposition, age, status, uploaded_at
+         FROM leads
+         WHERE vendor_id = $1
+           AND uploaded_at >= $2::timestamp with time zone - INTERVAL '5 minutes'
+           AND uploaded_at <= $2::timestamp with time zone + INTERVAL '5 minutes'
+         ORDER BY id ASC`,
+        [job.vendor_id, job.created_at]
+      );
+    }
+
+    const leads = leadsRes.rows.map((r) => {
+      let code = r.area_code;
+      if (!code || code === "Unknown") {
+        const clean = r.phone ? String(r.phone).replace(/\D/g, "") : "";
+        if (clean.length === 11 && clean.startsWith("1"))
+          code = clean.substring(1, 4);
+        else if (clean.length === 10) code = clean.substring(0, 3);
+      }
+      return {
+        ...r,
+        state: areaCodesMap[code] || "Unknown",
+      };
+    });
+
+    if (leads.length === 0) {
+      return res.status(404).json({ message: "No leads found for this uploaded file" });
+    }
+
+    const csv = new Parser({ fields: CSV_GOOD_FIELDS }).parse(leads);
+
+    return res.status(200).json({
+      fileName: job.file_name,
+      csv,
+      count: leads.length
+    });
+  } catch (err) {
+    console.error("Error downloading job file:", err);
+    return res.status(500).json({ message: "Server error downloading job file" });
+  }
+};
+
+// GET /api/download/job/:jobId/stats
+const getJobStats = async (req, res) => {
+  const { jobId } = req.params;
+  try {
+    const jobRes = await db.query(
+      `SELECT j.id, j.file_name, j.created_at, s.vendor_id, v.name as vendor_name
+       FROM upload_jobs j
+       JOIN upload_sessions s ON j.session_id = s.id
+       JOIN vendors v ON s.vendor_id = v.vendor_id
+       WHERE j.id = $1`,
+      [jobId]
+    );
+
+    if (jobRes.rows.length === 0) {
+      return res.status(404).json({ message: "Upload job not found" });
+    }
+
+    const job = jobRes.rows[0];
+
+    // Check if there are leads with this job_id
+    const jobCheck = await db.query(
+      `SELECT 1 FROM leads WHERE job_id = $1 LIMIT 1`,
+      [jobId]
+    );
+
+    let countQuery;
+    let countParams;
+
+    if (jobCheck.rows.length > 0) {
+      countQuery = `
+        SELECT 
+          COUNT(l.id)::int as total_leads,
+          COUNT(CASE WHEN l.status = 'downloaded' THEN 1 END)::int as downloaded_leads,
+          COUNT(CASE WHEN l.status = 'available' AND COALESCE(l.disposition, '') <> 'DNC' AND d.phone IS NULL THEN 1 END)::int as available_leads,
+          COUNT(CASE WHEN COALESCE(l.disposition, '') = 'DNC' OR d.phone IS NOT NULL THEN 1 END)::int as dnc_leads
+        FROM leads l
+        LEFT JOIN dnc_numbers d ON l.phone = d.phone
+        WHERE l.job_id = $1
+      `;
+      countParams = [jobId];
+    } else {
+      // Fallback for old jobs
+      countQuery = `
+        SELECT 
+          COUNT(l.id)::int as total_leads,
+          COUNT(CASE WHEN l.status = 'downloaded' THEN 1 END)::int as downloaded_leads,
+          COUNT(CASE WHEN l.status = 'available' AND COALESCE(l.disposition, '') <> 'DNC' AND d.phone IS NULL THEN 1 END)::int as available_leads,
+          COUNT(CASE WHEN COALESCE(l.disposition, '') = 'DNC' OR d.phone IS NOT NULL THEN 1 END)::int as dnc_leads
+        FROM leads l
+        LEFT JOIN dnc_numbers d ON l.phone = d.phone
+        WHERE l.vendor_id = $1
+          AND l.uploaded_at >= $2::timestamp with time zone - INTERVAL '5 minutes'
+          AND l.uploaded_at <= $2::timestamp with time zone + INTERVAL '5 minutes'
+      `;
+      countParams = [job.vendor_id, job.created_at];
+    }
+
+    const countsRes = await db.query(countQuery, countParams);
+    const counts = countsRes.rows[0] || { total_leads: 0, downloaded_leads: 0, available_leads: 0, dnc_leads: 0 };
+
+    return res.status(200).json({
+      jobId,
+      name: job.file_name,
+      total_leads: counts.total_leads,
+      downloaded_leads: counts.downloaded_leads,
+      available_leads: counts.available_leads,
+      dnc_leads: counts.dnc_leads
+    });
+  } catch (err) {
+    console.error("Error getting job stats:", err);
+    return res.status(500).json({ message: "Server error getting job stats" });
+  }
+};
+
 module.exports = {
   downloadLeads,
   createDownloadRequest,
@@ -1294,5 +1597,8 @@ module.exports = {
   getAlreadyDownloadedList,
   getVendorDownloadHistory,
   getDownloadLogFile,
+  getDownloadLogSummary,
   getStateCounts,
+  downloadJobFile,
+  getJobStats,
 };

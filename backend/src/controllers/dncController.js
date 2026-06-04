@@ -1,7 +1,17 @@
 const db = require("../config/db");
+const { Parser } = require("json2csv");
 const { normalizeUsDigits } = require("../utils/phoneParser");
 const { processFileBuffer } = require("../utils/fileProcessor");
-const { cleanupFile } = require('../middleware/upload');
+const { cleanupFile } = require("../middleware/upload");
+
+const DNC_EXPORT_FIELDS = [
+  "phone",
+  "dnc_type",
+  "campaign",
+  "source",
+  "notes",
+  "created_at",
+];
 
 const VALID_TYPES = new Set(["DNC", "SALE"]);
 
@@ -184,6 +194,135 @@ const importDnc = async (req, res) => {
   }
 };
 
+const buildDncExportFilters = ({ campaign_id, type }) => {
+  const params = [];
+  let where = "WHERE 1=1";
+
+  if (!campaign_id || campaign_id === "") {
+    return { error: "Campaign is required" };
+  }
+
+  if (campaign_id === "unassigned") {
+    where += " AND d.campaign_id IS NULL";
+  } else if (campaign_id !== "all") {
+    params.push(campaign_id);
+    where += ` AND d.campaign_id = $${params.length}`;
+  }
+
+  const t = type && type !== "ALL" ? normalizeType(type) : null;
+  if (type && type !== "ALL" && !t) {
+    return { error: "Valid type is required (DNC, SALE, or ALL)" };
+  }
+  if (t) {
+    params.push(t);
+    where += ` AND d.dnc_type = $${params.length}`;
+  }
+
+  return { where, params, type: t };
+};
+
+// GET /api/dnc/export-count?campaign_id=&type=
+const getDncExportCount = async (req, res) => {
+  try {
+    const { campaign_id, type = "ALL" } = req.query;
+    const built = buildDncExportFilters({ campaign_id, type });
+    if (built.error) {
+      return res.status(400).json({ message: built.error });
+    }
+
+    const countQuery = `
+      SELECT COUNT(*)::int AS count
+      FROM dnc_numbers d
+      ${built.where};
+    `;
+    const result = await db.query(countQuery, built.params);
+    res.json({ count: result.rows[0]?.count || 0 });
+  } catch (err) {
+    console.error("DNC export count error:", err);
+    res.status(500).json({ message: "Server error counting DNC records" });
+  }
+};
+
+// POST /api/dnc/download — export DNC/SALE numbers as CSV
+const downloadDnc = async (req, res) => {
+  try {
+    const { campaign_id, type = "ALL", quantity } = req.body || {};
+
+    const built = buildDncExportFilters({ campaign_id, type });
+    if (built.error) {
+      return res.status(400).json({ message: built.error });
+    }
+
+    const qty = parseInt(quantity, 10);
+    if (!qty || qty <= 0) {
+      return res.status(400).json({ message: "Valid quantity is required" });
+    }
+    if (qty > 500000) {
+      return res.status(400).json({ message: "Maximum 500,000 records per download" });
+    }
+
+    const dataQuery = `
+      SELECT
+        d.phone,
+        d.dnc_type,
+        COALESCE(c.name, 'Untagged') AS campaign,
+        COALESCE(d.source, '') AS source,
+        COALESCE(d.notes, '') AS notes,
+        d.created_at
+      FROM dnc_numbers d
+      LEFT JOIN campaigns c ON d.campaign_id = c.campaign_id
+      ${built.where}
+      ORDER BY d.created_at DESC
+      LIMIT $${built.params.length + 1};
+    `;
+
+    const countResult = await db.query(
+      `SELECT COUNT(*)::int AS count FROM dnc_numbers d ${built.where}`,
+      built.params,
+    );
+    const available = countResult.rows[0]?.count || 0;
+    if (available === 0) {
+      return res.status(400).json({
+        message:
+          "No DNC/SALE records for this campaign and type. Try “All Campaigns” or “No campaign linked” if numbers were imported without a campaign.",
+        available: 0,
+      });
+    }
+
+    const result = await db.query(dataQuery, [...built.params, qty]);
+    if (result.rows.length === 0) {
+      return res.status(400).json({
+        message: "No records returned. Check quantity and filters.",
+        available,
+      });
+    }
+
+    const rows = result.rows.map((r) => ({
+      ...r,
+      created_at: r.created_at
+        ? new Date(r.created_at).toISOString()
+        : "",
+    }));
+
+    const csv = new Parser({ fields: DNC_EXPORT_FIELDS }).parse(rows);
+    const typeLabel =
+      type === "ALL" ? "dnc_sale" : String(type).toLowerCase();
+    const campLabel =
+      campaign_id === "all" ? "all_campaigns" : "campaign";
+    const fileName = `${typeLabel}_${campLabel}_${Date.now()}.csv`;
+
+    res.json({
+      csv,
+      fileName,
+      count: rows.length,
+      type: type === "ALL" ? "ALL" : built.type,
+    });
+  } catch (err) {
+    console.error("DNC download error:", err);
+    res.status(500).json({ message: "Server error exporting DNC data" });
+  }
+};
+
 // DELETE /api/dnc/:id
 const deleteDnc = async (req, res) => {
   try {
@@ -207,4 +346,6 @@ module.exports = {
   addDnc,
   importDnc,
   deleteDnc,
+  getDncExportCount,
+  downloadDnc,
 };

@@ -5,7 +5,14 @@ const auth = require("../middleware/auth");
 const authorizeRole = require("../middleware/role");
 const upload = require("../middleware/upload");
 
-const { listDnc, addDnc, importDnc, deleteDnc } = require("../controllers/dncController");
+const {
+  listDnc,
+  addDnc,
+  importDnc,
+  deleteDnc,
+  getDncExportCount,
+  downloadDnc,
+} = require("../controllers/dncController");
 
 // super_admin, admin can manage DNC
 router.get("/", auth, authorizeRole(["super_admin", "admin"]), listDnc);
@@ -16,6 +23,18 @@ router.post(
   authorizeRole(["super_admin", "admin"]),
   upload.single("file"),
   importDnc,
+);
+router.get(
+  "/export-count",
+  auth,
+  authorizeRole(["super_admin", "admin"]),
+  getDncExportCount,
+);
+router.post(
+  "/download",
+  auth,
+  authorizeRole(["super_admin", "admin"]),
+  downloadDnc,
 );
 router.delete("/:id", auth, authorizeRole(["super_admin", "admin"]), deleteDnc);
 

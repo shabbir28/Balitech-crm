@@ -8,6 +8,11 @@ import {
     Building2, Hash, Calendar, Info, Sparkles, ArrowRight, BarChart3, MapPin
 } from 'lucide-react';
 
+const SCRUB_POLL_INTERVAL_MS = 5000;
+const SCRUB_POLL_MAX_MS = 60 * 60 * 1000; // 1 hour for 100k+ scrubs
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 const US_STATES = [
     { name: 'Alabama', abbr: 'AL' }, { name: 'Alaska', abbr: 'AK' }, { name: 'Arizona', abbr: 'AZ' }, { name: 'Arkansas', abbr: 'AR' },
     { name: 'California', abbr: 'CA' }, { name: 'Colorado', abbr: 'CO' }, { name: 'Connecticut', abbr: 'CT' }, { name: 'Delaware', abbr: 'DE' },
@@ -219,6 +224,154 @@ const ScrubSummaryModal = ({ data, onClose }) => {
     );
 };
 
+// ── Scrub Summary Inline Component ─────────────────────────────
+const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
+    if (!data) return null;
+
+    const { summary, badCsv } = data;
+    const isPending = summary.scrubPending === true || scrubPolling;
+
+    const handleDownloadBad = () => {
+        if (!badCsv) return;
+        const badFileName = (summary.fileName || `leads_${Date.now()}.csv`).replace('.csv', '_bad_leads.csv');
+        downloadBlob(badCsv, badFileName);
+    };
+
+    const handleDownloadGood = () => {
+        if (!data.goodCsv) return;
+        downloadBlob(data.goodCsv, summary.fileName || `leads_${Date.now()}.csv`);
+    };
+
+    const hasBadLeads = ((summary.blacklist || 0) + (summary.stateDnc || 0) + (summary.federalDnc || 0) + (summary.badPhone || 0)) > 0;
+
+    if (summary.scrubFailed) {
+        return (
+            <div className="mt-6 bg-red-500/10 border border-red-500/20 rounded-2xl p-6">
+                <p className="text-sm font-bold text-red-300">Scrub failed</p>
+                <p className="text-xs text-red-200/80 mt-1">{summary.scrubError || 'Background scrub could not complete.'}</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="mt-6 bg-[#13151f]/80 backdrop-blur-xl border border-white/[0.07] rounded-2xl p-6 shadow-2xl relative animate-fade-in">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
+                        <Sparkles className="h-4.5 w-4.5 text-white animate-pulse" />
+                    </div>
+                    <div>
+                        <h3 className="font-bold text-white text-sm">Last Export Scrub Summary</h3>
+                        <p className="text-[11px] text-slate-500">Blacklist Alliance TCPA & DNC results</p>
+                    </div>
+                </div>
+                <button
+                    onClick={onClose}
+                    className="text-slate-550 hover:text-white hover:bg-white/5 p-1.5 rounded-lg transition-colors shrink-0"
+                    title="Clear Summary"
+                >
+                    <XCircle className="h-5 w-5" />
+                </button>
+            </div>
+
+            {isPending && (
+                <div className="mb-5 flex items-start gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/25">
+                    <RefreshCw className="h-5 w-5 text-amber-400 shrink-0 animate-spin mt-0.5" />
+                    <div>
+                        <p className="text-sm font-bold text-amber-200">Scrub in progress…</p>
+                        <p className="text-[11px] text-amber-100/70 mt-1 leading-relaxed">
+                            Large exports (50k+) run Blacklist Alliance in the background. This page will update automatically with the full BLA breakdown when done — you do not need to open Already Downloaded.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* Meta details */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5 p-3 rounded-xl bg-[#0a0c14]/40 border border-white/5 text-[11px]">
+                <div className="flex items-center gap-2 text-slate-400">
+                    <Calendar className="h-3.5 w-3.5 text-slate-600 shrink-0" />
+                    <span className="font-semibold text-white">{summary.scrubDate || new Date().toLocaleString()}</span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-400 min-w-0">
+                    <Building2 className="h-3.5 w-3.5 text-slate-600 shrink-0" />
+                    <span className="font-semibold text-brand-400 truncate" title={summary.fileName}>{summary.fileName || 'leads_scrubbed.csv'}</span>
+                </div>
+            </div>
+
+            {/* Grid of Stats Cards */}
+            <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5 ${isPending ? 'opacity-60' : ''}`}>
+                <div className="bg-slate-500/5 border border-white/5 rounded-xl p-2.5 text-center">
+                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Total</p>
+                    <p className="text-base font-mono font-black text-white">{summary.total?.toLocaleString()}</p>
+                </div>
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-2.5 text-center">
+                    <p className="text-[9px] text-emerald-400 font-bold uppercase tracking-wider mb-0.5">Good Leads</p>
+                    <p className="text-base font-mono font-black text-emerald-400">{summary.good?.toLocaleString()}</p>
+                </div>
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-2.5 text-center">
+                    <p className="text-[9px] text-red-400 font-bold uppercase tracking-wider mb-0.5">Blacklist</p>
+                    <p className="text-base font-mono font-black text-red-400">{summary.blacklist?.toLocaleString()}</p>
+                </div>
+                <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-2.5 text-center">
+                    <p className="text-[9px] text-orange-400 font-bold uppercase tracking-wider mb-0.5">State DNC</p>
+                    <p className="text-base font-mono font-black text-orange-400">{summary.stateDnc?.toLocaleString()}</p>
+                </div>
+                <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-2.5 text-center">
+                    <p className="text-[9px] text-orange-500 font-bold uppercase tracking-wider mb-0.5">Fed DNC</p>
+                    <p className="text-base font-mono font-black text-orange-500">{summary.federalDnc?.toLocaleString()}</p>
+                </div>
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-2.5 text-center">
+                    <p className="text-[9px] text-red-500 font-bold uppercase tracking-wider mb-0.5">Bad Phone</p>
+                    <p className="text-base font-mono font-black text-red-500">{summary.badPhone?.toLocaleString()}</p>
+                </div>
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 text-center">
+                    <p className="text-[9px] text-amber-500 font-bold uppercase tracking-wider mb-0.5">Errors</p>
+                    <p className="text-base font-mono font-black text-amber-500">{summary.errors?.toLocaleString()}</p>
+                </div>
+                <div className="bg-slate-500/10 border border-slate-500/20 rounded-xl p-2.5 text-center">
+                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Suppress</p>
+                    <p className="text-base font-mono font-black text-slate-450">{summary.suppress?.toLocaleString() || 0}</p>
+                </div>
+            </div>
+
+            {/* Bottom Section */}
+            <div className="flex flex-col gap-3">
+                {/* Note */}
+                <div className="flex items-start gap-2 bg-blue-500/5 border border-blue-500/10 rounded-xl p-3 text-[11px] text-slate-400 leading-relaxed">
+                    <Info className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
+                    <div>
+                        <span className="font-bold text-white block mb-0.5">Compliance Actions Taken:</span>
+                        Flagged litigation & DNC leads have been added to the local DNC database and excluded from your exports.
+                    </div>
+                </div>
+
+                {!isPending && data.goodCsv && (
+                    <button
+                        type="button"
+                        onClick={handleDownloadGood}
+                        className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 text-emerald-400 font-bold text-xs rounded-xl transition-all"
+                    >
+                        <FileDown className="h-4 w-4 shrink-0" />
+                        Download Good Leads CSV ({summary.good?.toLocaleString()})
+                    </button>
+                )}
+
+                {/* Download bad leads if present */}
+                {!isPending && hasBadLeads && (
+                    <button
+                        onClick={handleDownloadBad}
+                        className="w-full flex items-center justify-center gap-2 py-3 bg-red-500/10 hover:bg-red-500/15 border border-red-500/20 hover:border-red-500/30 text-red-400 font-bold text-xs rounded-xl transition-all"
+                    >
+                        <FileDown className="h-4 w-4 shrink-0" />
+                        Download Bad/DNC Leads ({((summary.blacklist || 0) + (summary.stateDnc || 0) + (summary.federalDnc || 0) + (summary.badPhone || 0)).toLocaleString()})
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+};
+
 // ─────────────────────────────────────────────────────────────
 const DownloadLeads = () => {
     const { user } = useContext(AuthContext);
@@ -230,7 +383,15 @@ const DownloadLeads = () => {
     const [loadingV, setLoadingV]       = useState(true);
     const [loadingC, setLoadingC]       = useState(true);
 
-    const [form, setForm] = useState({ states: [], campaign_id: '', vendor_id: '', quantity: 1000, min_age: '', max_age: '' });
+    const [form, setForm] = useState({
+        states: [],
+        campaign_id: '',
+        vendor_id: '',
+        quantity: 1000,
+        min_age: '',
+        max_age: '',
+        include_downloaded: false,
+    });
     const [submitting, setSubmitting]   = useState(false);
     const [error, setError]             = useState('');
     const [successMsg, setSuccessMsg]   = useState('');
@@ -242,9 +403,17 @@ const DownloadLeads = () => {
     const [loadingReq, setLoadingReq]   = useState(false);
     const [dlId, setDlId]               = useState(null);
     const [scrubSummaryData, setScrubSummaryData] = useState(null);
+    const [scrubPolling, setScrubPolling] = useState(false);
+    const scrubPollCancelRef = useRef(false);
 
     const [stateCounts, setStateCounts] = useState({});
     const [loadingCounts, setLoadingCounts] = useState(false);
+
+    const [vendorFiles, setVendorFiles] = useState([]);
+    const [loadingFiles, setLoadingFiles] = useState(false);
+    const [selectedFileId, setSelectedFileId] = useState('');
+    
+    const [fileStats, setFileStats] = useState(null);
 
     useEffect(() => {
         Promise.all([api.get('/vendors?counts=true'), api.get('/campaigns')])
@@ -252,6 +421,48 @@ const DownloadLeads = () => {
             .catch(() => {})
             .finally(() => { setLoadingV(false); setLoadingC(false); });
     }, []);
+
+    useEffect(() => () => {
+        scrubPollCancelRef.current = true;
+    }, []);
+
+    const pollScrubSummaryUntilDone = async (logId) => {
+        scrubPollCancelRef.current = false;
+        setScrubPolling(true);
+        const deadline = Date.now() + SCRUB_POLL_MAX_MS;
+        try {
+            while (Date.now() < deadline && !scrubPollCancelRef.current) {
+                await sleep(SCRUB_POLL_INTERVAL_MS);
+                const statusRes = await api.get(`/download/logs/${logId}/summary`);
+                const { summary, scrubCompleted, scrubFailed, scrubError } = statusRes.data;
+
+                setScrubSummaryData((prev) => ({
+                    ...(prev || {}),
+                    summary: summary || prev?.summary,
+                }));
+
+                if (scrubFailed) {
+                    setError(scrubError || 'Background scrub failed.');
+                    return;
+                }
+                if (scrubCompleted) {
+                    const fullRes = await api.get(`/download/logs/${logId}/file`);
+                    setScrubSummaryData(fullRes.data);
+                    setSuccessMsg('Blacklist scrub complete — full summary is shown below.');
+                    api.get('/vendors?counts=true').then((v) => setVendors(v.data)).catch(() => {});
+                    return;
+                }
+            }
+            if (!scrubPollCancelRef.current) {
+                setError('Scrub is still running. Summary will appear here when finished, or check Already Downloaded.');
+            }
+        } catch (err) {
+            console.error('Scrub poll error', err);
+            setError(err.response?.data?.message || 'Could not refresh scrub summary.');
+        } finally {
+            setScrubPolling(false);
+        }
+    };
 
     // Fetch state counts whenever filters change and a vendor is selected
     useEffect(() => {
@@ -263,7 +474,9 @@ const DownloadLeads = () => {
                     campaign_id: form.campaign_id,
                     states: form.states,
                     min_age: form.min_age,
-                    max_age: form.max_age
+                    max_age: form.max_age,
+                    job_id: selectedFileId || undefined,
+                    include_downloaded: form.include_downloaded,
                 })
                 .then(res => setStateCounts(res.data))
                 .catch(err => console.error('Failed to fetch state counts', err))
@@ -274,7 +487,57 @@ const DownloadLeads = () => {
             const timeoutId = setTimeout(() => setStateCounts({}), 0);
             return () => clearTimeout(timeoutId);
         }
-    }, [form.vendor_id, form.campaign_id, form.states, form.min_age, form.max_age]);
+    }, [form.vendor_id, form.campaign_id, form.states, form.min_age, form.max_age, selectedFileId, form.include_downloaded]);
+
+    // Fetch vendor uploaded files whenever vendor changes
+    useEffect(() => {
+        if (form.vendor_id && form.vendor_id !== 'all') {
+            const fetchFiles = () => {
+                setLoadingFiles(true);
+                setSelectedFileId('');
+                setVendorFiles([]);
+                api.get(`/vendors/${form.vendor_id}/files`)
+                    .then(res => {
+                        setVendorFiles(res.data || []);
+                    })
+                    .catch(err => {
+                        console.error('Failed to fetch vendor files', err);
+                    })
+                    .finally(() => setLoadingFiles(false));
+            };
+            const timeoutId = setTimeout(fetchFiles, 0);
+            return () => clearTimeout(timeoutId);
+        } else {
+            const timeoutId = setTimeout(() => {
+                setVendorFiles([]);
+                setSelectedFileId('');
+            }, 0);
+            return () => clearTimeout(timeoutId);
+        }
+    }, [form.vendor_id]);
+
+    // Fetch file statistics whenever the selected file changes
+    useEffect(() => {
+        if (selectedFileId) {
+            const fetchStats = () => {
+                setFileStats(null);
+                api.get(`/download/job/${selectedFileId}/stats`)
+                    .then(res => {
+                        setFileStats(res.data);
+                    })
+                    .catch(err => {
+                        console.error('Failed to fetch job stats', err);
+                    });
+            };
+            const timeoutId = setTimeout(fetchStats, 0);
+            return () => clearTimeout(timeoutId);
+        } else {
+            const timeoutId = setTimeout(() => {
+                setFileStats(null);
+            }, 0);
+            return () => clearTimeout(timeoutId);
+        }
+    }, [selectedFileId]);
 
     const fetchMyReqs = async () => {
         if (!isAdmin) return;
@@ -304,22 +567,37 @@ const DownloadLeads = () => {
         try {
             if (isSuperAdmin) {
                 const useAsyncScrub = Number(form.quantity) >= 50000;
-                const body = { ...form, async_scrub: useAsyncScrub };
+                const body = { ...form, async_scrub: useAsyncScrub, job_id: selectedFileId || undefined };
                 const timeoutMs = useAsyncScrub ? 8 * 60 * 1000 : 30 * 60 * 1000;
                 const res = await api.post('/download', body, { timeout: timeoutMs });
                 setScrubSummaryData(res.data);
-                setSuccessMsg(
-                    useAsyncScrub
-                        ? 'CSV download ready. Blacklist scrub is running in background; DNC stats update after completion.'
-                        : 'Export scrubbing complete! View summary details below.'
-                );
-                
-                // Refetch vendors to update stats
+                if (res.data?.goodCsv && !res.data?.summary?.scrubPending) {
+                    downloadBlob(res.data.goodCsv, res.data.summary?.fileName || `leads_${Date.now()}.csv`);
+                }
+                if (res.data?.logId && res.data?.summary?.scrubPending) {
+                    setSuccessMsg(
+                        `Export saved (${res.data.summary?.total?.toLocaleString() || 0} leads). Blacklist scrub running — summary will update here automatically.`
+                    );
+                    pollScrubSummaryUntilDone(res.data.logId);
+                } else {
+                    setSuccessMsg('Export scrubbing complete! View summary details below.');
+                }
+
                 api.get('/vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
             } else {
-                await api.post('/download/request', form);
+                const body = { ...form, job_id: selectedFileId || undefined };
+                await api.post('/download/request', body);
                 setSuccessMsg('Request submitted! SuperAdmin will review it shortly.');
-                setForm({ states: [], campaign_id: '', vendor_id: '', quantity: 1000, min_age: '', max_age: '' });
+                setForm({
+                    states: [],
+                    campaign_id: '',
+                    vendor_id: '',
+                    quantity: 1000,
+                    min_age: '',
+                    max_age: '',
+                    include_downloaded: false,
+                });
+                setSelectedFileId('');
                 fetchMyReqs();
                 
                 // Refetch vendors to update stats (though usually won't change until approved)
@@ -342,6 +620,9 @@ const DownloadLeads = () => {
         try {
             const res = await api.get(`/download/requests/${req.id}/file`);
             setScrubSummaryData(res.data);
+            if (res.data?.goodCsv) {
+                downloadBlob(res.data.goodCsv, res.data.summary?.fileName || `leads_request_${req.id}.csv`);
+            }
         } catch { alert('Download failed. Try again.'); }
         finally { setDlId(null); }
     };
@@ -361,6 +642,17 @@ const DownloadLeads = () => {
     } else {
         selectedVendor = vendors.find(v => String(v.vendor_id) === String(form.vendor_id));
     }
+
+    const vendorDownloadPool = (v) => {
+        const available = parseInt(v?.available_leads || 0, 10);
+        const total = parseInt(v?.total_leads || 0, 10);
+        return form.include_downloaded ? total : available;
+    };
+
+    const selectedVendorPool =
+        selectedVendor && form.vendor_id !== 'all'
+            ? vendorDownloadPool(selectedVendor)
+            : null;
 
     return (
         <div className="min-h-screen" style={{ fontFamily: "'Inter', sans-serif" }}>
@@ -418,14 +710,27 @@ const DownloadLeads = () => {
                             <Field label="Vendor Source" required hint="Select the vendor whose data you want to export">
                                 <SelectInput
                                     value={form.vendor_id}
-                                    onChange={e => setForm({ ...form, vendor_id: e.target.value })}
+                                    onChange={e => {
+                                        const vendor_id = e.target.value;
+                                        setForm(p => ({
+                                            ...p,
+                                            vendor_id,
+                                            include_downloaded:
+                                                vendor_id && vendor_id !== 'all'
+                                                    ? p.include_downloaded
+                                                    : false,
+                                        }));
+                                    }}
                                     disabled={loadingV}
                                 >
                                     <option value="" disabled>{loadingV ? 'Loading...' : 'Choose a vendor...'}</option>
                                     <option value="all">All Vendors</option>
                                     {vendors.map(v => (
                                         <option key={v.vendor_id} value={v.vendor_id}>
-                                            {v.name}{v.available_leads != null ? ` — ${v.available_leads.toLocaleString()} available` : ''}
+                                            {v.name}
+                                            {v.available_leads != null
+                                                ? ` — ${vendorDownloadPool(v).toLocaleString()} ${form.include_downloaded ? 're-downloadable' : 'available'}`
+                                                : ''}
                                         </option>
                                     ))}
                                 </SelectInput>
@@ -436,7 +741,78 @@ const DownloadLeads = () => {
                                         <span className="text-xs font-semibold text-brand-300">{selectedVendor.name}</span>
                                     </div>
                                 )}
+
+                                {form.vendor_id && form.vendor_id !== 'all' && (
+                                    <label className="flex items-start gap-3 mt-4 p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 cursor-pointer hover:bg-amber-500/10 transition-colors">
+                                        <input
+                                            type="checkbox"
+                                            checked={form.include_downloaded}
+                                            onChange={e => {
+                                                const checked = e.target.checked;
+                                                const v = vendors.find(x => String(x.vendor_id) === String(form.vendor_id));
+                                                const pool = v
+                                                    ? parseInt(v.total_leads || 0, 10)
+                                                    : form.quantity;
+                                                setForm(p => ({
+                                                    ...p,
+                                                    include_downloaded: checked,
+                                                    quantity: checked && v ? pool : p.quantity,
+                                                }));
+                                            }}
+                                            className="mt-1 h-4 w-4 rounded border-amber-500/40 text-amber-500 focus:ring-amber-500/30"
+                                        />
+                                        <span className="text-[13px] text-slate-300 leading-relaxed">
+                                            <span className="font-bold text-amber-300 block mb-0.5">
+                                                Export all vendor leads again
+                                            </span>
+                                            When available shows 0, enable this to re-export that vendor&apos;s full dataset (available, downloaded, and DNC)
+                                            {selectedVendorPool != null && (
+                                                <span className="text-amber-400/90 font-semibold">
+                                                    {' '}({selectedVendorPool.toLocaleString()} leads in pool)
+                                                </span>
+                                            )}
+                                        </span>
+                                    </label>
+                                )}
                             </Field>
+
+                            {/* Vendor Uploaded Files */}
+                            {form.vendor_id && form.vendor_id !== 'all' && (
+                                <div className="p-4 rounded-2xl border border-white/[0.05] bg-white/[0.01] backdrop-blur-md space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                                            <FileDown className="h-4 w-4 text-brand-400" />
+                                            Uploaded Files
+                                        </span>
+                                        {loadingFiles && <span className="text-xs text-brand-400 animate-pulse font-bold">Loading...</span>}
+                                    </div>
+                                    
+                                    <SelectInput
+                                        value={selectedFileId}
+                                        onChange={e => setSelectedFileId(e.target.value)}
+                                        disabled={loadingFiles || vendorFiles.length === 0}
+                                    >
+                                        <option value="">
+                                            {loadingFiles 
+                                                ? 'Fetching files...' 
+                                                : vendorFiles.length === 0 
+                                                    ? 'No uploaded files found' 
+                                                    : 'All files (no file filter)'}
+                                        </option>
+                                        {vendorFiles.map(file => (
+                                            <option key={file.id} value={file.id}>
+                                                {file.file_name} ({new Date(file.created_at).toLocaleDateString()} — {file.total_rows?.toLocaleString() || 0} rows)
+                                            </option>
+                                        ))}
+                                    </SelectInput>
+                                    
+                                    {vendorFiles.length > 0 && !selectedFileId && (
+                                        <p className="text-[11px] text-slate-500 font-medium">
+                                            Select one of the {vendorFiles.length} files uploaded for this vendor to filter and download leads from that file specifically.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                 {/* State Filter */}
@@ -563,6 +939,17 @@ const DownloadLeads = () => {
                             </button>
                         </form>
                     </div>
+
+                    {/* Inline Scrub Summary */}
+                    <ScrubSummaryInline
+                        data={scrubSummaryData}
+                        scrubPolling={scrubPolling}
+                        onClose={() => {
+                            scrubPollCancelRef.current = true;
+                            setScrubSummaryData(null);
+                            setScrubPolling(false);
+                        }}
+                    />
                 </div>
 
                 {/* ── RIGHT: Info / Summary ────────────────────── */}
@@ -610,22 +997,66 @@ const DownloadLeads = () => {
                         </h3>
                         
                         <div className="space-y-3 text-[13px]">
-                            <div className="flex justify-between items-center p-3 rounded-xl bg-white/5 border border-white/5">
-                                <span className="text-slate-400 font-medium">Selected Vendor</span>
-                                <span className="text-white font-bold tracking-wide">{selectedVendor?.name || '—'}</span>
-                            </div>
-                            
-                            {selectedVendor && (
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 flex flex-col justify-center items-center text-center">
-                                        <span className="text-[10px] text-emerald-400/80 font-bold uppercase tracking-wider mb-1">Available Leads</span>
-                                        <span className="text-emerald-400 font-mono font-black text-lg">{parseInt(selectedVendor.available_leads).toLocaleString()}</span>
+                            {selectedFileId && fileStats ? (
+                                <>
+                                    <div className="flex justify-between items-center p-3 rounded-xl bg-white/5 border border-white/5">
+                                        <span className="text-slate-400 font-medium">Selected File</span>
+                                        <span className="text-white font-bold tracking-wide truncate max-w-[200px]" title={fileStats.name}>{fileStats.name}</span>
                                     </div>
-                                    <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 flex flex-col justify-center items-center text-center">
-                                        <span className="text-[10px] text-orange-400/80 font-bold uppercase tracking-wider mb-1">Downloaded</span>
-                                        <span className="text-orange-400 font-mono font-black text-lg">{parseInt(selectedVendor.downloaded_leads).toLocaleString()}</span>
+                                    
+                                    <div className="grid grid-cols-4 gap-2">
+                                        <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-2.5 flex flex-col justify-center items-center text-center">
+                                            <span className="text-[9px] text-blue-400/80 font-bold uppercase tracking-wider mb-0.5">Total Leads</span>
+                                            <span className="text-blue-400 font-mono font-black text-[13px]">{parseInt(fileStats.total_leads || 0).toLocaleString()}</span>
+                                        </div>
+                                        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-2.5 flex flex-col justify-center items-center text-center">
+                                            <span className="text-[9px] text-emerald-400/80 font-bold uppercase tracking-wider mb-0.5">Available</span>
+                                            <span className="text-emerald-400 font-mono font-black text-[13px]">{parseInt(fileStats.available_leads || 0).toLocaleString()}</span>
+                                        </div>
+                                        <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-2.5 flex flex-col justify-center items-center text-center">
+                                            <span className="text-[9px] text-orange-400/80 font-bold uppercase tracking-wider mb-0.5">Downloaded</span>
+                                            <span className="text-orange-400 font-mono font-black text-[13px]">{parseInt(fileStats.downloaded_leads || 0).toLocaleString()}</span>
+                                        </div>
+                                        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-2.5 flex flex-col justify-center items-center text-center">
+                                            <span className="text-[9px] text-red-400/80 font-bold uppercase tracking-wider mb-0.5">DNC</span>
+                                            <span className="text-red-400 font-mono font-black text-[13px]">{parseInt(fileStats.dnc_leads || 0).toLocaleString()}</span>
+                                        </div>
                                     </div>
-                                </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="flex justify-between items-center p-3 rounded-xl bg-white/5 border border-white/5">
+                                        <span className="text-slate-400 font-medium">Selected Vendor</span>
+                                        <span className="text-white font-bold tracking-wide">{selectedVendor?.name || '—'}</span>
+                                    </div>
+                                    
+                                    {selectedVendor && (
+                                        <div className="grid grid-cols-4 gap-2">
+                                            <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-2.5 flex flex-col justify-center items-center text-center">
+                                                <span className="text-[9px] text-blue-400/80 font-bold uppercase tracking-wider mb-0.5">Total Leads</span>
+                                                <span className="text-blue-400 font-mono font-black text-[13px]">{parseInt(selectedVendor.total_leads || 0).toLocaleString()}</span>
+                                            </div>
+                                            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-2.5 flex flex-col justify-center items-center text-center">
+                                                <span className="text-[9px] text-emerald-400/80 font-bold uppercase tracking-wider mb-0.5">
+                                                    {form.include_downloaded ? 'All vendor leads' : 'Available'}
+                                                </span>
+                                                <span className="text-emerald-400 font-mono font-black text-[13px]">
+                                                    {selectedVendorPool != null
+                                                        ? selectedVendorPool.toLocaleString()
+                                                        : parseInt(selectedVendor.available_leads || 0).toLocaleString()}
+                                                </span>
+                                            </div>
+                                            <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-2.5 flex flex-col justify-center items-center text-center">
+                                                <span className="text-[9px] text-orange-400/80 font-bold uppercase tracking-wider mb-0.5">Downloaded</span>
+                                                <span className="text-orange-400 font-mono font-black text-[13px]">{parseInt(selectedVendor.downloaded_leads || 0).toLocaleString()}</span>
+                                            </div>
+                                            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-2.5 flex flex-col justify-center items-center text-center">
+                                                <span className="text-[9px] text-red-400/80 font-bold uppercase tracking-wider mb-0.5">DNC</span>
+                                                <span className="text-red-400 font-mono font-black text-[13px]">{parseInt(selectedVendor.dnc_leads || 0).toLocaleString()}</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
                             )}
 
                             {/* State Breakdown Section */}
@@ -806,8 +1237,7 @@ const DownloadLeads = () => {
                 </div>
             )}
             
-            {/* ── Interactive Scrub Summary Dialog Modal ── */}
-            <ScrubSummaryModal data={scrubSummaryData} onClose={() => setScrubSummaryData(null)} />
+            {/* ── Scrub Summary modal removed to display inline on page instead ── */}
         </div>
     );
 };

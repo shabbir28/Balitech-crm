@@ -25,10 +25,12 @@ const getVendors = async (req, res) => {
       query = `
                 SELECT v.*, 
                        COUNT(l.id)::int as total_leads,
-                       COUNT(CASE WHEN l.status = 'available' THEN 1 END)::int as available_leads,
-                       COUNT(CASE WHEN l.status = 'downloaded' THEN 1 END)::int as downloaded_leads
+                       COUNT(CASE WHEN l.status = 'available' AND COALESCE(l.disposition, '') <> 'DNC' AND d.phone IS NULL THEN 1 END)::int as available_leads,
+                       COUNT(CASE WHEN l.status = 'downloaded' THEN 1 END)::int as downloaded_leads,
+                       COUNT(CASE WHEN COALESCE(l.disposition, '') = 'DNC' OR d.phone IS NOT NULL THEN 1 END)::int as dnc_leads
                 FROM vendors v
                 LEFT JOIN leads l ON v.vendor_id = l.vendor_id
+                LEFT JOIN dnc_numbers d ON l.phone = d.phone
                 GROUP BY v.vendor_id
                 ORDER BY v.created_at DESC
             `;
@@ -84,9 +86,29 @@ const deleteVendor = async (req, res) => {
   }
 };
 
+// GET /api/vendors/:id/files
+const getVendorFiles = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await db.query(
+      `SELECT j.id, j.file_name, j.total_rows, j.created_at, j.status, s.campaign_type
+       FROM upload_jobs j
+       JOIN upload_sessions s ON j.session_id = s.id
+       WHERE s.vendor_id = $1 AND j.status = 'Completed'
+       ORDER BY j.created_at DESC`,
+      [id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error fetching vendor files:", err);
+    res.status(500).json({ message: "Server error fetching vendor files" });
+  }
+};
+
 module.exports = {
   createVendor,
   getVendors,
   updateVendor,
   deleteVendor,
+  getVendorFiles,
 };
