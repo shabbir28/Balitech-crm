@@ -10,6 +10,8 @@ const getStats = async (req, res) => {
       campaignStatsResult,
       dncStatsResult,
       recentSessionsResult,
+      refineStatsResult,
+      refineCampaignStatsResult,
     ] = await Promise.all([
       // 1. Leads Overall Stats (Single Scan)
       db.query(`
@@ -81,15 +83,39 @@ const getStats = async (req, res) => {
                 ORDER BY s.created_at DESC
                 LIMIT 6
             `),
+
+      // 7. Refine Stats
+      db.query(`
+                SELECT 
+                    COUNT(*)::int AS total_refine_data,
+                    COUNT(CASE WHEN quality = 'Good' THEN 1 END)::int AS good_refine_data,
+                    COUNT(CASE WHEN quality = 'Bad' THEN 1 END)::int AS bad_refine_data
+                FROM refine_data
+            `),
+
+      // 8. Refine data per campaign (ACA, MEDICARE, etc.)
+      db.query(`
+                SELECT
+                    campaign_type AS name,
+                    COUNT(*)::int AS count,
+                    COUNT(CASE WHEN quality = 'Good' THEN 1 END)::int AS good_count,
+                    COUNT(CASE WHEN quality = 'Bad' THEN 1 END)::int AS bad_count
+                FROM refine_data
+                WHERE campaign_type IS NOT NULL AND TRIM(campaign_type) <> ''
+                GROUP BY campaign_type
+                ORDER BY count DESC
+            `),
     ]);
 
     // Construct totals object
     const leadsStats = leadsStatsResult.rows[0];
     const otherStats = otherTotalsResult.rows[0];
+    const refineStats = refineStatsResult.rows[0];
     
     const totals = {
       ...leadsStats,
-      ...otherStats
+      ...otherStats,
+      ...refineStats
     };
 
     // Construct lead status breakdown from leadsStats
@@ -105,6 +131,7 @@ const getStats = async (req, res) => {
       dncStats: dncStatsResult.rows,
       leadStatusBreakdown,
       recentSessions: recentSessionsResult.rows,
+      refineCampaignStats: refineCampaignStatsResult.rows,
     });
   } catch (err) {
     console.error("Dashboard Stats Error:", err);

@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { Plus, Trash2, Edit, Eye, X, AlertTriangle, CheckCircle, Search } from 'lucide-react';
 
-const Vendors = () => {
+const RefineVendors = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const urlSearch = searchParams.get('search') || '';
     const [localSearch, setLocalSearch] = useState(urlSearch);
@@ -30,7 +30,7 @@ const Vendors = () => {
 
     const fetchVendors = async () => {
         try {
-            const res = await api.get('/vendors?counts=false');
+            const res = await api.get('/refine-vendors?counts=false');
             setVendors(res.data);
         } catch (err) {
             console.error(err);
@@ -101,10 +101,10 @@ const Vendors = () => {
         e.preventDefault();
         try {
             if (editingId) {
-                await api.put(`/vendors/${editingId}`, formData);
+                await api.put(`/refine-vendors/${editingId}`, formData);
                 showNotification('Vendor updated successfully');
             } else {
-                await api.post('/vendors', formData);
+                await api.post('/refine-vendors', formData);
                 showNotification('Vendor created successfully');
             }
             setShowFormModal(false);
@@ -125,7 +125,7 @@ const Vendors = () => {
     const executeDelete = async () => {
         setDeleteModal(prev => ({ ...prev, isDeleting: true }));
         try {
-            await api.delete(`/vendors/${deleteModal.id}`);
+            await api.delete(`/refine-vendors/${deleteModal.id}`);
             showNotification('Vendor deleted successfully');
             fetchVendors();
             setDeleteModal({ isOpen: false, id: null, isDeleting: false });
@@ -140,7 +140,7 @@ const Vendors = () => {
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-                <h1 className="text-2xl font-bold text-white tracking-tight">Vendor Management</h1>
+                <h1 className="text-2xl font-bold text-white tracking-tight">Refine Vendor Management</h1>
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                     <div className="relative w-full sm:w-72">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
@@ -400,4 +400,4 @@ const Vendors = () => {
     );
 };
 
-export default Vendors;
+export default RefineVendors;

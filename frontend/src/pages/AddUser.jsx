@@ -47,6 +47,11 @@ const AddUser = ({ editMode }) => {
     const [dragOver, setDragOver] = useState(false);
     const [loadingUser, setLoadingUser] = useState(editMode);
 
+    const showToast = (msg, type = 'success') => {
+        setToast({ msg, type });
+        setTimeout(() => setToast(null), 3500);
+    };
+
     // Fetch existing user data in edit mode
     useEffect(() => {
         if (!editMode || !id) return;
@@ -71,11 +76,6 @@ const AddUser = ({ editMode }) => {
             .catch(() => showToast('Failed to load user data', 'error'))
             .finally(() => setLoadingUser(false));
     }, [editMode, id]);
-
-    const showToast = (msg, type = 'success') => {
-        setToast({ msg, type });
-        setTimeout(() => setToast(null), 3500);
-    };
 
     const handleChange = (e) => {
         const { name, value } = e.target;

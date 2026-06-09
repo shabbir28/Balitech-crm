@@ -5,8 +5,14 @@ const DEFAULT_BATCH = 500;
 const sortByPhone = (records) =>
   [...records].sort((a, b) => String(a.phone).localeCompare(String(b.phone)));
 
+const getQuality = (disposition) => {
+  if (!disposition) return 'Good';
+  const badStatuses = new Set(['A', 'AA', 'AB', 'ADC', 'DAIR', 'DC', 'DROP', 'N', 'NA', 'PDROP', 'PU']);
+  return badStatuses.has(String(disposition).toUpperCase().trim()) ? 'Bad' : 'Good';
+};
+
 /**
- * Insert only new leads (fresh upload). Each batch is its own statement — no long transaction.
+ * Insert only new refine_data (fresh upload). Each batch is its own statement — no long transaction.
  */
 const insertFreshLeadsBatches = async (
   exec,
@@ -27,7 +33,7 @@ const insertFreshLeadsBatches = async (
 
     for (const record of batch) {
       valueStrings.push(
-        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9})`,
+        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10})`,
       );
       values.push(
         truncate(record.name, 150) || null,
@@ -40,16 +46,17 @@ const insertFreshLeadsBatches = async (
         truncate(session.campaign_type, 50),
         record.age || null,
         job_id || null,
+        getQuality(record.disposition),
       );
-      paramIndex += 10;
+      paramIndex += 11;
     }
 
     if (valueStrings.length === 0) continue;
 
     const query = `
-      INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, campaign_type, age, job_id)
+      INSERT INTO refine_data (name, phone, email, country_code, area_code, vendor_id, disposition, campaign_type, age, job_id, quality)
       VALUES ${valueStrings.join(",")}
-      ON CONFLICT (phone, workspace) DO NOTHING
+      ON CONFLICT (phone) DO NOTHING
     `;
 
     const result = await withDeadlockRetry(() => exec.query(query, values));
@@ -60,7 +67,7 @@ const insertFreshLeadsBatches = async (
 };
 
 /**
- * Standard session upload: upsert leads, DNC filtered by caller.
+ * Standard session upload: upsert refine_data, DNC filtered by caller.
  */
 const insertLeadsUpsertBatches = async (
   exec,
@@ -82,7 +89,7 @@ const insertLeadsUpsertBatches = async (
 
     for (const record of batch) {
       valueStrings.push(
-        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8})`,
+        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10})`,
       );
       values.push(
         truncate(record.name, 150) || null,
@@ -92,35 +99,41 @@ const insertLeadsUpsertBatches = async (
         record.areaCode,
         session.vendor_id,
         truncate(record.disposition, 100) || null,
+        truncate(session.campaign_type, 50),
         record.age || null,
         job_id || null,
+        getQuality(record.disposition),
       );
-      paramIndex += 9;
+      paramIndex += 11;
     }
 
     if (valueStrings.length === 0) continue;
 
     const query = `
-      INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, age, job_id)
+      INSERT INTO refine_data (name, phone, email, country_code, area_code, vendor_id, disposition, campaign_type, age, job_id, quality)
       VALUES ${valueStrings.join(",")}
-      ON CONFLICT (phone, workspace) DO UPDATE SET
+      ON CONFLICT (phone) DO UPDATE SET
         disposition = CASE
           WHEN EXCLUDED.disposition IS NOT NULL AND EXCLUDED.disposition <> '' THEN EXCLUDED.disposition
-          ELSE leads.disposition
+          ELSE refine_data.disposition
         END,
         name = CASE
           WHEN EXCLUDED.name IS NOT NULL AND EXCLUDED.name <> '' THEN EXCLUDED.name
-          ELSE leads.name
+          ELSE refine_data.name
         END,
         email = CASE
           WHEN EXCLUDED.email IS NOT NULL AND EXCLUDED.email <> '' THEN EXCLUDED.email
-          ELSE leads.email
+          ELSE refine_data.email
         END,
         age = CASE
           WHEN EXCLUDED.age IS NOT NULL THEN EXCLUDED.age
-          ELSE leads.age
+          ELSE refine_data.age
         END,
-        job_id = COALESCE(EXCLUDED.job_id, leads.job_id)
+        quality = CASE
+          WHEN EXCLUDED.quality IS NOT NULL THEN EXCLUDED.quality
+          ELSE refine_data.quality
+        END,
+        job_id = COALESCE(EXCLUDED.job_id, refine_data.job_id)
       RETURNING (xmax = 0) AS inserted
     `;
 

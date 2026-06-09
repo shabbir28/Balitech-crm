@@ -29,6 +29,13 @@ const dncRoutes = require("./routes/dnc");
 const securityRoutes = require("./routes/security");
 
 const notificationRoutes = require("./routes/notifications");
+const refineSessionRoutes = require("./routes/refine_sessions");
+const refineJobRoutes = require("./routes/refine_jobs");
+const refineDataRoutes = require("./routes/refine_data");
+const refineDownloadRoutes = require("./routes/refine_download");
+const refineDncRoutes = require("./routes/refine_dnc");
+const refineVendorRoutes = require("./routes/refine_vendors");
+const refineCampaignRoutes = require("./routes/refine_campaigns");
 
 const enforceIPWhitelist = require("./middleware/ipWhitelist");
  
@@ -159,6 +166,14 @@ app.use("/api/dnc", dncRoutes);
 app.use("/api/security", securityRoutes);
 
 app.use("/api/notifications", notificationRoutes);
+
+app.use("/api/refine-sessions", refineSessionRoutes);
+app.use("/api/refine-jobs", refineJobRoutes);
+app.use("/api/refine-data", refineDataRoutes);
+app.use("/api/refine-download", refineDownloadRoutes);
+app.use("/api/refine-dnc", refineDncRoutes);
+app.use("/api/refine-vendors", refineVendorRoutes);
+app.use("/api/refine-campaigns", refineCampaignRoutes);
  
 // =========================
 

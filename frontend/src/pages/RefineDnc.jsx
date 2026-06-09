@@ -12,7 +12,7 @@ const downloadBlob = (content, filename) => {
     URL.revokeObjectURL(url);
 };
 
-const Dnc = () => {
+const RefineDnc = () => {
     const [type, setType] = useState('DNC');
     const [search, setSearch] = useState('');
     const [rows, setRows] = useState([]);
@@ -35,7 +35,7 @@ const Dnc = () => {
     const [downloadSuccess, setDownloadSuccess] = useState('');
 
     const queryString = useMemo(() => {
-        return `/dnc?page=1&limit=50&type=${encodeURIComponent(type)}&search=${encodeURIComponent(search)}`;
+        return `/refine-dnc?page=1&limit=50&type=${encodeURIComponent(type)}&search=${encodeURIComponent(search)}`;
     }, [type, search]);
 
     const fetchList = async () => {
@@ -56,7 +56,7 @@ const Dnc = () => {
     }, [queryString]);
 
     useEffect(() => {
-        api.get('/campaigns')
+        api.get('/refine-campaigns')
             .then(res => setCampaigns(res.data.filter(c => c.status === 'Active')))
             .catch(e => console.error('Failed to load campaigns', e));
     }, []);
@@ -69,7 +69,7 @@ const Dnc = () => {
         const timer = setTimeout(() => {
             setLoadingExportCount(true);
             setDownloadError('');
-            api.get(`/dnc/export-count?campaign_id=${encodeURIComponent(downloadCampaign)}&type=${encodeURIComponent(downloadType)}`)
+            api.get(`/refine-dnc/export-count?campaign_id=${encodeURIComponent(downloadCampaign)}&type=${encodeURIComponent(downloadType)}`)
                 .then(res => {
                     const count = res.data.count || 0;
                     setExportCount(count);
@@ -109,7 +109,7 @@ const Dnc = () => {
         setDownloadError('');
         setDownloadSuccess('');
         try {
-            const res = await api.post('/dnc/download', {
+            const res = await api.post('/refine-dnc/download', {
                 campaign_id: downloadCampaign,
                 type: downloadType,
                 quantity: qty,
@@ -137,7 +137,7 @@ const Dnc = () => {
         if (!deleteConfirmId) return;
         setIsDeleting(true);
         try {
-            await api.delete(`/dnc/${deleteConfirmId}`);
+            await api.delete(`/refine-dnc/${deleteConfirmId}`);
             fetchList();
             setDeleteConfirmId(null);
         } catch (e) {
@@ -157,7 +157,7 @@ const Dnc = () => {
                         <ShieldAlert className="w-8 h-8 text-rose-500" /> DNC & Sales Manager
                     </h1>
                     <p className="text-slate-400 text-sm mt-2 font-medium">
-                        Manage DNC and Sale numbers to ensure strict compliance before upload/download.
+                        Manage DNC and Sale numbers to ensure strict compliance before upload/refine-download.
                     </p>
                 </div>
 
@@ -356,7 +356,7 @@ const Dnc = () => {
                                     form.append('file', importFile);
                                     form.append('type', 'SALE');
                                     form.append('campaign_id', selectedCampaign);
-                                    api.post('/dnc/import', form, {
+                                    api.post('/refine-dnc/import', form, {
                                         headers: { 'Content-Type': 'multipart/form-data' },
                                     }).then(() => {
                                         setImportFile(null);
@@ -400,7 +400,7 @@ const Dnc = () => {
                                     form.append('file', importFile);
                                     form.append('type', 'DNC');
                                     form.append('campaign_id', selectedCampaign);
-                                    api.post('/dnc/import', form, {
+                                    api.post('/refine-dnc/import', form, {
                                         headers: { 'Content-Type': 'multipart/form-data' },
                                     }).then(() => {
                                         setImportFile(null);
@@ -554,4 +554,4 @@ const Dnc = () => {
     );
 };
 
-export default Dnc;
+export default RefineDnc;

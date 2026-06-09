@@ -13,10 +13,6 @@ const SecuritySettings = () => {
     const [formErrors, setFormErrors] = useState({});
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    useEffect(() => {
-        fetchIPs();
-    }, []);
-
     const fetchIPs = async () => {
         try {
             setLoading(true);
@@ -28,6 +24,10 @@ const SecuritySettings = () => {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        fetchIPs();
+    }, []);
 
     const handleOpenModal = (ip = null) => {
         if (ip) {

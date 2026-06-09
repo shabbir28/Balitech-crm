@@ -121,7 +121,7 @@ const Dashboard = () => {
 
     if (!data) return <div style={{ color:'#f87171', padding:32 }}>Failed to load stats.</div>;
 
-    const { totals, vendorDistribution, campaignStats, dncStats, leadStatusBreakdown, recentSessions } = data;
+    const { totals, vendorDistribution, campaignStats, dncStats, leadStatusBreakdown, recentSessions, refineCampaignStats } = data;
 
     // enrich lead status for pie
     const STATUS_COLORS = { available:'#10b981', downloaded:'#3b82f6', dnc:'#f97316', sold:'#a855f7', duplicate:'#6b7280' };
@@ -176,6 +176,48 @@ const Dashboard = () => {
                     </div>
                 </div>
             )}
+
+            {/* ── Refine Data Cards ── */}
+            <div style={{ marginBottom: 32 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
+                    <Layers size={16} color="#14b8a6" />
+                    <h2 style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', letterSpacing: '0.02em' }}>Refine Data</h2>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
+                    <div style={{ maxWidth: '300px' }}>
+                        <KpiCard index={0} icon={Database} label="Total Refine" value={+totals.total_refine_data} color="#14b8a6" sub="Refine module leads" />
+                    </div>
+                    <div style={{ maxWidth: '300px' }}>
+                        <KpiCard index={1} icon={CheckCircle2} label="Good Refine" value={+totals.good_refine_data} color="#10b981" sub="High quality data" />
+                    </div>
+                    <div style={{ maxWidth: '300px' }}>
+                        <KpiCard index={2} icon={AlertCircle} label="Bad Refine" value={+totals.bad_refine_data} color="#ef4444" sub="Low quality data" />
+                    </div>
+                </div>
+
+                {refineCampaignStats && refineCampaignStats.length > 0 && (
+                    <div style={{ marginTop: 20 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
+                            <Target size={15} color="#14b8a6" />
+                            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.02em' }}>Refine Data by Campaign</h3>
+                        </div>
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
+                            {refineCampaignStats.map((camp, idx) => (
+                                <div key={camp.name} style={{ maxWidth: '300px' }}>
+                                    <KpiCard
+                                        index={idx + 3}
+                                        icon={Target}
+                                        label={camp.name}
+                                        value={+camp.count}
+                                        color={COLORS[(idx + 2) % COLORS.length]}
+                                        sub={`Good: ${(+camp.good_count || 0).toLocaleString()} · Bad: ${(+camp.bad_count || 0).toLocaleString()}`}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
 
             {/* ── Row 2: Vendor Bar + Lead Status Pie ── */}
             <div style={{ display:'grid', gridTemplateColumns:'1fr 340px', gap:20, marginBottom:20, animation:'fadeUp .5s .25s ease both' }}>

@@ -24,6 +24,19 @@ import SecuritySettings from './pages/SecuritySettings';
 import CompareFiles from './pages/CompareFiles';
 import AlreadyDownloaded from './pages/AlreadyDownloaded';
 
+import RefineVendors from './pages/RefineVendors';
+import RefineUploadLeads from './pages/RefineUploadLeads';
+import RefineSessionsList from './pages/RefineSessionsList';
+import RefineSessionDetails from './pages/RefineSessionDetails';
+import RefineLeadsTable from './pages/RefineLeadsTable';
+import RefineDownloadLeads from './pages/RefineDownloadLeads';
+import RefineAlreadyDownloaded from './pages/RefineAlreadyDownloaded';
+import RefineDnc from './pages/RefineDnc';
+import RefineCampaigns from './pages/RefineCampaigns';
+import RefineAddCampaign from './pages/RefineAddCampaign';
+import RefineAddJob from './pages/RefineAddJob';
+
+
 const ProtectedRoute = ({ children, roles }) => {
     const { user, loading } = useContext(AuthContext);
     const location = useLocation();
@@ -96,6 +109,21 @@ const AppRoutes = () => {
             <Route path="/campaigns" element={<ProtectedRoute roles={['super_admin', 'admin']}><Campaigns /></ProtectedRoute>} />
             <Route path="/campaigns/add" element={<ProtectedRoute roles={['super_admin', 'admin']}><AddCampaign /></ProtectedRoute>} />
             <Route path="/campaigns/edit/:id" element={<ProtectedRoute roles={['super_admin', 'admin']}><AddCampaign editMode /></ProtectedRoute>} />
+
+            
+            {/* REFINE DATA MODULE */}
+            <Route path="/refine-vendors" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><RefineVendors /></ProtectedRoute>} />
+            <Route path="/refine-upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><RefineUploadLeads /></ProtectedRoute>} />
+            <Route path="/refine-sessions" element={<ProtectedRoute roles={['super_admin', 'admin']}><RefineSessionsList /></ProtectedRoute>} />
+            <Route path="/refine-sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><RefineSessionDetails /></ProtectedRoute>} />
+            <Route path="/refine-sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><RefineAddJob /></ProtectedRoute>} />
+            <Route path="/refine-data" element={<ProtectedRoute roles={['super_admin', 'admin']}><RefineLeadsTable /></ProtectedRoute>} />
+            <Route path="/refine-download" element={<ProtectedRoute roles={['super_admin', 'admin']}><RefineDownloadLeads /></ProtectedRoute>} />
+            <Route path="/refine-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin']}><RefineAlreadyDownloaded /></ProtectedRoute>} />
+            <Route path="/refine-dnc" element={<ProtectedRoute roles={['super_admin', 'admin']}><RefineDnc /></ProtectedRoute>} />
+            <Route path="/refine-campaigns" element={<ProtectedRoute roles={['super_admin', 'admin']}><RefineCampaigns /></ProtectedRoute>} />
+            <Route path="/refine-campaigns/add" element={<ProtectedRoute roles={['super_admin', 'admin']}><RefineAddCampaign /></ProtectedRoute>} />
+            <Route path="/refine-campaigns/edit/:id" element={<ProtectedRoute roles={['super_admin', 'admin']}><RefineAddCampaign editMode /></ProtectedRoute>} />
 
             {/* Catch all */}
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -24,6 +24,8 @@ export default defineConfig([
     },
     rules: {
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // Standard data-fetch-on-mount pattern used across CRM pages
+      'react-hooks/set-state-in-effect': 'off',
     },
   },
 ])

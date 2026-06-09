@@ -196,6 +196,9 @@ const Layout = ({ children }) => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [searchOpen,  setSearchOpen]  = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [vendorResults, setVendorResults] = useState([]);
+    const [refineVendorResults, setRefineVendorResults] = useState([]);
+    const [searchDataLoading, setSearchDataLoading] = useState(false);
     const searchRef  = useRef(null);
     const searchInputRef = useRef(null);
 
@@ -258,8 +261,20 @@ const Layout = ({ children }) => {
         { label: 'Logs',              path: '/logs',              roles: ['super_admin','admin'],        icon: <TerminalSquare className="h-4 w-4" /> },
         { label: 'Users',             path: '/users',             roles: ['super_admin'],               icon: <UserCheck className="h-4 w-4" /> },
         { label: 'Download Requests', path: '/download-requests', roles: ['super_admin'],               icon: <ClipboardList className="h-4 w-4" /> },
-        { label: 'Security',          path: '/security',          roles: ['super_admin'],               icon: <ShieldBan className="h-4 w-4" /> },
+        { label: 'Refine DNC',          path: '/refine-dnc',               roles: ['super_admin','admin'],        icon: <ShieldBan className="h-4 w-4" /> },
+        { label: 'Refine Vendors',      path: '/refine-vendors',           roles: ['super_admin','admin'],        icon: <Building2 className="h-4 w-4" /> },
+        { label: 'Refine Campaigns',    path: '/refine-campaigns',         roles: ['super_admin','admin'],        icon: <Target className="h-4 w-4" /> },
+        { label: 'Upload Refine Data',  path: '/refine-upload',            roles: ['super_admin','admin','data_entry'], icon: <FolderUp className="h-4 w-4" /> },
+        { label: 'All Refine Data',     path: '/refine-data',              roles: ['super_admin','admin'],        icon: <FileStack className="h-4 w-4" /> },
+        { label: 'Download Refined',    path: '/refine-download',          roles: ['super_admin','admin'],        icon: <FolderDown className="h-4 w-4" /> },
+        { label: 'Already Downloaded (Refine)', path: '/refine-already-downloaded', roles: ['super_admin','admin'], icon: <History className="h-4 w-4" /> },
     ];
+
+    const matchesSearchText = (value, query) =>
+        value && String(value).toLowerCase().includes(query);
+
+    const entityMatchesQuery = (entity, fields, query) =>
+        fields.some((field) => matchesSearchText(entity[field], query));
 
     const filteredPages = searchQuery.trim()
         ? ALL_PAGES.filter(p =>
@@ -267,6 +282,51 @@ const Layout = ({ children }) => {
             p.label.toLowerCase().includes(searchQuery.toLowerCase())
         )
         : ALL_PAGES.filter(p => p.roles.includes(role));
+
+    const vendorSearchQuery = searchQuery.trim().toLowerCase();
+    const filteredVendors = vendorSearchQuery
+        ? vendorResults.filter((v) =>
+            entityMatchesQuery(v, ['name', 'email', 'phone', 'comment', 'company'], vendorSearchQuery)
+        )
+        : [];
+    const filteredRefineVendors = vendorSearchQuery && isFullAccess
+        ? refineVendorResults.filter((v) =>
+            entityMatchesQuery(v, ['name', 'email', 'phone', 'company'], vendorSearchQuery)
+        )
+        : [];
+
+    const hasSearchQuery = Boolean(vendorSearchQuery);
+    const hasAnyResults =
+        filteredPages.length > 0 ||
+        filteredVendors.length > 0 ||
+        filteredRefineVendors.length > 0;
+
+    useEffect(() => {
+        if (!searchOpen) return undefined;
+        let cancelled = false;
+        const loadSearchData = async () => {
+            setSearchDataLoading(true);
+            try {
+                const requests = [api.get('/vendors?counts=false')];
+                if (isFullAccess) {
+                    requests.push(api.get('/refine-vendors?counts=false'));
+                }
+                const responses = await Promise.all(requests);
+                if (cancelled) return;
+                setVendorResults(responses[0]?.data || []);
+                setRefineVendorResults(isFullAccess ? (responses[1]?.data || []) : []);
+            } catch {
+                if (!cancelled) {
+                    setVendorResults([]);
+                    setRefineVendorResults([]);
+                }
+            } finally {
+                if (!cancelled) setSearchDataLoading(false);
+            }
+        };
+        loadSearchData();
+        return () => { cancelled = true; };
+    }, [searchOpen, isFullAccess]);
 
     const openSearch = () => {
         setSearchOpen(true);
@@ -276,6 +336,26 @@ const Layout = ({ children }) => {
     const closeSearch = () => { setSearchOpen(false); setSearchQuery(''); };
 
     const goToPage = (path) => { closeSearch(); navigate(path); };
+
+    const goToVendorSearch = (vendor, refine = false) => {
+        closeSearch();
+        const base = refine ? '/refine-vendors' : '/vendors';
+        navigate(`${base}?search=${encodeURIComponent(vendor.name || '')}`);
+    };
+
+    const handleSearchEnter = () => {
+        if (filteredVendors.length > 0) {
+            goToVendorSearch(filteredVendors[0], false);
+            return;
+        }
+        if (filteredRefineVendors.length > 0) {
+            goToVendorSearch(filteredRefineVendors[0], true);
+            return;
+        }
+        if (filteredPages.length > 0) {
+            goToPage(filteredPages[0].path);
+        }
+    };
 
     // Keyboard shortcut Ctrl+K / ⌘K
     useEffect(() => {
@@ -365,6 +445,35 @@ const Layout = ({ children }) => {
                                     <TerminalSquare className="h-[15px] w-[15px] shrink-0" /><span>Logs</span>
                                 </NavLink>
                             </div>
+
+                            <div>
+                                <p className="px-3 text-[10px] font-bold text-slate-600 uppercase tracking-[0.15em] mb-2 mt-4 text-brand-400">Refine Data</p>
+                                <NavLink to="/refine-vendors" className={getClassName}>
+                                    <Building2 className="h-[15px] w-[15px] shrink-0" /><span>Refine Vendors</span>
+                                </NavLink>
+                                <NavLink to="/refine-campaigns" className={getClassName}>
+                                    <Target className="h-[15px] w-[15px] shrink-0" /><span>Refine Campaigns</span>
+                                </NavLink>
+                                <NavLink to="/refine-upload" className={getClassName}>
+                                    <FolderUp className="h-[15px] w-[15px] shrink-0" /><span>Upload Refine Data</span>
+                                </NavLink>
+                                <NavLink to="/refine-sessions" className={getClassName}>
+                                    <Layers className="h-[15px] w-[15px] shrink-0" /><span>Refine Sessions</span>
+                                </NavLink>
+                                <NavLink to="/refine-data" className={getClassName}>
+                                    <FileStack className="h-[15px] w-[15px] shrink-0" /><span>All Refine Data</span>
+                                </NavLink>
+                                <NavLink to="/refine-dnc" className={getClassName}>
+                                    <ShieldBan className="h-[15px] w-[15px] shrink-0" /><span>Refine DNC</span>
+                                </NavLink>
+                                <NavLink to="/refine-download" className={getClassName}>
+                                    <FolderDown className="h-[15px] w-[15px] shrink-0" /><span>Download Refined</span>
+                                </NavLink>
+                                <NavLink to="/refine-already-downloaded" className={getClassName}>
+                                    <History className="h-[15px] w-[15px] shrink-0" /><span>Already Downloaded</span>
+                                </NavLink>
+                            </div>
+
 
                             {isSuperAdmin && (
                                 <div>
@@ -492,8 +601,8 @@ const Layout = ({ children }) => {
                                                 type="text"
                                                 value={searchQuery}
                                                 onChange={e => setSearchQuery(e.target.value)}
-                                                onKeyDown={e => { if (e.key === 'Enter' && filteredPages.length > 0) goToPage(filteredPages[0].path); }}
-                                                placeholder="Search pages..."
+                                                onKeyDown={e => { if (e.key === 'Enter') handleSearchEnter(); }}
+                                                placeholder="Search pages, vendors..."
                                                 className="flex-1 bg-transparent text-[13px] text-white placeholder:text-slate-600 outline-none font-medium"
                                             />
                                             <button onClick={closeSearch} className="p-1 rounded-lg hover:bg-white/8 text-slate-500 hover:text-white transition-colors">
@@ -503,28 +612,89 @@ const Layout = ({ children }) => {
 
                                         {/* Results */}
                                         <div className="max-h-[320px] overflow-y-auto py-2">
-                                            {filteredPages.length === 0 ? (
+                                            {searchDataLoading && hasSearchQuery ? (
+                                                <div className="px-4 py-6 text-center text-slate-500 text-sm">Searching…</div>
+                                            ) : !hasAnyResults ? (
                                                 <div className="px-4 py-8 text-center">
-                                                    <p className="text-slate-500 text-sm">No pages found for <span className="text-white font-medium">"{searchQuery}"</span></p>
+                                                    <p className="text-slate-500 text-sm">No results for <span className="text-white font-medium">&quot;{searchQuery}&quot;</span></p>
                                                 </div>
                                             ) : (
-                                                filteredPages.map((page) => (
-                                                    <button
-                                                        key={page.path}
-                                                        onClick={() => goToPage(page.path)}
-                                                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-all hover:bg-white/[0.05] ${
-                                                            location.pathname === page.path ? 'bg-brand-500/10 text-brand-300' : 'text-slate-300'
-                                                        }`}
-                                                    >
-                                                        <span className={`shrink-0 ${ location.pathname === page.path ? 'text-brand-400' : 'text-slate-500' }`}>
-                                                            {page.icon}
-                                                        </span>
-                                                        <span className="text-[13px] font-medium">{page.label}</span>
-                                                        {location.pathname === page.path && (
-                                                            <span className="ml-auto text-[10px] font-bold text-brand-400 bg-brand-500/10 border border-brand-500/20 px-2 py-0.5 rounded-full">Current</span>
-                                                        )}
-                                                    </button>
-                                                ))
+                                                <>
+                                                    {filteredVendors.length > 0 && (
+                                                        <div className="mb-2">
+                                                            <p className="px-4 py-1.5 text-[10px] font-bold text-slate-600 uppercase tracking-wider">Vendors</p>
+                                                            {filteredVendors.map((vendor) => (
+                                                                <button
+                                                                    key={vendor.vendor_id}
+                                                                    type="button"
+                                                                    onClick={() => goToVendorSearch(vendor, false)}
+                                                                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-all hover:bg-white/[0.05] text-slate-300"
+                                                                >
+                                                                    <span className="shrink-0 text-slate-500">
+                                                                        <Building2 className="h-4 w-4" />
+                                                                    </span>
+                                                                    <div className="min-w-0 flex-1">
+                                                                        <span className="text-[13px] font-medium text-white block truncate">{vendor.name}</span>
+                                                                        {(vendor.email || vendor.phone) && (
+                                                                            <span className="text-[11px] text-slate-500 block truncate">
+                                                                                {[vendor.email, vendor.phone].filter(Boolean).join(' · ')}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                    <span className="text-[10px] text-slate-600 shrink-0">Vendor</span>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+
+                                                    {filteredRefineVendors.length > 0 && (
+                                                        <div className="mb-2">
+                                                            <p className="px-4 py-1.5 text-[10px] font-bold text-slate-600 uppercase tracking-wider">Refine Vendors</p>
+                                                            {filteredRefineVendors.map((vendor) => (
+                                                                <button
+                                                                    key={vendor.vendor_id}
+                                                                    type="button"
+                                                                    onClick={() => goToVendorSearch(vendor, true)}
+                                                                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-all hover:bg-white/[0.05] text-slate-300"
+                                                                >
+                                                                    <span className="shrink-0 text-brand-400">
+                                                                        <Building2 className="h-4 w-4" />
+                                                                    </span>
+                                                                    <div className="min-w-0 flex-1">
+                                                                        <span className="text-[13px] font-medium text-white block truncate">{vendor.name}</span>
+                                                                    </div>
+                                                                    <span className="text-[10px] text-brand-400/80 shrink-0">Refine</span>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+
+                                                    {filteredPages.length > 0 && (
+                                                        <div>
+                                                            {hasSearchQuery && (
+                                                                <p className="px-4 py-1.5 text-[10px] font-bold text-slate-600 uppercase tracking-wider">Pages</p>
+                                                            )}
+                                                            {filteredPages.map((page) => (
+                                                                <button
+                                                                    key={page.path}
+                                                                    type="button"
+                                                                    onClick={() => goToPage(page.path)}
+                                                                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-all hover:bg-white/[0.05] ${
+                                                                        location.pathname === page.path ? 'bg-brand-500/10 text-brand-300' : 'text-slate-300'
+                                                                    }`}
+                                                                >
+                                                                    <span className={`shrink-0 ${ location.pathname === page.path ? 'text-brand-400' : 'text-slate-500' }`}>
+                                                                        {page.icon}
+                                                                    </span>
+                                                                    <span className="text-[13px] font-medium">{page.label}</span>
+                                                                    {location.pathname === page.path && (
+                                                                        <span className="ml-auto text-[10px] font-bold text-brand-400 bg-brand-500/10 border border-brand-500/20 px-2 py-0.5 rounded-full">Current</span>
+                                                                    )}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
 
