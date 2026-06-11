@@ -3,11 +3,11 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import api from '../services/api';
 import {
-    LogOut, Search, ChevronRight, Menu, X,
+    LogOut, Search, ChevronRight, ChevronDown, Menu, X,
     LayoutTemplate, Building2, Target, FolderUp, Scale, Layers,
     FileStack, ShieldBan, FolderDown, TerminalSquare, UserCheck,
     GitCompareArrows, ClipboardList, Bell, CheckCheck,
-    Download, CheckCircle2, XCircle, Users, History
+    Download, CheckCircle2, XCircle, Users, History, ShieldCheck, FileCheck2
 } from 'lucide-react';
 
 // ─── Notification Bell Component ─────────────────────────────
@@ -237,6 +237,42 @@ const Layout = ({ children }) => {
                 : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border border-transparent'
         }`;
 
+    const getSubClassName = ({ isActive }) =>
+        `group flex items-center pl-9 pr-3 py-2 text-[12px] font-medium rounded-lg transition-all duration-200 gap-2.5 mb-0.5 ${
+            isActive
+                ? 'bg-brand-500/12 text-white border border-brand-500/20'
+                : 'text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent'
+        }`;
+
+    const REFINE_NAV_ITEMS = [
+        { to: '/refine-vendors', icon: Building2, label: 'Refine Vendors' },
+        { to: '/refine-campaigns', icon: Target, label: 'Refine Campaigns' },
+        { to: '/refine-upload', icon: FolderUp, label: 'Upload Refine Data' },
+        { to: '/refine-sessions', icon: Layers, label: 'Refine Sessions' },
+        { to: '/refine-data', icon: FileStack, label: 'All Refine Data' },
+        { to: '/refine-dnc', icon: ShieldBan, label: 'Refine DNC' },
+        { to: '/refine-download', icon: FolderDown, label: 'Download Refined' },
+        { to: '/refine-already-downloaded', icon: History, label: 'Already Downloaded' },
+    ];
+
+    const isRefinePath = location.pathname.startsWith('/refine');
+    const [refineMenuOpen, setRefineMenuOpen] = useState(isRefinePath);
+
+    useEffect(() => {
+        if (location.pathname.startsWith('/refine')) {
+            setRefineMenuOpen(true);
+        }
+    }, [location.pathname]);
+
+    const isDncCheckerPath = location.pathname.startsWith('/dnc-checker');
+    const [dncCheckerMenuOpen, setDncCheckerMenuOpen] = useState(isDncCheckerPath);
+
+    useEffect(() => {
+        if (location.pathname.startsWith('/dnc-checker')) {
+            setDncCheckerMenuOpen(true);
+        }
+    }, [location.pathname]);
+
     const displayName = user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : user?.username || 'User';
     const profilePic  = user?.profile_picture ? `http://localhost:5000${user.profile_picture}` : null;
     const initials    = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
@@ -268,6 +304,9 @@ const Layout = ({ children }) => {
         { label: 'All Refine Data',     path: '/refine-data',              roles: ['super_admin','admin'],        icon: <FileStack className="h-4 w-4" /> },
         { label: 'Download Refined',    path: '/refine-download',          roles: ['super_admin','admin'],        icon: <FolderDown className="h-4 w-4" /> },
         { label: 'Already Downloaded (Refine)', path: '/refine-already-downloaded', roles: ['super_admin','admin'], icon: <History className="h-4 w-4" /> },
+        { label: 'DNC Checker Uploaded Files',  path: '/dnc-checker/uploaded-files', roles: ['super_admin','admin'], icon: <FileCheck2 className="h-4 w-4" /> },
+        { label: 'DNC Checker Campaigns',       path: '/dnc-checker/campaigns',      roles: ['super_admin','admin'], icon: <ShieldCheck className="h-4 w-4" /> },
+        { label: 'DNC Download Data',           path: '/dnc-checker/download',       roles: ['super_admin','admin'], icon: <FolderDown className="h-4 w-4" /> },
     ];
 
     const matchesSearchText = (value, query) =>
@@ -446,34 +485,77 @@ const Layout = ({ children }) => {
                                 </NavLink>
                             </div>
 
-                            <div>
-                                <p className="px-3 text-[10px] font-bold text-slate-600 uppercase tracking-[0.15em] mb-2 mt-4 text-brand-400">Refine Data</p>
-                                <NavLink to="/refine-vendors" className={getClassName}>
-                                    <Building2 className="h-[15px] w-[15px] shrink-0" /><span>Refine Vendors</span>
-                                </NavLink>
-                                <NavLink to="/refine-campaigns" className={getClassName}>
-                                    <Target className="h-[15px] w-[15px] shrink-0" /><span>Refine Campaigns</span>
-                                </NavLink>
-                                <NavLink to="/refine-upload" className={getClassName}>
-                                    <FolderUp className="h-[15px] w-[15px] shrink-0" /><span>Upload Refine Data</span>
-                                </NavLink>
-                                <NavLink to="/refine-sessions" className={getClassName}>
-                                    <Layers className="h-[15px] w-[15px] shrink-0" /><span>Refine Sessions</span>
-                                </NavLink>
-                                <NavLink to="/refine-data" className={getClassName}>
-                                    <FileStack className="h-[15px] w-[15px] shrink-0" /><span>All Refine Data</span>
-                                </NavLink>
-                                <NavLink to="/refine-dnc" className={getClassName}>
-                                    <ShieldBan className="h-[15px] w-[15px] shrink-0" /><span>Refine DNC</span>
-                                </NavLink>
-                                <NavLink to="/refine-download" className={getClassName}>
-                                    <FolderDown className="h-[15px] w-[15px] shrink-0" /><span>Download Refined</span>
-                                </NavLink>
-                                <NavLink to="/refine-already-downloaded" className={getClassName}>
-                                    <History className="h-[15px] w-[15px] shrink-0" /><span>Already Downloaded</span>
-                                </NavLink>
+                            <div className="mt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setRefineMenuOpen((open) => !open)}
+                                    className={`w-full flex items-center px-3.5 py-2.5 text-[13px] font-medium rounded-xl transition-all duration-200 gap-3 mb-0.5 border ${
+                                        isRefinePath
+                                            ? 'bg-gradient-to-r from-teal-500/15 to-transparent text-white border-teal-500/25'
+                                            : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border-transparent'
+                                    }`}
+                                >
+                                    <Layers className="h-[15px] w-[15px] shrink-0 text-teal-400" />
+                                    <span className="flex-1 text-left">Refine Data</span>
+                                    <ChevronDown
+                                        className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${refineMenuOpen ? 'rotate-180' : ''}`}
+                                    />
+                                </button>
+
+                                <div
+                                    className={`overflow-hidden transition-all duration-300 ease-out ${
+                                        refineMenuOpen ? 'max-h-[520px] opacity-100 mt-1' : 'max-h-0 opacity-0'
+                                    }`}
+                                >
+                                    {REFINE_NAV_ITEMS.map((item) => {
+                                        const ItemIcon = item.icon;
+                                        return (
+                                            <NavLink key={item.to} to={item.to} className={getSubClassName}>
+                                                <ItemIcon className="h-[14px] w-[14px] shrink-0" />
+                                                <span>{item.label}</span>
+                                            </NavLink>
+                                        );
+                                    })}
+                                </div>
                             </div>
 
+                            {/* DNC Checker Results Collapsible */}
+                            <div className="mt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setDncCheckerMenuOpen((open) => !open)}
+                                    className={`w-full flex items-center px-3.5 py-2.5 text-[13px] font-medium rounded-xl transition-all duration-200 gap-3 mb-0.5 border ${
+                                        isDncCheckerPath
+                                            ? 'bg-gradient-to-r from-teal-500/15 to-transparent text-white border-teal-500/25'
+                                            : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border-transparent'
+                                    }`}
+                                >
+                                    <ShieldCheck className="h-[15px] w-[15px] shrink-0 text-teal-400" />
+                                    <span className="flex-1 text-left">DNC Checker Results</span>
+                                    <ChevronDown
+                                        className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${dncCheckerMenuOpen ? 'rotate-180' : ''}`}
+                                    />
+                                </button>
+
+                                <div
+                                    className={`overflow-hidden transition-all duration-300 ease-out ${
+                                        dncCheckerMenuOpen ? 'max-h-[200px] opacity-100 mt-1' : 'max-h-0 opacity-0'
+                                    }`}
+                                >
+                                    <NavLink to="/dnc-checker/uploaded-files" className={getSubClassName}>
+                                        <FileCheck2 className="h-[14px] w-[14px] shrink-0" />
+                                        <span>Uploaded Files</span>
+                                    </NavLink>
+                                    <NavLink to="/dnc-checker/campaigns" className={getSubClassName}>
+                                        <ShieldCheck className="h-[14px] w-[14px] shrink-0" />
+                                        <span>Campaigns</span>
+                                    </NavLink>
+                                    <NavLink to="/dnc-checker/download" className={getSubClassName}>
+                                        <FolderDown className="h-[14px] w-[14px] shrink-0" />
+                                        <span>Download Data</span>
+                                    </NavLink>
+                                </div>
+                            </div>
 
                             {isSuperAdmin && (
                                 <div>

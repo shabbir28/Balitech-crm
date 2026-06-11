@@ -36,6 +36,7 @@ const refineDownloadRoutes = require("./routes/refine_download");
 const refineDncRoutes = require("./routes/refine_dnc");
 const refineVendorRoutes = require("./routes/refine_vendors");
 const refineCampaignRoutes = require("./routes/refine_campaigns");
+const dncCheckerRoutes    = require("./routes/dnc_checker");
 
 const enforceIPWhitelist = require("./middleware/ipWhitelist");
  
@@ -174,6 +175,7 @@ app.use("/api/refine-download", refineDownloadRoutes);
 app.use("/api/refine-dnc", refineDncRoutes);
 app.use("/api/refine-vendors", refineVendorRoutes);
 app.use("/api/refine-campaigns", refineCampaignRoutes);
+app.use("/api/dnc-checker",     dncCheckerRoutes);
  
 // =========================
 
