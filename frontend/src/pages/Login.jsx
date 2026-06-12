@@ -1,24 +1,35 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useRef, useState } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Lock, User, ArrowRight, ShieldCheck } from 'lucide-react';
+import ReCAPTCHA from 'react-google-recaptcha';
 
-const Login = () => {    const { login } = useContext(AuthContext);
+const Login = () => {
+    const { login } = useContext(AuthContext);
     const navigate = useNavigate();
+    const recaptchaRef = useRef(null);
     const [formData, setFormData] = useState({ username: '', password: '' });
+    const [captchaToken, setCaptchaToken] = useState(null);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
+        if (!captchaToken) {
+            setError('Please complete the reCAPTCHA');
+            return;
+        }
+
         setLoading(true);
         setError('');
         try {
-            await login(formData.username, formData.password, null);
+            await login(formData.username, formData.password, captchaToken);
             navigate('/');
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to login');
+            recaptchaRef.current?.reset();
+            setCaptchaToken(null);
         } finally {
             setLoading(false);
         }
@@ -97,7 +108,17 @@ const Login = () => {    const { login } = useContext(AuthContext);
                                 </div>
                             </div>
 
-                            <div className="pt-2">                                <button
+                            <div className="flex justify-center pt-2">
+                                <ReCAPTCHA
+                                    ref={recaptchaRef}
+                                    sitekey="6LeLzwctAAAAAIRVXWG_PUJcMegb1k1B-o_s4q1w"
+                                    onChange={(token) => setCaptchaToken(token)}
+                                    theme="dark"
+                                />
+                            </div>
+
+                            <div className="pt-2">
+                                <button
                                     type="submit"
                                     disabled={loading}
                                     className="w-full group relative overflow-hidden bg-gradient-to-r from-brand-600 to-brand-500 text-white rounded-xl py-3.5 px-6 font-semibold shadow-[0_4px_14px_rgba(59,130,246,0.3)] hover:shadow-[0_6px_20px_rgba(59,130,246,0.4)] transition-all duration-300 flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed text-[14px]"
@@ -143,4 +164,3 @@ const Login = () => {    const { login } = useContext(AuthContext);
 };
 
 export default Login;
-
