@@ -1,4 +1,4 @@
-import React, { useContext, useRef, useState } from 'react';
+import React, { useContext, useState } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Lock, User, ArrowRight, ShieldCheck } from 'lucide-react';
@@ -7,29 +7,29 @@ import ReCAPTCHA from 'react-google-recaptcha';
 const Login = () => {
     const { login } = useContext(AuthContext);
     const navigate = useNavigate();
-    const recaptchaRef = useRef(null);
     const [formData, setFormData] = useState({ username: '', password: '' });
-    const [captchaToken, setCaptchaToken] = useState(null);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+
+    const recaptchaRef = React.useRef(null);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        if (!captchaToken) {
-            setError('Please complete the reCAPTCHA');
+        const token = recaptchaRef.current?.getValue();
+        if (!token) {
+            setError('Please complete the reCAPTCHA to continue');
             return;
         }
 
         setLoading(true);
         setError('');
         try {
-            await login(formData.username, formData.password, captchaToken);
+            await login(formData.username, formData.password, token);
             navigate('/');
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to login');
             recaptchaRef.current?.reset();
-            setCaptchaToken(null);
         } finally {
             setLoading(false);
         }
@@ -108,11 +108,10 @@ const Login = () => {
                                 </div>
                             </div>
 
-                            <div className="flex justify-center pt-2">
+                            <div className="pt-2 flex justify-center">
                                 <ReCAPTCHA
                                     ref={recaptchaRef}
                                     sitekey="6LeLzwctAAAAAIRVXWG_PUJcMegb1k1B-o_s4q1w"
-                                    onChange={(token) => setCaptchaToken(token)}
                                     theme="dark"
                                 />
                             </div>

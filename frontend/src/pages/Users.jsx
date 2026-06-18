@@ -67,13 +67,23 @@ const Users = () => {
         return () => clearTimeout(timer);
     }, [search]);
 
+    const handleToggleStatus = async (id, newStatus) => {
+        try {
+            await api.put(`/users/${id}`, { status: newStatus });
+            showToast(`User ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`);
+            fetchUsers();
+        } catch (err) {
+            showToast(err?.response?.data?.message || `Failed to ${newStatus === 'active' ? 'activate' : 'deactivate'} user`, 'error');
+        }
+    };
+
     const handleDelete = async (id) => {
         try {
             await api.delete(`/users/${id}`);
-            showToast('User deactivated successfully');
+            showToast('User deleted successfully');
             fetchUsers();
         } catch (err) {
-            showToast(err?.response?.data?.message || 'Failed to deactivate user', 'error');
+            showToast(err?.response?.data?.message || 'Failed to delete user', 'error');
         } finally {
             setDeleteConfirm(null);
         }
@@ -92,7 +102,7 @@ const Users = () => {
             {/* Toast */}
             {toast && (
                 <div style={{
-                    position: 'fixed', top: 24, right: 24, zIndex: 9999,
+                    position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
                     background: toast.type === 'error' ? '#ef4444' : '#10b981',
                     color: '#fff', padding: '12px 20px', borderRadius: 10,
                     fontWeight: 600, fontSize: 14, boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
@@ -313,11 +323,28 @@ const Users = () => {
                                                     onMouseLeave={e => e.currentTarget.style.background = 'none'}>
                                                     <Edit2 size={13} /> Edit
                                                 </button>
+                                                
+                                                {u.status === 'active' ? (
+                                                    <button onClick={() => { handleToggleStatus(u.id, 'inactive'); setActionMenu(null); }}
+                                                        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 16px', background: 'none', border: 'none', color: '#f59e0b', cursor: 'pointer', fontSize: 13, transition: 'background 0.15s' }}
+                                                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(245,158,11,0.08)'}
+                                                        onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                        <X size={13} /> Deactivate
+                                                    </button>
+                                                ) : (
+                                                    <button onClick={() => { handleToggleStatus(u.id, 'active'); setActionMenu(null); }}
+                                                        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 16px', background: 'none', border: 'none', color: '#10b981', cursor: 'pointer', fontSize: 13, transition: 'background 0.15s' }}
+                                                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(16,185,129,0.08)'}
+                                                        onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                        <Check size={13} /> Activate
+                                                    </button>
+                                                )}
+
                                                 <button onClick={() => { setDeleteConfirm(u.id); setActionMenu(null); }}
                                                     style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 16px', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 13, transition: 'background 0.15s' }}
                                                     onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
                                                     onMouseLeave={e => e.currentTarget.style.background = 'none'}>
-                                                    <Trash2 size={13} /> Deactivate
+                                                    <Trash2 size={13} /> Delete
                                                 </button>
                                             </div>
                                         )}
@@ -369,11 +396,11 @@ const Users = () => {
                         borderRadius: 16, padding: 28, maxWidth: 380, width: '90%',
                         boxShadow: '0 20px 60px rgba(0,0,0,0.5)'
                     }} onClick={e => e.stopPropagation()}>
-                        <h3 style={{ color: '#fff', margin: '0 0 8px', fontSize: 18, fontWeight: 700 }}>Deactivate User?</h3>
-                        <p style={{ color: '#9ca3af', margin: '0 0 24px', fontSize: 14 }}>This will deactivate the user account. They won't be able to log in.</p>
+                        <h3 style={{ color: '#fff', margin: '0 0 8px', fontSize: 18, fontWeight: 700 }}>Delete User?</h3>
+                        <p style={{ color: '#9ca3af', margin: '0 0 24px', fontSize: 14 }}>This action is permanent and will completely remove the user account from the database. Are you sure?</p>
                         <div style={{ display: 'flex', gap: 10 }}>
                             <button onClick={() => setDeleteConfirm(null)} style={{ flex: 1, padding: '10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
-                            <button onClick={() => handleDelete(deleteConfirm)} style={{ flex: 1, padding: '10px', background: '#ef4444', border: 'none', color: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Deactivate</button>
+                            <button onClick={() => handleDelete(deleteConfirm)} style={{ flex: 1, padding: '10px', background: '#ef4444', border: 'none', color: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Delete Permanently</button>
                         </div>
                     </div>
                 </div>

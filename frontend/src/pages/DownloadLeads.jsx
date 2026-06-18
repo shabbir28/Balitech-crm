@@ -376,7 +376,7 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
 const DownloadLeads = () => {
     const { user } = useContext(AuthContext);
     const isSuperAdmin = user?.role === 'super_admin';
-    const isAdmin      = user?.role === 'admin';
+    const isRequester = user?.role === 'admin' || user?.role === 'data_entry';
 
     const [vendors, setVendors]         = useState([]);
     const [campaigns, setCampaigns]     = useState([]);
@@ -540,7 +540,7 @@ const DownloadLeads = () => {
     }, [selectedFileId]);
 
     const fetchMyReqs = async () => {
-        if (!isAdmin) return;
+        if (!isRequester) return;
         setLoadingReq(true);
         try { const r = await api.get('/download/requests/mine'); setMyRequests(r.data); }
         catch (err) { console.error(err); } finally { setLoadingReq(false); }
@@ -680,7 +680,7 @@ const DownloadLeads = () => {
                             </p>
                         </div>
                     </div>
-                    {isAdmin && (
+                    {isRequester && (
                         <div className="flex items-center gap-2 px-4 py-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl backdrop-blur-md">
                             <Info className="h-4 w-4 text-blue-400 shrink-0" />
                             <p className="text-xs text-blue-300 font-medium tracking-wide uppercase">Approval Required</p>
@@ -961,7 +961,7 @@ const DownloadLeads = () => {
                             <Info className="h-4.5 w-4.5 text-blue-400" />
                             {isSuperAdmin ? 'Export Workflow' : 'How It Works'}
                         </h3>
-                        {isAdmin ? (
+                        {isRequester ? (
                             <div className="space-y-4">
                                 {[
                                     { step: '1', label: 'Configure Filters', desc: 'Select vendor, quantity and targeted demographics' },
@@ -1130,8 +1130,8 @@ const DownloadLeads = () => {
 
 
 
-            {/* ── MY REQUESTS TABLE (Admin only) ──────────────── */}
-            {isAdmin && (
+            {/* ── MY REQUESTS TABLE (Admin & Data Entry) ──────────────── */}
+            {isRequester && (
                 <div className="mt-10">
                     <div className="flex items-center justify-between mb-5">
                         <div>

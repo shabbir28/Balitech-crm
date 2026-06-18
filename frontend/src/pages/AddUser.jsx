@@ -1,33 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
-import { ArrowLeft, UploadCloud, User, X, Check } from 'lucide-react';
+import { ArrowLeft, UploadCloud, X, Check, CheckCircle2, AlertCircle, User, Eye, EyeOff } from 'lucide-react';
 
-const inputStyle = {
-    width: '100%',
-    background: '#0f1117',
-    border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: 10,
-    padding: '11px 14px',
-    color: '#fff',
-    fontSize: 14,
-    outline: 'none',
-    boxSizing: 'border-box',
-    transition: 'border-color 0.2s',
-};
-
-const labelStyle = {
-    color: '#9ca3af',
-    fontSize: 13,
-    fontWeight: 600,
-    marginBottom: 6,
-    display: 'block',
-};
-
-const FormField = ({ label, children }) => (
-    <div style={{ marginBottom: 20 }}>
-        <label style={labelStyle}>{label}</label>
+const FormField = ({ label, children, error }) => (
+    <div className="mb-5">
+        <label className="block text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+            {label}
+        </label>
         {children}
+        {error && <p className="text-rose-500 text-xs mt-1.5 font-medium flex items-center gap-1"><AlertCircle className="w-3 h-3"/> {error}</p>}
     </div>
 );
 
@@ -46,13 +28,13 @@ const AddUser = ({ editMode }) => {
     const [toast, setToast] = useState(null);
     const [dragOver, setDragOver] = useState(false);
     const [loadingUser, setLoadingUser] = useState(editMode);
+    const [showPassword, setShowPassword] = useState(false);
 
     const showToast = (msg, type = 'success') => {
         setToast({ msg, type });
         setTimeout(() => setToast(null), 3500);
     };
 
-    // Fetch existing user data in edit mode
     useEffect(() => {
         if (!editMode || !id) return;
         api.get(`/users/${id}`)
@@ -86,7 +68,7 @@ const AddUser = ({ editMode }) => {
     const handleFileChange = (file) => {
         if (!file) return;
         if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'].includes(file.type)) {
-            showToast('Unsupported file type. Use JPG, PNG, PDF.', 'error');
+            showToast('Unsupported file type. Use JPG, PNG, WebP, PDF.', 'error');
             return;
         }
         if (file.size > 5 * 1024 * 1024) {
@@ -109,7 +91,6 @@ const AddUser = ({ editMode }) => {
         if (!form.last_name.trim()) errs.last_name = 'Required';
         if (!form.email.trim()) errs.email = 'Required';
         else if (!/\S+@\S+\.\S+/.test(form.email)) errs.email = 'Invalid email';
-        // In edit mode, password is optional — only validate if provided
         if (!editMode && !form.password) errs.password = 'Required';
         if (form.password && form.password.length < 6) errs.password = 'Min 6 characters';
         if (form.password !== form.confirm_password) errs.confirm_password = 'Passwords do not match';
@@ -131,15 +112,11 @@ const AddUser = ({ editMode }) => {
             if (profileFile) formData.append('profile_picture', profileFile);
 
             if (editMode) {
-                await api.put(`/users/${id}`, formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
-                });
-                showToast('User updated successfully!');
+                await api.put(`/users/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+                showToast('User updated successfully!', 'success');
             } else {
-                await api.post('/users', formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
-                });
-                showToast('User created successfully!');
+                await api.post('/users', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+                showToast('User created successfully!', 'success');
             }
             setTimeout(() => navigate('/users'), 1500);
         } catch (err) {
@@ -150,272 +127,245 @@ const AddUser = ({ editMode }) => {
     };
 
     if (loadingUser) return (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300, color: '#9ca3af', fontFamily: "'Inter', sans-serif" }}>
+        <div className="flex items-center justify-center h-64 text-slate-400 font-medium">
+            <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mr-3"></div>
             Loading user data...
         </div>
     );
 
+    const inputClass = (error) => `w-full bg-[#0a0a0f] border ${error ? 'border-rose-500/50 focus:border-rose-500/50 focus:ring-rose-500/20' : 'border-white/10 focus:border-brand-500/50 focus:ring-brand-500/20'} rounded-xl px-4 py-3 text-white text-[14px] outline-none transition-all focus:ring-2 shadow-inner`;
+
     return (
-        <div style={{ fontFamily: "'Inter', sans-serif", maxWidth: 1000, margin: '0 auto' }}>
+        <div className="max-w-6xl mx-auto font-sans pb-12">
             {/* Toast */}
             {toast && (
-                <div style={{
-                    position: 'fixed', top: 24, right: 24, zIndex: 9999,
-                    background: toast.type === 'error' ? '#ef4444' : '#10b981',
-                    color: '#fff', padding: '12px 20px', borderRadius: 10,
-                    fontWeight: 600, fontSize: 14, boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-                    display: 'flex', alignItems: 'center', gap: 8
-                }}>
-                    {toast.type === 'error' ? <X size={16} /> : <Check size={16} />}
-                    {toast.msg}
+                <div className="fixed bottom-6 right-6 z-[200] max-w-sm w-full animate-in slide-in-from-bottom-5 fade-in duration-300">
+                    <div className="bg-[#13151f] border border-white/[0.07] shadow-2xl rounded-xl p-4 flex items-start gap-3">
+                        {toast.type === 'success' ? <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" /> : <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />}
+                        <div className="flex-1">
+                            <p className="text-sm font-medium text-white">{toast.msg}</p>
+                        </div>
+                        <button onClick={() => setToast(null)} className="text-slate-400 hover:text-white transition-colors">
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
                 </div>
             )}
 
-            {/* Page Header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 28 }}>
-                <button onClick={() => navigate('/users')} style={{
-                    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
-                    color: '#9ca3af', cursor: 'pointer', borderRadius: 8, padding: '8px 12px',
-                    display: 'flex', alignItems: 'center', gap: 6, fontSize: 13
-                }}>
-                    <ArrowLeft size={15} /> Back
+            {/* Header Area */}
+            <div className="flex items-center gap-4 mb-8">
+                <button 
+                    onClick={() => navigate('/users')} 
+                    className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all shadow-sm"
+                >
+                    <ArrowLeft className="w-5 h-5" />
                 </button>
                 <div>
-                    <h1 style={{ fontSize: 24, fontWeight: 800, color: '#fff', margin: 0 }}>{editMode ? 'Edit User' : 'Add User'}</h1>
-                    <p style={{ color: '#6b7280', fontSize: 13, margin: '4px 0 0' }}>{editMode ? 'Update the user details below.' : 'Please fill in the user details below.'}</p>
+                    <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
+                        {editMode ? 'Edit User' : 'Add New User'}
+                    </h1>
+                    <p className="text-slate-400 text-sm mt-1 font-medium">
+                        {editMode ? 'Update the details and permissions for this user.' : 'Create a new user account and assign roles.'}
+                    </p>
                 </div>
             </div>
 
-            <form onSubmit={handleSubmit}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 24, alignItems: 'start' }}>
-                    {/* Left - Form Fields */}
-                    <div style={{
-                        background: '#13151e', border: '1px solid rgba(255,255,255,0.06)',
-                        borderRadius: 16, padding: 28
-                    }}>
-                        {/* First Name */}
-                        <FormField label="First Name">
-                            <input
-                                name="first_name" value={form.first_name} onChange={handleChange}
-                                placeholder="Enter First Name"
-                                style={{ ...inputStyle, borderColor: errors.first_name ? '#ef4444' : 'rgba(255,255,255,0.1)' }}
-                                onFocus={e => e.target.style.borderColor = '#f59e0b'}
-                                onBlur={e => e.target.style.borderColor = errors.first_name ? '#ef4444' : 'rgba(255,255,255,0.1)'}
-                            />
-                            {errors.first_name && <p style={{ color: '#ef4444', fontSize: 12, margin: '4px 0 0' }}>{errors.first_name}</p>}
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-8 items-start">
+                
+                {/* Left - Form Fields */}
+                <div className="bg-[#1e1e2d] border border-white/[0.05] shadow-2xl rounded-3xl relative overflow-hidden p-8">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-brand-500/10 rounded-full blur-[80px] pointer-events-none" />
+                    <div className="absolute bottom-0 left-0 w-64 h-64 bg-violet-500/10 rounded-full blur-[80px] pointer-events-none" />
+                    
+                    <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-x-6">
+                        <FormField label="First Name" error={errors.first_name}>
+                            <input name="first_name" value={form.first_name} onChange={handleChange} placeholder="e.g. John" className={inputClass(errors.first_name)} />
                         </FormField>
 
-                        {/* Last Name */}
-                        <FormField label="Last Name">
-                            <input
-                                name="last_name" value={form.last_name} onChange={handleChange}
-                                placeholder="Enter Last Name"
-                                style={{ ...inputStyle, borderColor: errors.last_name ? '#ef4444' : 'rgba(255,255,255,0.1)' }}
-                                onFocus={e => e.target.style.borderColor = '#f59e0b'}
-                                onBlur={e => e.target.style.borderColor = errors.last_name ? '#ef4444' : 'rgba(255,255,255,0.1)'}
-                            />
-                            {errors.last_name && <p style={{ color: '#ef4444', fontSize: 12, margin: '4px 0 0' }}>{errors.last_name}</p>}
+                        <FormField label="Last Name" error={errors.last_name}>
+                            <input name="last_name" value={form.last_name} onChange={handleChange} placeholder="e.g. Doe" className={inputClass(errors.last_name)} />
                         </FormField>
 
-                        {/* Email */}
-                        <FormField label="Email Address">
-                            <input
-                                name="email" type="email" value={form.email} onChange={handleChange}
-                                placeholder="Enter Email Address"
-                                style={{ ...inputStyle, borderColor: errors.email ? '#ef4444' : 'rgba(255,255,255,0.1)' }}
-                                onFocus={e => e.target.style.borderColor = '#f59e0b'}
-                                onBlur={e => e.target.style.borderColor = errors.email ? '#ef4444' : 'rgba(255,255,255,0.1)'}
-                            />
-                            {errors.email && <p style={{ color: '#ef4444', fontSize: 12, margin: '4px 0 0' }}>{errors.email}</p>}
+                        <div className="md:col-span-2">
+                            <FormField label="Email Address" error={errors.email}>
+                                <input name="email" type="email" value={form.email} onChange={handleChange} placeholder="john.doe@example.com" className={inputClass(errors.email)} />
+                            </FormField>
+                        </div>
+
+                        <FormField label="Phone Number" error={errors.phone}>
+                            <input name="phone" value={form.phone} onChange={handleChange} placeholder="+1 (555) 000-0000" className={inputClass(errors.phone)} />
                         </FormField>
 
-                        {/* Phone */}
-                        <FormField label="Phone Number">
-                            <input
-                                name="phone" value={form.phone} onChange={handleChange}
-                                placeholder="Enter Phone Number"
-                                style={inputStyle}
-                                onFocus={e => e.target.style.borderColor = '#f59e0b'}
-                                onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
-                            />
+                        <FormField label="Date of Birth" error={errors.date_of_birth}>
+                            <input name="date_of_birth" type="date" value={form.date_of_birth} onChange={handleChange} className={`${inputClass(errors.date_of_birth)} color-scheme-dark`} />
                         </FormField>
 
-                        {/* Date of Birth */}
-                        <FormField label="Date of Birth">
-                            <input
-                                name="date_of_birth" type="date" value={form.date_of_birth} onChange={handleChange}
-                                placeholder="dd/mm/yyyy"
-                                style={{ ...inputStyle, colorScheme: 'dark' }}
-                                onFocus={e => e.target.style.borderColor = '#f59e0b'}
-                                onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
-                            />
+                        <FormField label="Password" error={errors.password}>
+                            <div className="relative">
+                                <input 
+                                    name="password" 
+                                    type={showPassword ? "text" : "password"} 
+                                    value={form.password} 
+                                    onChange={handleChange} 
+                                    placeholder={editMode ? "Leave blank to keep current" : "••••••••"} 
+                                    className={inputClass(errors.password)} 
+                                />
+                                <button 
+                                    type="button" 
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+                                >
+                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                            </div>
                         </FormField>
 
-                        {/* Password */}
-                        <FormField label="Password">
-                            <input
-                                name="password" type="password" value={form.password} onChange={handleChange}
-                                placeholder="Enter Password"
-                                style={{ ...inputStyle, borderColor: errors.password ? '#ef4444' : 'rgba(255,255,255,0.1)' }}
-                                onFocus={e => e.target.style.borderColor = '#f59e0b'}
-                                onBlur={e => e.target.style.borderColor = errors.password ? '#ef4444' : 'rgba(255,255,255,0.1)'}
-                            />
-                            {errors.password && <p style={{ color: '#ef4444', fontSize: 12, margin: '4px 0 0' }}>{errors.password}</p>}
+                        <FormField label="Confirm Password" error={errors.confirm_password}>
+                            <div className="relative">
+                                <input 
+                                    name="confirm_password" 
+                                    type={showPassword ? "text" : "password"} 
+                                    value={form.confirm_password} 
+                                    onChange={handleChange} 
+                                    placeholder="••••••••" 
+                                    className={inputClass(errors.confirm_password)} 
+                                />
+                            </div>
                         </FormField>
 
-                        {/* Confirm Password */}
-                        <FormField label="Confirm Password">
-                            <input
-                                name="confirm_password" type="password" value={form.confirm_password} onChange={handleChange}
-                                placeholder="Confirm Password"
-                                style={{ ...inputStyle, borderColor: errors.confirm_password ? '#ef4444' : 'rgba(255,255,255,0.1)' }}
-                                onFocus={e => e.target.style.borderColor = '#f59e0b'}
-                                onBlur={e => e.target.style.borderColor = errors.confirm_password ? '#ef4444' : 'rgba(255,255,255,0.1)'}
-                            />
-                            {errors.confirm_password && <p style={{ color: '#ef4444', fontSize: 12, margin: '4px 0 0' }}>{errors.confirm_password}</p>}
-                        </FormField>
-
-                        {/* Select Role */}
-                        <FormField label="Select Role">
-                            <select
-                                name="role" value={form.role} onChange={handleChange}
-                                style={{ ...inputStyle, cursor: 'pointer', borderColor: errors.role ? '#ef4444' : 'rgba(255,255,255,0.1)' }}
-                                onFocus={e => e.target.style.borderColor = '#f59e0b'}
-                                onBlur={e => e.target.style.borderColor = errors.role ? '#ef4444' : 'rgba(255,255,255,0.1)'}
-                            >
-                                <option value="" disabled>Select Role</option>
-                                <option value="super_admin">Super Admin</option>
-                                <option value="admin">Admin</option>
-                                <option value="data_entry">Data Entry</option>
-                            </select>
-                            {errors.role && <p style={{ color: '#ef4444', fontSize: 12, margin: '4px 0 0' }}>{errors.role}</p>}
-                        </FormField>
-
-                        {/* Submit Button */}
-                        <button
-                            type="submit"
-                            disabled={submitting}
-                            style={{
-                                width: '100%',
-                                background: submitting ? 'rgba(245,158,11,0.5)' : 'linear-gradient(135deg, #f59e0b, #d97706)',
-                                border: 'none',
-                                borderRadius: 10,
-                                padding: '13px',
-                                color: '#111',
-                                fontWeight: 700,
-                                fontSize: 15,
-                                cursor: submitting ? 'not-allowed' : 'pointer',
-                                boxShadow: '0 4px 14px rgba(245,158,11,0.35)',
-                                transition: 'opacity 0.2s',
-                                marginTop: 4
-                            }}
-                        >
-                            {submitting ? (editMode ? 'Saving...' : 'Creating User...') : (editMode ? 'Save Changes' : 'Create User')}
-                        </button>
+                        <div className="md:col-span-2">
+                            <FormField label="Select Role" error={errors.role}>
+                                <select name="role" value={form.role} onChange={handleChange} className={inputClass(errors.role) + " appearance-none"}>
+                                    <option value="" disabled>Select Role...</option>
+                                    <option value="super_admin">Super Admin</option>
+                                    <option value="admin">Admin</option>
+                                    <option value="data_entry">Data Entry</option>
+                                </select>
+                            </FormField>
+                        </div>
                     </div>
+                </div>
 
-                    {/* Right - Attachment */}
-                    <div style={{
-                        background: '#13151e', border: '1px solid rgba(255,255,255,0.06)',
-                        borderRadius: 16, padding: 24
-                    }}>
-                        <p style={{ color: '#9ca3af', fontSize: 13, fontWeight: 700, marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Attachment</p>
-
-                        {/* Drop Zone */}
+                {/* Right - Attachment & Submit */}
+                <div className="flex flex-col gap-6">
+                    {/* Attachment Card */}
+                    <div className="bg-[#1e1e2d] border border-white/[0.05] shadow-2xl rounded-3xl p-6 relative overflow-hidden">
+                        <h2 className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-4">Profile Photo</h2>
+                        
                         <div
                             onClick={() => fileInputRef.current?.click()}
                             onDrop={e => { e.preventDefault(); setDragOver(false); handleFileChange(e.dataTransfer.files[0]); }}
                             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                             onDragLeave={() => setDragOver(false)}
-                            style={{
-                                border: `2px dashed ${dragOver ? '#f59e0b' : 'rgba(255,255,255,0.12)'}`,
-                                borderRadius: 12,
-                                padding: '28px 20px',
-                                textAlign: 'center',
-                                cursor: 'pointer',
-                                background: dragOver ? 'rgba(245,158,11,0.05)' : 'rgba(255,255,255,0.01)',
-                                transition: 'all 0.2s',
-                                marginBottom: 16
-                            }}
+                            className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all duration-300 ${
+                                dragOver ? 'border-brand-500 bg-brand-500/5' : 'border-white/10 hover:border-brand-500/50 hover:bg-white/[0.02]'
+                            }`}
                         >
                             {profilePreview ? (
-                                <div style={{ position: 'relative' }}>
-                                    <img src={profilePreview} alt="Preview"
-                                        style={{ width: 100, height: 100, borderRadius: '50%', objectFit: 'cover', border: '3px solid rgba(245,158,11,0.4)', margin: '0 auto', display: 'block' }} />
-                                    <button onClick={e => { e.stopPropagation(); setProfileFile(null); setProfilePreview(null); }}
-                                        style={{ position: 'absolute', top: 0, right: '50%', transform: 'translateX(50px)', background: '#ef4444', border: 'none', borderRadius: '50%', width: 22, height: 22, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <X size={12} color="#fff" />
+                                <div className="relative group inline-block">
+                                    <img src={profilePreview} alt="Preview" className="w-24 h-24 rounded-full object-cover border-4 border-brand-500/30 group-hover:border-brand-500/60 transition-colors shadow-lg" />
+                                    <button 
+                                        type="button"
+                                        onClick={e => { e.stopPropagation(); setProfileFile(null); setProfilePreview(null); }}
+                                        className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full p-1.5 shadow-lg scale-0 group-hover:scale-100 transition-transform"
+                                    >
+                                        <X className="w-3 h-3" />
                                     </button>
-                                    <p style={{ color: '#9ca3af', fontSize: 12, marginTop: 10 }}>Click to change photo</p>
                                 </div>
                             ) : profileFile ? (
-                                <div>
-                                    <div style={{ fontSize: 36, marginBottom: 8 }}>📄</div>
-                                    <p style={{ color: '#f59e0b', fontSize: 13, fontWeight: 600 }}>{profileFile.name}</p>
-                                    <p style={{ color: '#6b7280', fontSize: 11 }}>Click to change</p>
+                                <div className="py-4">
+                                    <div className="w-12 h-12 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-500 mx-auto mb-3">
+                                        <CheckCircle2 className="w-6 h-6" />
+                                    </div>
+                                    <p className="text-sm font-semibold text-white truncate px-2">{profileFile.name}</p>
+                                    <p className="text-xs text-slate-500 mt-1">Click to replace</p>
                                 </div>
                             ) : (
-                                <>
-                                    <div style={{ width: 50, height: 50, borderRadius: '50%', background: 'rgba(245,158,11,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-                                        <UploadCloud size={22} color="#f59e0b" />
+                                <div className="py-4">
+                                    <div className="w-12 h-12 rounded-full bg-brand-500/10 flex items-center justify-center text-brand-500 mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
+                                        <UploadCloud className="w-6 h-6" />
                                     </div>
-                                    <button
-                                        type="button"
-                                        style={{
-                                            background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                                            border: 'none', borderRadius: 8, padding: '8px 20px',
-                                            color: '#111', fontWeight: 700, fontSize: 13, cursor: 'pointer',
-                                            marginBottom: 10
-                                        }}>
+                                    <button type="button" className="bg-brand-500 text-white text-xs font-bold px-4 py-2 rounded-lg mb-2 shadow-[0_2px_10px_rgba(245,158,11,0.2)]">
                                         Browse File
                                     </button>
-                                    <p style={{ color: '#6b7280', fontSize: 11, margin: 0 }}>
-                                        Click or drag files to upload<br />
-                                        <span style={{ color: '#4b5563' }}>Supported: JPG, PNG, WebP, PDF</span>
-                                    </p>
-                                </>
+                                    <p className="text-xs text-slate-500 font-medium">JPG, PNG, WebP</p>
+                                </div>
                             )}
                         </div>
-                        <input ref={fileInputRef} type="file" accept="image/*,.pdf" style={{ display: 'none' }}
-                            onChange={e => handleFileChange(e.target.files[0])} />
+                        <input ref={fileInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={e => handleFileChange(e.target.files[0])} />
 
-                        {/* Profile Preview Card */}
-                        {(form.first_name || form.last_name) && (
-                            <div style={{
-                                marginTop: 16, padding: '14px', background: 'rgba(245,158,11,0.05)',
-                                border: '1px solid rgba(245,158,11,0.15)', borderRadius: 10, textAlign: 'center'
-                            }}>
-                                <div style={{
-                                    width: 48, height: 48, borderRadius: '50%',
-                                    background: 'rgba(245,158,11,0.2)', border: '2px solid rgba(245,158,11,0.4)',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    margin: '0 auto 8px', color: '#f59e0b', fontWeight: 800, fontSize: 18
-                                }}>
-                                    {profilePreview
-                                        ? <img src={profilePreview} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} alt="" />
-                                        : ((form.first_name[0] || '') + (form.last_name[0] || '')).toUpperCase()
-                                    }
+                        {/* Profile Summary Card (Only if data exists) */}
+                        {(form.first_name || form.last_name || form.email) && (
+                            <div className="mt-6 p-4 rounded-2xl bg-black/20 border border-white/5 flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-brand-500 to-orange-600 flex items-center justify-center text-white font-bold text-lg shadow-inner overflow-hidden shrink-0">
+                                    {profilePreview ? (
+                                        <img src={profilePreview} className="w-full h-full object-cover" alt="" />
+                                    ) : (
+                                        ((form.first_name[0] || '') + (form.last_name[0] || '')).toUpperCase() || <User className="w-5 h-5 text-white/70" />
+                                    )}
                                 </div>
-                                <p style={{ color: '#fff', fontWeight: 700, fontSize: 14, margin: '0 0 2px' }}>
-                                    {form.first_name} {form.last_name}
-                                </p>
-                                <p style={{ color: '#6b7280', fontSize: 12, margin: 0 }}>{form.email || 'No email'}</p>
-                                {form.role && (
-                                    <span style={{
-                                        display: 'inline-block', marginTop: 6,
-                                        background: form.role === 'super_admin' ? 'rgba(245,158,11,0.15)' : form.role === 'admin' ? 'rgba(99,102,241,0.15)' : 'rgba(16,185,129,0.15)',
-                                        color: form.role === 'super_admin' ? '#f59e0b' : form.role === 'admin' ? '#818cf8' : '#10b981',
-                                        border: `1px solid ${form.role === 'super_admin' ? 'rgba(245,158,11,0.3)' : form.role === 'admin' ? 'rgba(99,102,241,0.3)' : 'rgba(16,185,129,0.3)'}`,
-                                        borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 600
-                                    }}>
-                                        {form.role === 'super_admin' ? 'Super Admin' : form.role === 'admin' ? 'Admin' : 'Data Entry'}
-                                    </span>
-                                )}
+                                <div className="min-w-0">
+                                    <p className="text-sm font-bold text-white truncate">
+                                        {form.first_name || form.last_name ? `${form.first_name} ${form.last_name}` : 'New User'}
+                                    </p>
+                                    <p className="text-xs text-slate-400 truncate mt-0.5">{form.email || 'No email provided'}</p>
+                                    {form.role && (
+                                        <span className={`inline-block mt-1.5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-md ${
+                                            form.role === 'super_admin' ? 'bg-amber-500/10 text-amber-400' :
+                                            form.role === 'admin' ? 'bg-blue-500/10 text-blue-400' :
+                                            'bg-emerald-500/10 text-emerald-400'
+                                        }`}>
+                                            {form.role.replace('_', ' ')}
+                                        </span>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>
+
+                    {/* Submit Button */}
+                    <button
+                        type="submit"
+                        disabled={submitting}
+                        className={`w-full bg-gradient-to-r from-brand-500 to-orange-500 text-white font-bold rounded-2xl py-4 shadow-[0_8px_24px_rgba(245,158,11,0.25)] hover:shadow-[0_8px_30px_rgba(245,158,11,0.4)] transition-all duration-300 flex items-center justify-center gap-2 ${
+                            submitting ? 'opacity-70 cursor-not-allowed scale-[0.98]' : 'hover:-translate-y-0.5 active:scale-[0.98]'
+                        }`}
+                    >
+                        {submitting ? (
+                            <>
+                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                {editMode ? 'Saving Changes...' : 'Creating User...'}
+                            </>
+                        ) : (
+                            <>
+                                <CheckCircle2 className="w-5 h-5" />
+                                {editMode ? 'Save Changes' : 'Create User'}
+                            </>
+                        )}
+                    </button>
                 </div>
             </form>
+            
+            <style>{`
+                .color-scheme-dark::-webkit-calendar-picker-indicator {
+                    filter: invert(1);
+                    opacity: 0.5;
+                    cursor: pointer;
+                }
+                .color-scheme-dark::-webkit-calendar-picker-indicator:hover {
+                    opacity: 0.8;
+                }
+                
+                /* Override Chrome/Edge Autofill White Background */
+                input:-webkit-autofill,
+                input:-webkit-autofill:hover, 
+                input:-webkit-autofill:focus, 
+                input:-webkit-autofill:active{
+                    -webkit-box-shadow: 0 0 0 30px #0a0a0f inset !important;
+                    -webkit-text-fill-color: white !important;
+                    transition: background-color 5000s ease-in-out 0s;
+                }
+            `}</style>
         </div>
     );
 };

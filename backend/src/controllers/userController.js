@@ -257,11 +257,10 @@ const deleteUser = async (req, res) => {
         .json({ message: "Cannot delete your own account" });
     }
 
-    await db.query("UPDATE users SET status = $1 WHERE id = $2", [
-      "inactive",
+    await db.query("DELETE FROM users WHERE id = $1", [
       id,
     ]);
-    res.json({ message: "User deactivated successfully" });
+    res.json({ message: "User deleted successfully" });
   } catch (err) {
     console.error("deleteUser error:", err);
     res.status(500).json({ message: "Server error" });

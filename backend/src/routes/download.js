@@ -23,11 +23,11 @@ const authorizeRole = require('../middleware/role');
 // ── SuperAdmin direct download (existing) ────────────────────
 router.post('/', auth, authorizeRole(['super_admin']), downloadLeads);
 
-// ── Admin: submit a download request ─────────────────────────
-router.post('/request', auth, authorizeRole(['admin']), createDownloadRequest);
+// ── Admin & Data Entry: submit a download request ─────────────────────────
+router.post('/request', auth, authorizeRole(['admin', 'data_entry']), createDownloadRequest);
 
-// ── Admin: view own requests ──────────────────────────────────
-router.get('/requests/mine', auth, authorizeRole(['admin']), getMyDownloadRequests);
+// ── Admin & Data Entry: view own requests ──────────────────────────────────
+router.get('/requests/mine', auth, authorizeRole(['admin', 'data_entry']), getMyDownloadRequests);
 
 // ── SuperAdmin: view ALL requests ────────────────────────────
 router.get('/requests', auth, authorizeRole(['super_admin']), getDownloadRequests);
@@ -35,8 +35,8 @@ router.get('/requests', auth, authorizeRole(['super_admin']), getDownloadRequest
 // ── SuperAdmin: accept or reject a request ───────────────────
 router.patch('/requests/:id', auth, authorizeRole(['super_admin']), reviewDownloadRequest);
 
-// ── Admin: download CSV for an accepted request ───────────────
-router.get('/requests/:id/file', auth, authorizeRole(['admin']), executeApprovedDownload);
+// ── Admin & Data Entry: download CSV for an accepted request ───────────────
+router.get('/requests/:id/file', auth, authorizeRole(['admin', 'data_entry']), executeApprovedDownload);
 
 // ── Both: view download logs ──────────────────────────────────
 router.get('/logs', auth, authorizeRole(['super_admin', 'admin']), getDownloadLogs);
@@ -73,11 +73,11 @@ router.get(
   getDownloadLogFile,
 );
 
-// ── Both: Get state counts ────────────────────────────────────
+// ── Get state counts ────────────────────────────────────
 router.post(
   '/state-counts',
   auth,
-  authorizeRole(['super_admin', 'admin']),
+  authorizeRole(['super_admin', 'admin', 'data_entry']),
   getStateCounts,
 );
 
@@ -89,11 +89,11 @@ router.get(
   downloadJobFile,
 );
 
-// ── Both: Get stats for a specific upload job/file ─────────────────
+// ── Get stats for a specific upload job/file ─────────────────
 router.get(
   '/job/:jobId/stats',
   auth,
-  authorizeRole(['super_admin', 'admin']),
+  authorizeRole(['super_admin', 'admin', 'data_entry']),
   getJobStats,
 );
 
