@@ -25,7 +25,7 @@ const Login = () => {
         setLoading(true);
         setError('');
         try {
-            await login(formData.username, formData.password, token);
+            await login(formData.username, formData.password);
             navigate('/');
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to login');

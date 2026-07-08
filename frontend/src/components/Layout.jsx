@@ -255,12 +255,31 @@ const Layout = ({ children }) => {
         { to: '/refine-already-downloaded', icon: History, label: 'Already Downloaded' },
     ];
 
+    const PREMIUM_NAV_ITEMS = [
+        { to: '/premium-vendors', icon: Building2, label: 'Premium Vendors' },
+        { to: '/premium-campaigns', icon: Target, label: 'Premium Campaigns' },
+        { to: '/premium-upload', icon: FolderUp, label: 'Upload Premium Data' },
+        { to: '/premium-sessions', icon: Layers, label: 'Premium Sessions' },
+        { to: '/premium-data', icon: FileStack, label: 'All Premium Data' },
+        { to: '/premium-download', icon: FolderDown, label: 'Download Premium Data' },
+        { to: '/premium-already-downloaded', icon: History, label: 'Already Downloaded (Premium)' },
+    ];
+
     const isRefinePath = location.pathname.startsWith('/refine');
     const [refineMenuOpen, setRefineMenuOpen] = useState(isRefinePath);
 
     useEffect(() => {
         if (location.pathname.startsWith('/refine')) {
             setRefineMenuOpen(true);
+        }
+    }, [location.pathname]);
+
+    const isPremiumPath = location.pathname.startsWith('/premium');
+    const [premiumMenuOpen, setPremiumMenuOpen] = useState(isPremiumPath);
+
+    useEffect(() => {
+        if (location.pathname.startsWith('/premium')) {
+            setPremiumMenuOpen(true);
         }
     }, [location.pathname]);
 
@@ -508,6 +527,40 @@ const Layout = ({ children }) => {
                                     }`}
                                 >
                                     {REFINE_NAV_ITEMS.map((item) => {
+                                        const ItemIcon = item.icon;
+                                        return (
+                                            <NavLink key={item.to} to={item.to} className={getSubClassName}>
+                                                <ItemIcon className="h-[14px] w-[14px] shrink-0" />
+                                                <span>{item.label}</span>
+                                            </NavLink>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            <div className="mt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setPremiumMenuOpen((open) => !open)}
+                                    className={`w-full flex items-center px-3.5 py-2.5 text-[13px] font-medium rounded-xl transition-all duration-200 gap-3 mb-0.5 border ${
+                                        isPremiumPath
+                                            ? 'bg-gradient-to-r from-teal-500/15 to-transparent text-white border-teal-500/25'
+                                            : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border-transparent'
+                                    }`}
+                                >
+                                    <Layers className="h-[15px] w-[15px] shrink-0 text-teal-400" />
+                                    <span className="flex-1 text-left">Premium Data</span>
+                                    <ChevronDown
+                                        className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${premiumMenuOpen ? 'rotate-180' : ''}`}
+                                    />
+                                </button>
+
+                                <div
+                                    className={`overflow-hidden transition-all duration-300 ease-out ${
+                                        premiumMenuOpen ? 'max-h-[520px] opacity-100 mt-1' : 'max-h-0 opacity-0'
+                                    }`}
+                                >
+                                    {PREMIUM_NAV_ITEMS.map((item) => {
                                         const ItemIcon = item.icon;
                                         return (
                                             <NavLink key={item.to} to={item.to} className={getSubClassName}>

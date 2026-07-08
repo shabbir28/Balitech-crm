@@ -38,6 +38,14 @@ const refineVendorRoutes = require("./routes/refine_vendors");
 const refineCampaignRoutes = require("./routes/refine_campaigns");
 const dncCheckerRoutes    = require("./routes/dnc_checker");
 
+const premiumVendorRoutes = require("./routes/premium_vendors");
+const premiumCampaignRoutes = require("./routes/premium_campaigns");
+const premiumSessionRoutes = require("./routes/premium_sessions");
+const premiumJobRoutes = require("./routes/premium_jobs");
+const premiumDataRoutes = require("./routes/premium_data");
+const premiumDownloadRoutes = require("./routes/premium_download");
+const premiumDncRoutes = require("./routes/premium_dnc");
+
 const enforceIPWhitelist = require("./middleware/ipWhitelist");
  
 if (!process.env.JWT_SECRET) {
@@ -176,6 +184,14 @@ app.use("/api/refine-dnc", refineDncRoutes);
 app.use("/api/refine-vendors", refineVendorRoutes);
 app.use("/api/refine-campaigns", refineCampaignRoutes);
 app.use("/api/dnc-checker",     dncCheckerRoutes);
+
+app.use("/api/premium-vendors", premiumVendorRoutes);
+app.use("/api/premium-campaigns", premiumCampaignRoutes);
+app.use("/api/premium-sessions", premiumSessionRoutes);
+app.use("/api/premium-jobs", premiumJobRoutes);
+app.use("/api/premium-data", premiumDataRoutes);
+app.use("/api/premium-download", premiumDownloadRoutes);
+app.use("/api/premium-dnc", premiumDncRoutes);
  
 // =========================
 
@@ -253,15 +269,23 @@ process.on("uncaughtException", (err) => {
 
   console.error("💥 Uncaught Exception:", err);
 
-  process.exit(1);
+  // Only exit for truly fatal errors (e.g. port already in use)
+  if (err.code === "EADDRINUSE" || err.code === "EACCES") {
+    process.exit(1);
+  }
+
+  // For other uncaught exceptions, log but keep running
+  console.error("⚠️  Server continuing after uncaught exception...");
 
 });
  
 process.on("unhandledRejection", (reason) => {
 
-  console.error("💥 Unhandled Rejection:", reason);
-
-  process.exit(1);
+  // Log the rejection but do NOT kill the process — transient DB errors
+  // (e.g. during IP whitelist cache refresh on first request) were crashing
+  // the entire server. Route-level handlers and middleware already have
+  // try/catch; this is a safety net for any that slip through.
+  console.error("💥 Unhandled Rejection (non-fatal):", reason);
 
 });
- 
+

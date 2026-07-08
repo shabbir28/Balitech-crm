@@ -10,7 +10,7 @@ const { scrubPhones, normalizePhone } = require("../utils/blacklistAlliance");
  * (default 60s) and causes 502 Bad Gateway.
  *
  * MAX_API_SCRUB_PHONES — above this size we skip the external API scrub.
- *   - Local `refine_dnc_numbers` filter (NOT EXISTS) still runs on every download.
+ *   - Local `premium_dnc_numbers` filter (NOT EXISTS) still runs on every download.
  *   - Set to 0 in .env to fully disable the external scrub.
  */
 const MAX_API_SCRUB_PHONES = (() => {
@@ -65,7 +65,7 @@ const serializeDownloadPayload = (goodRows, badRows, summary, fileName) => {
 const saveDownloadLogPayload = async (logId, payload) => {
   if (!logId || !payload) return;
   await db.query(
-    `UPDATE refine_download_logs SET csv_payload = $1 WHERE id = $2`,
+    `UPDATE premium_download_logs SET csv_payload = $1 WHERE id = $2`,
     [payload, logId],
   );
 };
@@ -73,8 +73,9 @@ const saveDownloadLogPayload = async (logId, payload) => {
 const upsertDncNumbersBatched = async ({
   queryFn,
   badItems,
+  createdBy,
+  notePrefix,
   campaignId = null,
-  vendorId = null,
 }) => {
   if (!Array.isArray(badItems) || badItems.length === 0) return;
 
@@ -85,24 +86,30 @@ const upsertDncNumbersBatched = async ({
     let idx = 1;
 
     for (const badItem of chunk) {
-      valueStrings.push(`($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3})`);
+      valueStrings.push(
+        `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4}, $${idx + 5})`,
+      );
       insertValues.push(
         badItem.phone,
         "DNC",
+        "Blacklist Alliance API",
+        `${notePrefix}${badItem.reason}`,
+        createdBy || null,
         campaignId || null,
-        vendorId || null
       );
-      idx += 4;
+      idx += 6;
     }
 
     await queryFn(
       `
-        INSERT INTO refine_dnc_numbers (phone, dnc_type, campaign_id, vendor_id)
+        INSERT INTO premium_dnc_numbers (phone, dnc_type, source, notes, created_by, campaign_id)
         VALUES ${valueStrings.join(",")}
         ON CONFLICT (phone) DO UPDATE
         SET dnc_type = EXCLUDED.dnc_type,
-            campaign_id = COALESCE(EXCLUDED.campaign_id, refine_dnc_numbers.campaign_id),
-            vendor_id = COALESCE(EXCLUDED.vendor_id, refine_dnc_numbers.vendor_id)
+            source = EXCLUDED.source,
+            notes = EXCLUDED.notes,
+            created_by = EXCLUDED.created_by,
+            campaign_id = COALESCE(EXCLUDED.campaign_id, premium_dnc_numbers.campaign_id)
       `,
       insertValues,
     );
@@ -113,7 +120,7 @@ const markScrubFailed = async (logId, errMessage) => {
   if (!logId) return;
   try {
     const { rows } = await db.query(
-      `SELECT csv_payload FROM refine_download_logs WHERE id = $1`,
+      `SELECT csv_payload FROM premium_download_logs WHERE id = $1`,
       [logId],
     );
     const payload = rows[0]?.csv_payload ? JSON.parse(rows[0].csv_payload) : {};
@@ -136,7 +143,6 @@ const runBackgroundScrub = async ({
   userId,
   fileName,
   campaignId = null,
-  vendorId = null,
 }) => {
   if (!Array.isArray(exportedRows) || exportedRows.length === 0) return;
   try {
@@ -172,7 +178,7 @@ const runBackgroundScrub = async ({
     if (badPhones.length > 0) {
       await db.query(
         `
-          UPDATE refine_data
+          UPDATE premium_data
           SET status = 'available',
               downloaded_at = null,
               disposition = 'DNC'
@@ -184,8 +190,9 @@ const runBackgroundScrub = async ({
       await upsertDncNumbersBatched({
         queryFn: db.query.bind(db),
         badItems: scrubResult.bad,
+        createdBy: userId,
+        notePrefix: "Background scrub. Reason: ",
         campaignId,
-        vendorId,
       });
     }
 
@@ -248,21 +255,20 @@ async function buildFilters(
     max_age,
     job_id,
     include_downloaded,
-    quality,
   },
 ) {
   const includeAllVendorLeads =
     include_downloaded === true || include_downloaded === "true";
 
-  // Re-download mode: all refine_data for this vendor (any status), not only "downloaded"
+  // Re-download mode: all premium_data for this vendor (any status), not only "downloaded"
   const filters = includeAllVendorLeads ? [] : ["status = 'available'"];
   const params = [];
   let paramIdx = 1;
 
   if (job_id && job_id !== "") {
-    // Check if there are any refine_data with this job_id
+    // Check if there are any premium_data with this job_id
     const jobCheck = await client.query(
-      `SELECT 1 FROM refine_data WHERE job_id = $1 LIMIT 1`,
+      `SELECT 1 FROM premium_data WHERE job_id = $1 LIMIT 1`,
       [job_id]
     );
     if (jobCheck.rows.length > 0) {
@@ -272,8 +278,8 @@ async function buildFilters(
       // Fallback: get job created_at and vendor_id
       const jobRes = await client.query(
         `SELECT j.created_at, s.vendor_id 
-         FROM refine_jobs j
-         JOIN refine_sessions s ON j.session_id = s.id
+         FROM premium_jobs j
+         JOIN premium_sessions s ON j.session_id = s.id
          WHERE j.id = $1`,
         [job_id]
       );
@@ -299,7 +305,7 @@ async function buildFilters(
 
   if (campaign_id && campaign_id !== "all") {
     const campRes = await client.query(
-      "SELECT name FROM refine_campaigns WHERE campaign_id = $1",
+      "SELECT name FROM premium_campaigns WHERE campaign_id = $1",
       [campaign_id],
     );
     if (campRes.rows.length > 0) {
@@ -334,11 +340,6 @@ async function buildFilters(
     params.push(parseInt(max_age));
   }
 
-  if (quality && quality !== "All") {
-    filters.push(`quality = $${paramIdx++}`);
-    params.push(quality);
-  }
-
   return { filters, params, paramIdx };
 }
 
@@ -360,7 +361,6 @@ async function executeDownload(
     async_scrub = false,
     job_id,
     include_downloaded = false,
-    quality,
   },
 ) {
   const { filters, params, paramIdx } = await buildFilters(client, {
@@ -371,7 +371,6 @@ async function executeDownload(
     max_age,
     job_id,
     include_downloaded,
-    quality,
   });
   const includeAllVendorLeads =
     include_downloaded === true || include_downloaded === "true";
@@ -379,7 +378,7 @@ async function executeDownload(
   const whereParts = [...filters];
   if (!includeAllVendorLeads) {
     whereParts.push(
-      `NOT EXISTS (SELECT 1 FROM refine_dnc_numbers d WHERE d.phone = refine_data.phone)`,
+      `NOT EXISTS (SELECT 1 FROM premium_dnc_numbers d WHERE d.phone = premium_data.phone)`,
     );
   }
   const whereClause =
@@ -390,13 +389,13 @@ async function executeDownload(
   const updateQuery = `
         WITH selected_leads AS (
             SELECT id 
-            FROM refine_data 
+            FROM premium_data 
             WHERE ${whereClause}
             ORDER BY uploaded_at ASC
             FOR UPDATE SKIP LOCKED
             LIMIT $${paramIdx}
         )
-        UPDATE refine_data l
+        UPDATE premium_data l
         SET status = 'downloaded', downloaded_at = CURRENT_TIMESTAMP
         FROM selected_leads sl
         WHERE l.id = sl.id
@@ -434,7 +433,7 @@ async function executeDownload(
     } else if (skipApiScrub) {
       console.warn(
         `[Download] Skipping Blacklist Alliance API scrub for ${allPhones.length} phones ` +
-          `(threshold ${MAX_API_SCRUB_PHONES}). Local refine_dnc_numbers filter still applied. ` +
+          `(threshold ${MAX_API_SCRUB_PHONES}). Local premium_dnc_numbers filter still applied. ` +
           `Pass force_scrub=true in the request body to override.`,
       );
     } else if (force_scrub && wouldSkip) {
@@ -479,7 +478,7 @@ async function executeDownload(
         try {
           await client.query(
             `
-              UPDATE refine_data
+              UPDATE premium_data
               SET status = 'available',
                   downloaded_at = null,
                   disposition = 'DNC'
@@ -491,8 +490,9 @@ async function executeDownload(
           await upsertDncNumbersBatched({
             queryFn: client.query.bind(client),
             badItems: scrubResult.bad,
-            campaignId: campaign_id && campaign_id !== "all" ? campaign_id : null,
-            vendorId: vendor_id && vendor_id !== "all" ? vendor_id : null,
+            createdBy: user_id,
+            notePrefix: "Auto-Scrubbed on download. Reason: ",
+            campaignId: campaign_id || null,
           });
           await client.query("COMMIT");
         } catch (badErr) {
@@ -522,17 +522,18 @@ async function executeDownload(
       }
     } catch (scrubErr) {
       console.error(
-        "[Blacklist Alliance] Scrubbing failed. Proceeding with original refine_data for safety.",
+        "[Blacklist Alliance] Scrubbing failed. Proceeding with original premium_data for safety.",
         scrubErr.message,
       );
       scrubErrors = result.rows.length;
     }
   }
 
+  // ── Phase 3: log the download (single insert, no transaction needed) ──────
   const logRes = await client.query(
-    `INSERT INTO refine_download_logs (
-       user_id, vendor_id, country_code, area_code, quantity,
-       campaign_id, states, min_age, max_age, approved_by
+    `INSERT INTO premium_download_logs (
+       user_id, vendor_id, country_code, area_code, quantity, approved_by,
+       campaign_id, states, min_age, max_age
      )
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING id`,
@@ -542,6 +543,7 @@ async function executeDownload(
       null,
       null,
       finalRows.length,
+      approved_by_id || null,
       campaign_id && campaign_id !== "all" ? campaign_id : null,
       states && states.length > 0 ? states : null,
       min_age !== undefined && min_age !== null && min_age !== ""
@@ -550,7 +552,6 @@ async function executeDownload(
       max_age !== undefined && max_age !== null && max_age !== ""
         ? parseInt(max_age, 10)
         : null,
-      approved_by_id || null,
     ],
   );
   const logId = logRes.rows[0]?.id || null;
@@ -623,7 +624,6 @@ const downloadLeads = async (req, res) => {
       async_scrub,
       job_id,
       include_downloaded,
-      quality,
     } = req.body;
     if (!quantity || quantity <= 0) {
       return res.status(400).json({ message: "Valid quantity is required" });
@@ -656,7 +656,6 @@ const downloadLeads = async (req, res) => {
       async_scrub: asyncScrub,
       job_id,
       include_downloaded,
-      quality,
     });
     // executeDownload now commits internally; outer rollback is a no-op afterwards.
 
@@ -664,8 +663,8 @@ const downloadLeads = async (req, res) => {
       return res.status(404).json({
         message:
           include_downloaded === true || include_downloaded === "true"
-            ? "No refine_data found to re-download for this vendor (check filters)."
-            : "No available refine_data found matching criteria",
+            ? "No premium_data found to re-download for this vendor (check filters)."
+            : "No available premium_data found matching criteria",
       });
     }
 
@@ -693,7 +692,7 @@ const downloadLeads = async (req, res) => {
       badCsv,
     };
 
-    // Persist a copy to refine_download_logs so "Already Downloaded" can re-download.
+    // Persist a copy to premium_download_logs so "Already Downloaded" can re-download.
     // Run in the background — don't make the user wait on a second JSON.stringify.
     saveDownloadLogPayload(logId, JSON.stringify(responseBody)).catch((err) =>
       console.error("Failed to persist download payload:", err.message),
@@ -706,8 +705,8 @@ const downloadLeads = async (req, res) => {
           exportedRows: goodRows,
           userId: req.user.id,
           fileName,
-          campaignId: campaign_id && campaign_id !== "all" ? campaign_id : null,
-          vendorId: vendor_id && vendor_id !== "all" ? vendor_id : null,
+          campaignId:
+            campaign_id && campaign_id !== "all" ? campaign_id : null,
         }),
       );
     }
@@ -758,7 +757,7 @@ const createDownloadRequest = async (req, res) => {
     }
 
     const result = await db.query(
-      `INSERT INTO refine_download_requests
+      `INSERT INTO premium_download_requests
                (admin_id, vendor_id, campaign_id, quantity, states, min_age, max_age, job_id, include_downloaded)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
              RETURNING *`,
@@ -790,7 +789,7 @@ const createDownloadRequest = async (req, res) => {
         sa.id,
         "download_request_new",
         "📥 New Download Request",
-        `${adminDisplayName} has requested to download ${quantity.toLocaleString()} refine_data from vendor data.`,
+        `${adminDisplayName} has requested to download ${quantity.toLocaleString()} premium_data from vendor data.`,
         newRequest.id,
       );
     }
@@ -829,10 +828,10 @@ const getDownloadRequests = async (req, res) => {
                 v.name       AS vendor_name,
                 c.name       AS campaign_name,
                 rv.username  AS reviewed_by_username
-            FROM refine_download_requests dr
+            FROM premium_download_requests dr
             LEFT JOIN users u  ON dr.admin_id = u.id
-            LEFT JOIN refine_vendors v ON dr.vendor_id = v.vendor_id
-            LEFT JOIN refine_campaigns c ON dr.campaign_id = c.campaign_id
+            LEFT JOIN premium_vendors v ON dr.vendor_id = v.vendor_id
+            LEFT JOIN premium_campaigns c ON dr.campaign_id = c.campaign_id
             LEFT JOIN users rv ON dr.reviewed_by = rv.id
             ORDER BY
                 CASE dr.status WHEN 'pending' THEN 0 ELSE 1 END,
@@ -865,9 +864,9 @@ const getMyDownloadRequests = async (req, res) => {
                 dr.reviewed_at,
                 v.name AS vendor_name,
                 c.name AS campaign_name
-            FROM refine_download_requests dr
-            LEFT JOIN refine_vendors v  ON dr.vendor_id  = v.vendor_id
-            LEFT JOIN refine_campaigns c ON dr.campaign_id = c.campaign_id
+            FROM premium_download_requests dr
+            LEFT JOIN premium_vendors v  ON dr.vendor_id  = v.vendor_id
+            LEFT JOIN premium_campaigns c ON dr.campaign_id = c.campaign_id
             WHERE dr.admin_id = $1
             ORDER BY dr.requested_at DESC
         `,
@@ -900,7 +899,7 @@ const reviewDownloadRequest = async (req, res) => {
   try {
     // Fetch the request
     const reqRes = await client.query(
-      `SELECT * FROM refine_download_requests WHERE id = $1`,
+      `SELECT * FROM premium_download_requests WHERE id = $1`,
       [id],
     );
     if (reqRes.rows.length === 0) {
@@ -915,7 +914,7 @@ const reviewDownloadRequest = async (req, res) => {
 
     if (action === "reject") {
       await client.query(
-        `UPDATE refine_download_requests
+        `UPDATE premium_download_requests
                  SET status='rejected', rejection_reason=$1, reviewed_at=NOW(), reviewed_by=$2
                  WHERE id=$3`,
         [rejection_reason || null, req.user.id, id],
@@ -926,8 +925,8 @@ const reviewDownloadRequest = async (req, res) => {
         "download_request_rejected",
         "❌ Download Request Rejected",
         rejection_reason
-          ? `Your download request for ${dlReq.quantity?.toLocaleString()} refine_data was rejected. Reason: ${rejection_reason}`
-          : `Your download request for ${dlReq.quantity?.toLocaleString()} refine_data was rejected by the SuperAdmin.`,
+          ? `Your download request for ${dlReq.quantity?.toLocaleString()} premium_data was rejected. Reason: ${rejection_reason}`
+          : `Your download request for ${dlReq.quantity?.toLocaleString()} premium_data was rejected by the SuperAdmin.`,
         dlReq.id,
       );
       return res.json({ message: "Request rejected successfully." });
@@ -957,15 +956,15 @@ const reviewDownloadRequest = async (req, res) => {
 
     if (goodRows.length === 0 && badRows.length === 0) {
       await db.query(
-        `UPDATE refine_download_requests
-                 SET status='rejected', rejection_reason='No available refine_data found matching the criteria at time of approval.',
+        `UPDATE premium_download_requests
+                 SET status='rejected', rejection_reason='No available premium_data found matching the criteria at time of approval.',
                      reviewed_at=NOW(), reviewed_by=$1
                  WHERE id=$2`,
         [req.user.id, id],
       );
       return res.status(404).json({
         message:
-          "No available refine_data found. Request has been marked as rejected.",
+          "No available premium_data found. Request has been marked as rejected.",
       });
     }
 
@@ -977,7 +976,7 @@ const reviewDownloadRequest = async (req, res) => {
     );
 
     await db.query(
-      `UPDATE refine_download_requests
+      `UPDATE premium_download_requests
              SET status='accepted', reviewed_at=NOW(), reviewed_by=$1, csv_data=$2
              WHERE id=$3`,
       [req.user.id, serializedData, id],
@@ -993,12 +992,12 @@ const reviewDownloadRequest = async (req, res) => {
       dlReq.admin_id,
       "download_request_accepted",
       "✅ Download Request Approved!",
-      `Your download request for ${goodRows.length.toLocaleString()} refine_data has been approved. You can now download your CSV file.`,
+      `Your download request for ${goodRows.length.toLocaleString()} premium_data has been approved. You can now download your CSV file.`,
       dlReq.id,
     );
 
     return res.json({
-      message: `Request accepted. ${goodRows.length} refine_data are ready for the admin to download.`,
+      message: `Request accepted. ${goodRows.length} premium_data are ready for the admin to download.`,
       lead_count: goodRows.length,
     });
   } catch (err) {
@@ -1018,7 +1017,7 @@ const executeApprovedDownload = async (req, res) => {
   const { id } = req.params;
   try {
     const result = await db.query(
-      `SELECT * FROM refine_download_requests WHERE id=$1 AND admin_id=$2`,
+      `SELECT * FROM premium_download_requests WHERE id=$1 AND admin_id=$2`,
       [id, req.user.id],
     );
     if (result.rows.length === 0) {
@@ -1081,10 +1080,10 @@ const getDownloadLogs = async (req, res) => {
                 ap.username   AS approved_by_username,
                 ap.first_name AS approved_by_first_name,
                 ap.last_name  AS approved_by_last_name
-            FROM refine_download_logs dl
+            FROM premium_download_logs dl
             LEFT JOIN users u  ON dl.user_id    = u.id
             LEFT JOIN users ap ON dl.approved_by = ap.id
-            LEFT JOIN refine_vendors v ON dl.vendor_id  = v.vendor_id
+            LEFT JOIN premium_vendors v ON dl.vendor_id  = v.vendor_id
             ORDER BY dl.download_date DESC
             LIMIT 100
         `);
@@ -1201,9 +1200,9 @@ const getAlreadyDownloadedList = async (req, res) => {
         u.first_name AS user_first_name,
         u.last_name AS user_last_name,
         ap.username AS approved_by_username
-      FROM refine_download_logs dl
-      LEFT JOIN refine_vendors v ON dl.vendor_id = v.vendor_id
-      LEFT JOIN refine_campaigns c ON dl.campaign_id = c.campaign_id
+      FROM premium_download_logs dl
+      LEFT JOIN premium_vendors v ON dl.vendor_id = v.vendor_id
+      LEFT JOIN premium_campaigns c ON dl.campaign_id = c.campaign_id
       LEFT JOIN users u ON dl.user_id = u.id
       LEFT JOIN users ap ON dl.approved_by = ap.id
       ${where}
@@ -1213,7 +1212,7 @@ const getAlreadyDownloadedList = async (req, res) => {
 
     const countQuery = `
       SELECT COUNT(*)::int AS count
-      FROM refine_download_logs dl
+      FROM premium_download_logs dl
       ${where}
     `;
 
@@ -1236,7 +1235,7 @@ const getAlreadyDownloadedList = async (req, res) => {
   }
 };
 
-// GET /api/download/already-downloaded — vendors grouped with download counts
+// GET /api/download/already-downloaded — premium_vendors grouped with download counts
 const getAlreadyDownloadedSummary = async (req, res) => {
   try {
     const result = await db.query(`
@@ -1247,8 +1246,8 @@ const getAlreadyDownloadedSummary = async (req, res) => {
         COALESCE(SUM(dl.quantity), 0)::int AS total_leads_downloaded,
         MAX(dl.download_date) AS last_download_at,
         BOOL_OR(dl.csv_payload IS NOT NULL AND dl.csv_payload <> '') AS has_stored_file
-      FROM refine_download_logs dl
-      LEFT JOIN refine_vendors v ON dl.vendor_id = v.vendor_id
+      FROM premium_download_logs dl
+      LEFT JOIN premium_vendors v ON dl.vendor_id = v.vendor_id
       GROUP BY dl.vendor_id, v.name
       ORDER BY MAX(dl.download_date) DESC
     `);
@@ -1291,9 +1290,9 @@ const getVendorDownloadHistory = async (req, res) => {
         u.first_name AS user_first_name,
         u.last_name AS user_last_name,
         ap.username AS approved_by_username
-      FROM refine_download_logs dl
-      LEFT JOIN refine_vendors v ON dl.vendor_id = v.vendor_id
-      LEFT JOIN refine_campaigns c ON dl.campaign_id = c.campaign_id
+      FROM premium_download_logs dl
+      LEFT JOIN premium_vendors v ON dl.vendor_id = v.vendor_id
+      LEFT JOIN premium_campaigns c ON dl.campaign_id = c.campaign_id
       LEFT JOIN users u ON dl.user_id = u.id
       LEFT JOIN users ap ON dl.approved_by = ap.id
       WHERE ${vendorFilter}
@@ -1319,7 +1318,7 @@ const getDownloadLogSummary = async (req, res) => {
   try {
     const { id } = req.params;
     const result = await db.query(
-      `SELECT csv_payload FROM refine_download_logs WHERE id = $1`,
+      `SELECT csv_payload FROM premium_download_logs WHERE id = $1`,
       [id],
     );
 
@@ -1360,7 +1359,7 @@ const getDownloadLogFile = async (req, res) => {
   try {
     const { id } = req.params;
     const result = await db.query(
-      `SELECT csv_payload, quantity FROM refine_download_logs WHERE id = $1`,
+      `SELECT csv_payload, quantity FROM premium_download_logs WHERE id = $1`,
       [id],
     );
 
@@ -1385,7 +1384,7 @@ const getDownloadLogFile = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/download/state-counts
-// Return available refine_data count mapped by state
+// Return available premium_data count mapped by state
 // ─────────────────────────────────────────────────────────────
 const getStateCounts = async (req, res) => {
   try {
@@ -1397,7 +1396,6 @@ const getStateCounts = async (req, res) => {
       max_age,
       job_id,
       include_downloaded,
-      quality,
     } = req.body;
     const client = await db.getClient();
     try {
@@ -1409,15 +1407,13 @@ const getStateCounts = async (req, res) => {
         max_age,
         job_id,
         include_downloaded,
-        quality,
       });
-      const whereClause = filters.length > 0 ? filters.join(" AND ") : "1=1";
+      const whereClause = filters.join(" AND ");
 
       const query = `
         SELECT area_code, COUNT(id)::int as count 
-        FROM refine_data 
-        WHERE ${whereClause}
-          AND NOT EXISTS (SELECT 1 FROM refine_dnc_numbers d WHERE d.phone = refine_data.phone)
+        FROM premium_data 
+        WHERE ${whereClause} 
         GROUP BY area_code
       `;
       const result = await client.query(query, params);
@@ -1451,9 +1447,9 @@ const downloadJobFile = async (req, res) => {
   try {
     const jobRes = await db.query(
       `SELECT j.id, j.file_name, j.created_at, s.vendor_id, v.name as vendor_name
-       FROM refine_jobs j
-       JOIN refine_sessions s ON j.session_id = s.id
-       JOIN vendors v ON s.vendor_id = v.vendor_id
+       FROM premium_jobs j
+       JOIN premium_sessions s ON j.session_id = s.id
+       JOIN premium_vendors v ON s.vendor_id = v.vendor_id
        WHERE j.id = $1`,
       [jobId]
     );
@@ -1464,20 +1460,20 @@ const downloadJobFile = async (req, res) => {
 
     const job = jobRes.rows[0];
 
-    // Query refine_data of this job
+    // Query premium_data of this job
     let leadsRes = await db.query(
       `SELECT name, phone, email, country_code, area_code, disposition, age, status, uploaded_at
-       FROM refine_data
+       FROM premium_data
        WHERE job_id = $1
        ORDER BY id ASC`,
       [jobId]
     );
 
-    // Fallback if no refine_data have this job_id (old jobs before this migration)
+    // Fallback if no premium_data have this job_id (old premium_jobs before this migration)
     if (leadsRes.rows.length === 0) {
       leadsRes = await db.query(
         `SELECT name, phone, email, country_code, area_code, disposition, age, status, uploaded_at
-         FROM refine_data
+         FROM premium_data
          WHERE vendor_id = $1
            AND uploaded_at >= $2::timestamp with time zone - INTERVAL '5 minutes'
            AND uploaded_at <= $2::timestamp with time zone + INTERVAL '5 minutes'
@@ -1486,7 +1482,7 @@ const downloadJobFile = async (req, res) => {
       );
     }
 
-    const refine_data = leadsRes.rows.map((r) => {
+    const premium_data = leadsRes.rows.map((r) => {
       let code = r.area_code;
       if (!code || code === "Unknown") {
         const clean = r.phone ? String(r.phone).replace(/\D/g, "") : "";
@@ -1500,16 +1496,16 @@ const downloadJobFile = async (req, res) => {
       };
     });
 
-    if (refine_data.length === 0) {
-      return res.status(404).json({ message: "No refine_data found for this uploaded file" });
+    if (premium_data.length === 0) {
+      return res.status(404).json({ message: "No premium_data found for this uploaded file" });
     }
 
-    const csv = new Parser({ fields: CSV_GOOD_FIELDS }).parse(refine_data);
+    const csv = new Parser({ fields: CSV_GOOD_FIELDS }).parse(premium_data);
 
     return res.status(200).json({
       fileName: job.file_name,
       csv,
-      count: refine_data.length
+      count: premium_data.length
     });
   } catch (err) {
     console.error("Error downloading job file:", err);
@@ -1523,9 +1519,9 @@ const getJobStats = async (req, res) => {
   try {
     const jobRes = await db.query(
       `SELECT j.id, j.file_name, j.created_at, s.vendor_id, v.name as vendor_name
-       FROM refine_jobs j
-       JOIN refine_sessions s ON j.session_id = s.id
-       JOIN vendors v ON s.vendor_id = v.vendor_id
+       FROM premium_jobs j
+       JOIN premium_sessions s ON j.session_id = s.id
+       JOIN premium_vendors v ON s.vendor_id = v.vendor_id
        WHERE j.id = $1`,
       [jobId]
     );
@@ -1536,9 +1532,9 @@ const getJobStats = async (req, res) => {
 
     const job = jobRes.rows[0];
 
-    // Check if there are refine_data with this job_id
+    // Check if there are premium_data with this job_id
     const jobCheck = await db.query(
-      `SELECT 1 FROM refine_data WHERE job_id = $1 LIMIT 1`,
+      `SELECT 1 FROM premium_data WHERE job_id = $1 LIMIT 1`,
       [jobId]
     );
 
@@ -1552,21 +1548,21 @@ const getJobStats = async (req, res) => {
           COUNT(CASE WHEN l.status = 'downloaded' THEN 1 END)::int as downloaded_leads,
           COUNT(CASE WHEN l.status = 'available' AND COALESCE(l.disposition, '') <> 'DNC' AND d.phone IS NULL THEN 1 END)::int as available_leads,
           COUNT(CASE WHEN COALESCE(l.disposition, '') = 'DNC' OR d.phone IS NOT NULL THEN 1 END)::int as dnc_leads
-        FROM refine_data l
-        LEFT JOIN refine_dnc_numbers d ON l.phone = d.phone
+        FROM premium_data l
+        LEFT JOIN premium_dnc_numbers d ON l.phone = d.phone
         WHERE l.job_id = $1
       `;
       countParams = [jobId];
     } else {
-      // Fallback for old jobs
+      // Fallback for old premium_jobs
       countQuery = `
         SELECT 
           COUNT(l.id)::int as total_leads,
           COUNT(CASE WHEN l.status = 'downloaded' THEN 1 END)::int as downloaded_leads,
           COUNT(CASE WHEN l.status = 'available' AND COALESCE(l.disposition, '') <> 'DNC' AND d.phone IS NULL THEN 1 END)::int as available_leads,
           COUNT(CASE WHEN COALESCE(l.disposition, '') = 'DNC' OR d.phone IS NOT NULL THEN 1 END)::int as dnc_leads
-        FROM refine_data l
-        LEFT JOIN refine_dnc_numbers d ON l.phone = d.phone
+        FROM premium_data l
+        LEFT JOIN premium_dnc_numbers d ON l.phone = d.phone
         WHERE l.vendor_id = $1
           AND l.uploaded_at >= $2::timestamp with time zone - INTERVAL '5 minutes'
           AND l.uploaded_at <= $2::timestamp with time zone + INTERVAL '5 minutes'

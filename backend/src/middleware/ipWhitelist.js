@@ -47,7 +47,11 @@ const enforceIPWhitelist = async (req, res, next) => {
 
         // Cache expire ho gayi ho toh refresh karo
         if (Date.now() > cacheExpiry) {
-            await refreshCache();
+            await refreshCache().catch((err) => {
+                console.error('⚠️  IP whitelist cache refresh failed (fail-open):', err.message);
+                // Keep old cache if available; reset expiry so we retry after 10s
+                cacheExpiry = Date.now() + 10 * 1000;
+            });
         }
 
         // 1️⃣ Whitelist empty hai ya Localhost hai → sab allow karo (fail-open / dev friendly)

@@ -384,6 +384,8 @@ async function executeDownload(
   const whereClause =
     whereParts.length > 0 ? whereParts.join(" AND ") : "1=1";
 
+    await client.query("SET local work_mem = '512MB'");
+
   const updateQuery = `
         WITH selected_leads AS (
             SELECT id 

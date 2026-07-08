@@ -39,6 +39,17 @@ import DncUploadedFiles from './pages/DncUploadedFiles';
 import DncCampaigns from './pages/DncCampaigns';
 import DncDownloadData from './pages/DncDownloadData';
 
+import PremiumVendors from './pages/PremiumVendors';
+import PremiumUploadLeads from './pages/PremiumUploadLeads';
+import PremiumSessionsList from './pages/PremiumSessionsList';
+import PremiumSessionDetails from './pages/PremiumSessionDetails';
+import PremiumLeadsTable from './pages/PremiumLeadsTable';
+import PremiumDownloadLeads from './pages/PremiumDownloadLeads';
+import PremiumAlreadyDownloaded from './pages/PremiumAlreadyDownloaded';
+import PremiumCampaigns from './pages/PremiumCampaigns';
+import PremiumAddCampaign from './pages/PremiumAddCampaign';
+import PremiumAddJob from './pages/PremiumAddJob';
+
 
 const ProtectedRoute = ({ children, roles }) => {
     const { user, loading } = useContext(AuthContext);
@@ -132,6 +143,19 @@ const AppRoutes = () => {
             <Route path="/dnc-checker/uploaded-files" element={<ProtectedRoute roles={['super_admin', 'admin']}><DncUploadedFiles /></ProtectedRoute>} />
             <Route path="/dnc-checker/campaigns" element={<ProtectedRoute roles={['super_admin', 'admin']}><DncCampaigns /></ProtectedRoute>} />
             <Route path="/dnc-checker/download" element={<ProtectedRoute roles={['super_admin', 'admin']}><DncDownloadData /></ProtectedRoute>} />
+
+            {/* PREMIUM DATA MODULE */}
+            <Route path="/premium-vendors" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><PremiumVendors /></ProtectedRoute>} />
+            <Route path="/premium-upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><PremiumUploadLeads /></ProtectedRoute>} />
+            <Route path="/premium-sessions" element={<ProtectedRoute roles={['super_admin', 'admin']}><PremiumSessionsList /></ProtectedRoute>} />
+            <Route path="/premium-sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><PremiumSessionDetails /></ProtectedRoute>} />
+            <Route path="/premium-sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><PremiumAddJob /></ProtectedRoute>} />
+            <Route path="/premium-data" element={<ProtectedRoute roles={['super_admin', 'admin']}><PremiumLeadsTable /></ProtectedRoute>} />
+            <Route path="/premium-download" element={<ProtectedRoute roles={['super_admin', 'admin']}><PremiumDownloadLeads /></ProtectedRoute>} />
+            <Route path="/premium-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin']}><PremiumAlreadyDownloaded /></ProtectedRoute>} />
+            <Route path="/premium-campaigns" element={<ProtectedRoute roles={['super_admin', 'admin']}><PremiumCampaigns /></ProtectedRoute>} />
+            <Route path="/premium-campaigns/add" element={<ProtectedRoute roles={['super_admin', 'admin']}><PremiumAddCampaign /></ProtectedRoute>} />
+            <Route path="/premium-campaigns/edit/:id" element={<ProtectedRoute roles={['super_admin', 'admin']}><PremiumAddCampaign editMode /></ProtectedRoute>} />
 
             {/* Catch all */}
             <Route path="*" element={<Navigate to="/" replace />} />

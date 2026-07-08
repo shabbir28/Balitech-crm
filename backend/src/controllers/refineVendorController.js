@@ -23,19 +23,29 @@ const getVendors = async (req, res) => {
     let query;
     if (includeCounts) {
       query = `
-                SELECT v.*, 
-                       COUNT(l.id)::int as total_leads,
-                       COUNT(CASE WHEN l.status = 'available' AND COALESCE(l.disposition, '') <> 'DNC' AND d.phone IS NULL THEN 1 END)::int as available_leads,
-                       COUNT(CASE WHEN l.status = 'downloaded' THEN 1 END)::int as downloaded_leads,
-                       COUNT(CASE WHEN COALESCE(l.disposition, '') = 'DNC' OR d.phone IS NOT NULL THEN 1 END)::int as dnc_leads,
-                       COUNT(CASE WHEN COALESCE(l.quality, 'Good') = 'Good' AND d.phone IS NULL THEN 1 END)::int as good_count,
-                       COUNT(CASE WHEN l.quality = 'Bad' AND d.phone IS NULL THEN 1 END)::int as bad_count
-                FROM refine_vendors v
-                LEFT JOIN refine_data l ON v.vendor_id = l.vendor_id
-                LEFT JOIN refine_dnc_numbers d ON l.phone = d.phone
-                GROUP BY v.vendor_id
-                ORDER BY v.created_at DESC
-            `;
+        WITH vendor_stats AS (
+            SELECT l.vendor_id,
+                   COUNT(l.id)::int as total_leads,
+                   COUNT(CASE WHEN l.status = 'available' AND COALESCE(l.disposition, '') <> 'DNC' AND d.phone IS NULL THEN 1 END)::int as available_leads,
+                   COUNT(CASE WHEN l.status = 'downloaded' THEN 1 END)::int as downloaded_leads,
+                   COUNT(CASE WHEN COALESCE(l.disposition, '') = 'DNC' OR d.phone IS NOT NULL THEN 1 END)::int as dnc_leads,
+                   COUNT(CASE WHEN COALESCE(l.quality, 'Good') = 'Good' AND d.phone IS NULL THEN 1 END)::int as good_count,
+                   COUNT(CASE WHEN l.quality = 'Bad' AND d.phone IS NULL THEN 1 END)::int as bad_count
+            FROM refine_data l
+            LEFT JOIN refine_dnc_numbers d ON l.phone = d.phone
+            GROUP BY l.vendor_id
+        )
+        SELECT v.*, 
+               COALESCE(vs.total_leads, 0) as total_leads,
+               COALESCE(vs.available_leads, 0) as available_leads,
+               COALESCE(vs.downloaded_leads, 0) as downloaded_leads,
+               COALESCE(vs.dnc_leads, 0) as dnc_leads,
+               COALESCE(vs.good_count, 0) as good_count,
+               COALESCE(vs.bad_count, 0) as bad_count
+        FROM refine_vendors v
+        LEFT JOIN vendor_stats vs ON v.vendor_id = vs.vendor_id
+        ORDER BY v.created_at DESC
+      `;
     } else {
       query = `
                 SELECT * FROM refine_vendors 
