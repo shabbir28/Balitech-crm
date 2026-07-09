@@ -12,6 +12,8 @@ const getStats = async (req, res) => {
       recentSessionsResult,
       refineStatsResult,
       refineCampaignStatsResult,
+      premiumStatsResult,
+      premiumCampaignStatsResult,
     ] = await Promise.all([
       // 1. Leads Overall Stats (Single Scan)
       db.query(`
@@ -105,17 +107,34 @@ const getStats = async (req, res) => {
                 GROUP BY campaign_type
                 ORDER BY count DESC
             `),
+
+      // 9. Premium Data Total Stats
+      db.query(`
+                SELECT COUNT(*)::int AS total_premium_data
+                FROM premium_data
+            `),
+
+      // 10. Premium Data per campaign
+      db.query(`
+                SELECT campaign_type AS name, COUNT(*)::int AS count
+                FROM premium_data
+                WHERE campaign_type IS NOT NULL AND TRIM(campaign_type) <> ''
+                GROUP BY campaign_type
+                ORDER BY count DESC
+            `),
     ]);
 
     // Construct totals object
     const leadsStats = leadsStatsResult.rows[0];
     const otherStats = otherTotalsResult.rows[0];
     const refineStats = refineStatsResult.rows[0];
+    const premiumStats = premiumStatsResult.rows[0];
     
     const totals = {
       ...leadsStats,
       ...otherStats,
-      ...refineStats
+      ...refineStats,
+      ...premiumStats
     };
 
     // Construct lead status breakdown from leadsStats
@@ -132,6 +151,7 @@ const getStats = async (req, res) => {
       leadStatusBreakdown,
       recentSessions: recentSessionsResult.rows,
       refineCampaignStats: refineCampaignStatsResult.rows,
+      premiumCampaignStats: premiumCampaignStatsResult.rows,
     });
   } catch (err) {
     console.error("Dashboard Stats Error:", err);

@@ -312,7 +312,7 @@ const Layout = ({ children }) => {
         { label: 'Sessions',          path: '/sessions',          roles: ['super_admin','admin'],        icon: <Layers className="h-4 w-4" /> },
         { label: 'All Data',          path: '/leads',             roles: ['super_admin','admin'],        icon: <FileStack className="h-4 w-4" /> },
         { label: 'DNC',               path: '/dnc',               roles: ['super_admin','admin'],        icon: <ShieldBan className="h-4 w-4" /> },
-        { label: 'Download Data',     path: '/download',          roles: ['super_admin','admin','data_entry'],        icon: <FolderDown className="h-4 w-4" /> },
+        { label: 'Download Data',     path: '/download',          roles: ['super_admin','admin'],        icon: <FolderDown className="h-4 w-4" /> },
         { label: 'Logs',              path: '/logs',              roles: ['super_admin','admin'],        icon: <TerminalSquare className="h-4 w-4" /> },
         { label: 'Users',             path: '/users',             roles: ['super_admin'],               icon: <UserCheck className="h-4 w-4" /> },
         { label: 'Download Requests', path: '/download-requests', roles: ['super_admin'],               icon: <ClipboardList className="h-4 w-4" /> },
@@ -639,11 +639,14 @@ const Layout = ({ children }) => {
                             <NavLink to="/vendors" className={getClassName}>
                                 <Building2 className="h-[15px] w-[15px] shrink-0" /><span>Vendors</span>
                             </NavLink>
+                            <NavLink to="/premium-vendors" className={getClassName}>
+                                <Building2 className="h-[15px] w-[15px] shrink-0" /><span>Premium Vendors</span>
+                            </NavLink>
                             <NavLink to="/upload" className={getClassName}>
                                 <FolderUp className="h-[15px] w-[15px] shrink-0" /><span>Upload Data</span>
                             </NavLink>
-                            <NavLink to="/download" className={getClassName}>
-                                <FolderDown className="h-[15px] w-[15px] shrink-0" /><span>Download Data</span>
+                            <NavLink to="/premium-upload" className={getClassName}>
+                                <FolderUp className="h-[15px] w-[15px] shrink-0" /><span>Upload Premium Data</span>
                             </NavLink>
                         </div>
                     )}

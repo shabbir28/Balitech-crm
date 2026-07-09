@@ -6,7 +6,7 @@ const sortByPhone = (records) =>
   [...records].sort((a, b) => String(a.phone).localeCompare(String(b.phone)));
 
 /**
- * Insert leads for Premium Data. No unique constraints on phone, so no ON CONFLICT DO NOTHING.
+ * Insert leads for Premium Data. Uses ON CONFLICT to update if new duration is greater.
  */
 const insertPremiumLeadsBatches = async (
   exec,
@@ -54,6 +54,23 @@ const insertPremiumLeadsBatches = async (
     const query = `
       INSERT INTO premium_data (name, phone, email, country_code, area_code, vendor_id, campaign_type, age, job_id, dob, zipcode, jornaya_lead_id, state, caller_id, duration)
       VALUES ${valueStrings.join(",")}
+      ON CONFLICT (phone) DO UPDATE SET
+        name = EXCLUDED.name,
+        email = EXCLUDED.email,
+        country_code = EXCLUDED.country_code,
+        area_code = EXCLUDED.area_code,
+        vendor_id = EXCLUDED.vendor_id,
+        campaign_type = EXCLUDED.campaign_type,
+        age = EXCLUDED.age,
+        job_id = EXCLUDED.job_id,
+        dob = EXCLUDED.dob,
+        zipcode = EXCLUDED.zipcode,
+        jornaya_lead_id = EXCLUDED.jornaya_lead_id,
+        state = EXCLUDED.state,
+        caller_id = EXCLUDED.caller_id,
+        duration = EXCLUDED.duration,
+        uploaded_at = CURRENT_TIMESTAMP
+      WHERE COALESCE(EXCLUDED.duration, 0) > COALESCE(premium_data.duration, 0)
     `;
 
     const result = await withDeadlockRetry(() => exec.query(query, values));

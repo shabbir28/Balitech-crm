@@ -181,18 +181,38 @@ const compareJob = async (req, res) => {
     const uniqueRecords = dedupeAndNormalizeRecords(validRecords);
     const duplicatesInFile = validRecords.length - uniqueRecords.length;
 
+    const phones = uniqueRecords.map(r => String(r.phone));
+    let existingCount = 0;
+    const existingBreakdown = {};
+    if (phones.length > 0) {
+      const existingResult = await db.query(
+        `SELECT p.phone, v.name as vendor_name 
+         FROM premium_data p
+         LEFT JOIN premium_vendors v ON p.vendor_id = v.vendor_id
+         WHERE p.phone = ANY($1::varchar[])`,
+        [phones]
+      );
+      existingCount = existingResult.rows.length;
+      for (const row of existingResult.rows) {
+        const vName = row.vendor_name || 'Unknown Vendor';
+        existingBreakdown[vName] = (existingBreakdown[vName] || 0) + 1;
+      }
+    }
+
+    const freshCount = uniqueRecords.length - existingCount;
+
     return res.json({
       message: "Compare completed",
       total_processed: validRecords.length,
       total_unique_phones: uniqueRecords.length,
       duplicates_in_file: duplicatesInFile,
-      fresh_count: uniqueRecords.length, // Everything is inserted
-      existing_count: 0,
+      fresh_count: freshCount,
+      existing_count: existingCount,
       dnc_skipped: 0,
       dnc_skipped_dnc: 0,
       dnc_skipped_sale: 0,
       fresh_sample: uniqueRecords.slice(0, 25).map(r => ({ phone: r.phone, name: r.name })),
-      existing_breakdown: {},
+      existing_breakdown: existingBreakdown,
     });
   } catch (err) {
     return res.status(500).json({
@@ -297,7 +317,17 @@ const uploadFreshJob = async (req, res) => {
 
     setImmediate(async () => {
       let insertedCount = 0;
+      let existingCount = 0;
       try {
+        const phones = uniqueRecords.map(r => String(r.phone));
+        if (phones.length > 0) {
+          const existingResult = await db.query(
+            `SELECT phone FROM premium_data WHERE phone = ANY($1::varchar[])`,
+            [phones]
+          );
+          existingCount = existingResult.rows.length;
+        }
+
         await withSessionUploadLock(db, session_id, async (exec) => {
           insertedCount = await insertPremiumLeadsBatches(exec, {
             records: uniqueRecords,
@@ -313,18 +343,19 @@ const uploadFreshJob = async (req, res) => {
                total_rows         = $1,
                end_time           = CURRENT_TIMESTAMP,
                fresh_count        = $3,
-               existing_count     = 0,
-               duplicates_in_file = $4,
+               existing_count     = $4,
+               duplicates_in_file = $5,
                dnc_skipped        = 0,
                dnc_skipped_dnc    = 0,
                dnc_skipped_sale   = 0,
-               inserted           = $5,
+               inserted           = $6,
                updated            = 0
            WHERE id = $2`,
           [
             validRecords.length,
             job.id,
-            uniqueRecords.length,
+            uniqueRecords.length - existingCount,
+            existingCount,
             duplicatesInFile,
             insertedCount,
           ]

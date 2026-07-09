@@ -23,11 +23,11 @@ const authorizeRole = require('../middleware/role');
 // ── SuperAdmin direct download (existing) ────────────────────
 router.post('/', auth, authorizeRole(['super_admin']), downloadLeads);
 
-// ── Admin & Data Entry: submit a download request ─────────────────────────
-router.post('/request', auth, authorizeRole(['admin', 'data_entry']), createDownloadRequest);
+// ── Admin: submit a download request ─────────────────────────
+router.post('/request', auth, authorizeRole(['admin']), createDownloadRequest);
 
-// ── Admin & Data Entry: view own requests ──────────────────────────────────
-router.get('/requests/mine', auth, authorizeRole(['admin', 'data_entry']), getMyDownloadRequests);
+// ── Admin: view own requests ──────────────────────────────────
+router.get('/requests/mine', auth, authorizeRole(['admin']), getMyDownloadRequests);
 
 // ── SuperAdmin: view ALL requests ────────────────────────────
 router.get('/requests', auth, authorizeRole(['super_admin']), getDownloadRequests);
@@ -35,8 +35,8 @@ router.get('/requests', auth, authorizeRole(['super_admin']), getDownloadRequest
 // ── SuperAdmin: accept or reject a request ───────────────────
 router.patch('/requests/:id', auth, authorizeRole(['super_admin']), reviewDownloadRequest);
 
-// ── Admin & Data Entry: download CSV for an accepted request ───────────────
-router.get('/requests/:id/file', auth, authorizeRole(['admin', 'data_entry']), executeApprovedDownload);
+// ── Admin: download CSV for an accepted request ───────────────
+router.get('/requests/:id/file', auth, authorizeRole(['admin']), executeApprovedDownload);
 
 // ── Both: view download logs ──────────────────────────────────
 router.get('/logs', auth, authorizeRole(['super_admin', 'admin']), getDownloadLogs);
@@ -77,7 +77,7 @@ router.get(
 router.post(
   '/state-counts',
   auth,
-  authorizeRole(['super_admin', 'admin', 'data_entry']),
+  authorizeRole(['super_admin', 'admin']),
   getStateCounts,
 );
 
@@ -93,7 +93,7 @@ router.get(
 router.get(
   '/job/:jobId/stats',
   auth,
-  authorizeRole(['super_admin', 'admin', 'data_entry']),
+  authorizeRole(['super_admin', 'admin']),
   getJobStats,
 );
 

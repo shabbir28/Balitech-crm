@@ -121,7 +121,7 @@ const Dashboard = () => {
 
     if (!data) return <div style={{ color:'#f87171', padding:32 }}>Failed to load stats.</div>;
 
-    const { totals, vendorDistribution, campaignStats, dncStats, leadStatusBreakdown, recentSessions, refineCampaignStats } = data;
+    const { totals, vendorDistribution, campaignStats, dncStats, leadStatusBreakdown, recentSessions, refineCampaignStats, premiumCampaignStats } = data;
 
     // enrich lead status for pie
     const STATUS_COLORS = { available:'#10b981', downloaded:'#3b82f6', dnc:'#f97316', sold:'#a855f7', duplicate:'#6b7280' };
@@ -211,6 +211,42 @@ const Dashboard = () => {
                                         value={+camp.count}
                                         color={COLORS[(idx + 2) % COLORS.length]}
                                         sub={`Good: ${(+camp.good_count || 0).toLocaleString()} · Bad: ${(+camp.bad_count || 0).toLocaleString()}`}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* ── Premium Data Cards ── */}
+            <div style={{ marginBottom: 32 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
+                    <Zap size={16} color="#eab308" />
+                    <h2 style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', letterSpacing: '0.02em' }}>Premium Data</h2>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
+                    <div style={{ maxWidth: '300px' }}>
+                        <KpiCard index={0} icon={Database} label="Total Premium Data" value={+totals.total_premium_data} color="#eab308" sub="Premium module leads" />
+                    </div>
+                </div>
+
+                {premiumCampaignStats && premiumCampaignStats.length > 0 && (
+                    <div style={{ marginTop: 20 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
+                            <Target size={15} color="#eab308" />
+                            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.02em' }}>Premium Data by Campaign</h3>
+                        </div>
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
+                            {premiumCampaignStats.map((camp, idx) => (
+                                <div key={camp.name} style={{ maxWidth: '300px' }}>
+                                    <KpiCard
+                                        index={idx + 1}
+                                        icon={Target}
+                                        label={camp.name}
+                                        value={+camp.count}
+                                        color={COLORS[(idx + 4) % COLORS.length]}
+                                        sub="Total premium leads"
                                     />
                                 </div>
                             ))}

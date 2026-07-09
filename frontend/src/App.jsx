@@ -104,8 +104,8 @@ const AppRoutes = () => {
             {/* Compare File (new module) - super_admin, admin */}
             <Route path="/compare-file" element={<ProtectedRoute roles={['super_admin', 'admin']}><CompareFiles /></ProtectedRoute>} />
 
-            {/* Download - super_admin, admin, data_entry */}
-            <Route path="/download" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><DownloadLeads /></ProtectedRoute>} />
+            {/* Download - super_admin, admin */}
+            <Route path="/download" element={<ProtectedRoute roles={['super_admin', 'admin']}><DownloadLeads /></ProtectedRoute>} />
             <Route path="/already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin']}><AlreadyDownloaded /></ProtectedRoute>} />
 
             {/* Users management - super_admin only */}

@@ -61,7 +61,7 @@ const db = require("./src/config/db");
     `CREATE TABLE IF NOT EXISTS premium_data (
         id BIGSERIAL PRIMARY KEY,
         name VARCHAR(150),
-        phone VARCHAR(50) NOT NULL,
+        phone VARCHAR(50) NOT NULL UNIQUE,
         email VARCHAR(150),
         country_code VARCHAR(10),
         area_code VARCHAR(10),
