@@ -61,7 +61,9 @@ const RejectModal = ({ req, onConfirm, onCancel }) => {
                         </div>
                         <div>
                             <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Requested Leads</p>
-                            <p className="text-sm text-rose-400 font-mono font-bold">{req.quantity?.toLocaleString()}</p>
+                            <p className="text-sm text-rose-400 font-mono font-bold">
+                                {req.quantity?.toLocaleString()} <span className="text-slate-400 font-sans text-xs ml-1">{req.typeLabel}</span>
+                            </p>
                         </div>
                     </div>
 
@@ -124,7 +126,9 @@ const AcceptModal = ({ req, onConfirm, onCancel }) => (
                     </div>
                     <div>
                         <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Total Leads</p>
-                        <p className="text-sm text-emerald-400 font-mono font-bold">{req.quantity?.toLocaleString()}</p>
+                        <p className="text-sm text-emerald-400 font-mono font-bold">
+                            {req.quantity?.toLocaleString()} <span className="text-slate-400 font-sans text-xs ml-1">{req.typeLabel}</span>
+                        </p>
                     </div>
                     <div>
                         <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Age Range</p>
@@ -187,8 +191,17 @@ const DownloadRequests = () => {
     const fetchRequests = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await api.get('/download/requests');
-            setRequests(res.data);
+            const [resLeads, resPremium, resRefine] = await Promise.all([
+                api.get('/download/requests').catch(() => ({ data: [] })),
+                api.get('/premium-download/requests').catch(() => ({ data: [] })),
+                api.get('/refine-download/requests').catch(() => ({ data: [] }))
+            ]);
+            
+            const leads = (resLeads.data || []).map(r => ({ ...r, moduleType: 'leads', typeLabel: 'Leads' }));
+            const premium = (resPremium.data || []).map(r => ({ ...r, moduleType: 'premium', typeLabel: 'Premium Data' }));
+            const refine = (resRefine.data || []).map(r => ({ ...r, moduleType: 'refine', typeLabel: 'Refine Data' }));
+            
+            setRequests([...leads, ...premium, ...refine]);
         }
         catch { showToast('Failed to load requests from server.', 'error'); }
         finally { setLoading(false); }
@@ -197,9 +210,10 @@ const DownloadRequests = () => {
     useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
     const handleAccept = async () => {
-        const req = acceptModal; setAcceptModal(null); setProcessing(req.id);
+        const req = acceptModal; setAcceptModal(null); setProcessing(`${req.moduleType}-${req.id}`);
+        const endpoint = req.moduleType === 'premium' ? '/premium-download/requests' : req.moduleType === 'refine' ? '/refine-download/requests' : '/download/requests';
         try {
-            await api.patch(`/download/requests/${req.id}`, { action: 'accept' });
+            await api.patch(`${endpoint}/${req.id}`, { action: 'accept' });
             showToast('Request fulfilled successfully.', 'success');
             fetchRequests();
         } catch (e) { showToast(e.response?.data?.message || 'Failed to process approval.', 'error'); }
@@ -207,9 +221,10 @@ const DownloadRequests = () => {
     };
 
     const handleReject = async (reason) => {
-        const req = rejectModal; setRejectModal(null); setProcessing(req.id);
+        const req = rejectModal; setRejectModal(null); setProcessing(`${req.moduleType}-${req.id}`);
+        const endpoint = req.moduleType === 'premium' ? '/premium-download/requests' : req.moduleType === 'refine' ? '/refine-download/requests' : '/download/requests';
         try {
-            await api.patch(`/download/requests/${req.id}`, { action: 'reject', rejection_reason: reason });
+            await api.patch(`${endpoint}/${req.id}`, { action: 'reject', rejection_reason: reason });
             showToast('Request was declined.', 'success');
             fetchRequests();
         } catch (e) { showToast(e.response?.data?.message || 'Failed to decline request.', 'error'); }
@@ -352,14 +367,14 @@ const DownloadRequests = () => {
                     ) : (
                         displayed.map((req) => {
                             const adminName = [req.admin_first_name, req.admin_last_name].filter(Boolean).join(' ') || req.admin_username;
-                            const isProcessing = processing === req.id;
-                            const isExpanded = expandedRow === req.id;
+                            const isProcessing = processing === `${req.moduleType}-${req.id}`;
+                            const isExpanded = expandedRow === `${req.moduleType}-${req.id}`;
 
                             return (
-                                <div key={req.id} className={`bg-[#13151f] border ${isExpanded ? 'border-brand-500/50 shadow-[0_0_20px_rgba(245,158,11,0.1)]' : 'border-white/[0.05] hover:border-white/20 hover:bg-[#161824]'} rounded-2xl overflow-hidden transition-all duration-200`}>
+                                <div key={`${req.moduleType}-${req.id}`} className={`bg-[#13151f] border ${isExpanded ? 'border-brand-500/50 shadow-[0_0_20px_rgba(245,158,11,0.1)]' : 'border-white/[0.05] hover:border-white/20 hover:bg-[#161824]'} rounded-2xl overflow-hidden transition-all duration-200`}>
                                     <div 
                                         className="p-5 flex items-center gap-6 cursor-pointer"
-                                        onClick={() => setExpandedRow(isExpanded ? null : req.id)}
+                                        onClick={() => setExpandedRow(isExpanded ? null : `${req.moduleType}-${req.id}`)}
                                     >
                                         <div className="flex items-center gap-4 w-[250px] shrink-0">
                                             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500/20 to-orange-600/20 border border-brand-500/30 text-brand-500 flex items-center justify-center text-sm font-black shadow-inner">
@@ -378,7 +393,9 @@ const DownloadRequests = () => {
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Records Requested</p>
-                                                <p className="text-sm font-mono font-bold text-white bg-white/5 px-2 py-0.5 rounded-md inline-block">{req.quantity?.toLocaleString()}</p>
+                                                <p className="text-sm font-mono font-bold text-white bg-white/5 px-2 py-0.5 rounded-md inline-block">
+                                                    {req.quantity?.toLocaleString()} <span className="text-slate-400 text-xs font-sans ml-1">{req.typeLabel}</span>
+                                                </p>
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Campaign</p>
@@ -420,7 +437,7 @@ const DownloadRequests = () => {
                                                 )
                                             ) : (
                                                 <button
-                                                    onClick={(e) => { e.stopPropagation(); setExpandedRow(isExpanded ? null : req.id); }}
+                                                    onClick={(e) => { e.stopPropagation(); setExpandedRow(isExpanded ? null : `${req.moduleType}-${req.id}`); }}
                                                     className="w-full py-2 rounded-xl text-xs font-bold text-slate-400 bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center gap-2"
                                                 >
                                                     View Details {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}

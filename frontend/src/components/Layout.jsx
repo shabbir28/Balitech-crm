@@ -221,8 +221,13 @@ const Layout = ({ children }) => {
         if (!isSuperAdmin) return;
         const fetchPendingCount = async () => {
             try {
-                const res = await api.get('/download/requests');
-                setPendingCount(res.data.filter(r => r.status === 'pending').length);
+                const [res1, res2, res3] = await Promise.all([
+                    api.get('/download/requests').catch(() => ({ data: [] })),
+                    api.get('/premium-download/requests').catch(() => ({ data: [] })),
+                    api.get('/refine-download/requests').catch(() => ({ data: [] }))
+                ]);
+                const allReqs = [...(res1.data || []), ...(res2.data || []), ...(res3.data || [])];
+                setPendingCount(allReqs.filter(r => r.status === 'pending').length);
             } catch { /* silent */ }
         };
         fetchPendingCount();
