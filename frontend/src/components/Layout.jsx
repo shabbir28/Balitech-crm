@@ -227,7 +227,7 @@ const Layout = ({ children }) => {
                     api.get('/refine-download/requests').catch(() => ({ data: [] }))
                 ]);
                 const allReqs = [...(res1.data || []), ...(res2.data || []), ...(res3.data || [])];
-                setPendingCount(allReqs.filter(r => r.status === 'pending').length);
+                setPendingCount(allReqs.filter(r => r.status?.toLowerCase() === 'pending').length);
             } catch { /* silent */ }
         };
         fetchPendingCount();

@@ -197,9 +197,9 @@ const DownloadRequests = () => {
                 api.get('/refine-download/requests').catch(() => ({ data: [] }))
             ]);
             
-            const leads = (resLeads.data || []).map(r => ({ ...r, moduleType: 'leads', typeLabel: 'Leads' }));
-            const premium = (resPremium.data || []).map(r => ({ ...r, moduleType: 'premium', typeLabel: 'Premium Data' }));
-            const refine = (resRefine.data || []).map(r => ({ ...r, moduleType: 'refine', typeLabel: 'Refine Data' }));
+            const leads = (resLeads.data || []).map(r => ({ ...r, status: r.status?.toLowerCase(), moduleType: 'leads', typeLabel: 'Leads' }));
+            const premium = (resPremium.data || []).map(r => ({ ...r, status: r.status?.toLowerCase(), moduleType: 'premium', typeLabel: 'Premium Data' }));
+            const refine = (resRefine.data || []).map(r => ({ ...r, status: r.status?.toLowerCase(), moduleType: 'refine', typeLabel: 'Refine Data' }));
             
             setRequests([...leads, ...premium, ...refine]);
         }
