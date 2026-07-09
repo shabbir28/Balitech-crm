@@ -24,19 +24,19 @@ const AUTO_ASYNC_SCRUB_MIN = (() => {
 })();
 
 const CSV_GOOD_FIELDS = [
-  "name",
-  "phone",
-  "email",
-  "country_code",
-  "area_code",
-  "state",
-  "disposition",
-  "age",
+  { label: 'Age', value: 'age' },
+  { label: 'Dob', value: 'dob' },
+  { label: 'Name', value: 'name' },
+  { label: 'Zipcode', value: 'zipcode' },
+  { label: 'Jornaya Lead id', value: 'jornaya_lead_id' },
+  { label: 'State', value: 'state' },
+  { label: 'Caller id', value: 'caller_id' },
+  { label: 'Duration', value: 'duration' }
 ];
 const CSV_BAD_FIELDS = [
   ...CSV_GOOD_FIELDS,
-  "dnc_type",
-  "reason",
+  { label: 'DNC Type', value: 'dnc_type' },
+  { label: 'Reason', value: 'reason' },
 ];
 const DNC_UPSERT_BATCH_SIZE = 3000;
 
@@ -253,6 +253,8 @@ async function buildFilters(
     states,
     min_age,
     max_age,
+    min_duration,
+    max_duration,
     job_id,
     include_downloaded,
   },
@@ -340,6 +342,16 @@ async function buildFilters(
     params.push(parseInt(max_age));
   }
 
+  if (min_duration !== undefined && min_duration !== null && min_duration !== "") {
+    filters.push(`duration >= $${paramIdx++}`);
+    params.push(parseInt(min_duration));
+  }
+
+  if (max_duration !== undefined && max_duration !== null && max_duration !== "") {
+    filters.push(`duration <= $${paramIdx++}`);
+    params.push(parseInt(max_duration));
+  }
+
   return { filters, params, paramIdx };
 }
 
@@ -357,6 +369,8 @@ async function executeDownload(
     approved_by_id,
     min_age,
     max_age,
+    min_duration,
+    max_duration,
     force_scrub = false,
     async_scrub = false,
     job_id,
@@ -369,6 +383,8 @@ async function executeDownload(
     states,
     min_age,
     max_age,
+    min_duration,
+    max_duration,
     job_id,
     include_downloaded,
   });
@@ -399,7 +415,7 @@ async function executeDownload(
         SET status = 'downloaded', downloaded_at = CURRENT_TIMESTAMP
         FROM selected_leads sl
         WHERE l.id = sl.id
-        RETURNING l.name, l.phone, l.email, l.country_code, l.area_code, l.disposition, l.age
+        RETURNING l.name, l.phone, l.email, l.country_code, l.area_code, l.disposition, l.age, l.dob, l.zipcode, l.jornaya_lead_id, l.state, l.caller_id, l.duration
     `;
   params.push(quantity);
 
@@ -620,6 +636,8 @@ const downloadLeads = async (req, res) => {
       campaign_id,
       min_age,
       max_age,
+      min_duration,
+      max_duration,
       force_scrub,
       async_scrub,
       job_id,
@@ -652,6 +670,8 @@ const downloadLeads = async (req, res) => {
       user_id: req.user.id,
       min_age,
       max_age,
+      min_duration,
+      max_duration,
       force_scrub: forceScrub,
       async_scrub: asyncScrub,
       job_id,
@@ -736,6 +756,8 @@ const createDownloadRequest = async (req, res) => {
       campaign_id,
       min_age,
       max_age,
+      min_duration,
+      max_duration,
       job_id,
       include_downloaded,
     } = req.body;
@@ -758,8 +780,8 @@ const createDownloadRequest = async (req, res) => {
 
     const result = await db.query(
       `INSERT INTO premium_download_requests
-               (admin_id, vendor_id, campaign_id, quantity, states, min_age, max_age, job_id, include_downloaded)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+               (admin_id, vendor_id, campaign_id, quantity, states, min_age, max_age, min_duration, max_duration, job_id, include_downloaded)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
              RETURNING *`,
       [
         req.user.id,
@@ -769,6 +791,8 @@ const createDownloadRequest = async (req, res) => {
         states && states.length ? states : null,
         min_age || null,
         max_age || null,
+        min_duration || null,
+        max_duration || null,
         job_id || null,
         include_downloaded === true || include_downloaded === "true",
       ],
@@ -820,6 +844,8 @@ const getDownloadRequests = async (req, res) => {
                 dr.rejection_reason,
                 dr.min_age,
                 dr.max_age,
+                dr.min_duration,
+                dr.max_duration,
                 dr.requested_at,
                 dr.reviewed_at,
                 u.username  AS admin_username,
@@ -946,6 +972,8 @@ const reviewDownloadRequest = async (req, res) => {
       quantity: dlReq.quantity,
       min_age: dlReq.min_age,
       max_age: dlReq.max_age,
+      min_duration: dlReq.min_duration,
+      max_duration: dlReq.max_duration,
       user_id: dlReq.admin_id,
       approved_by_id: req.user.id,
       job_id: dlReq.job_id,
@@ -1394,6 +1422,8 @@ const getStateCounts = async (req, res) => {
       states,
       min_age,
       max_age,
+      min_duration,
+      max_duration,
       job_id,
       include_downloaded,
     } = req.body;
@@ -1405,6 +1435,8 @@ const getStateCounts = async (req, res) => {
         states,
         min_age,
         max_age,
+        min_duration,
+        max_duration,
         job_id,
         include_downloaded,
       });

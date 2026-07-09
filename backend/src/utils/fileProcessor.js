@@ -101,6 +101,11 @@ const guessIndices = (rowLower) => {
   let dispIdx = -1;
   let ageIdx = -1;
   let dobIdx = -1;
+  let zipcodeIdx = -1;
+  let jornayaLeadIdIdx = -1;
+  let stateIdx = -1;
+  let callerIdIdx = -1;
+  let durationIdx = -1;
 
   const isPhoneHeader = (v) => {
     // Explicitly ignore any source number / src_number column headers
@@ -169,6 +174,12 @@ const guessIndices = (rowLower) => {
   const isAgeHeader = (v) => {
     return v === "age" || v === "customerage" || v === "insuredage";
   };
+
+  const isZipcodeHeader = (v) => v === "zipcode" || v === "zip" || v === "zip_code" || v === "postal_code";
+  const isJornayaLeadIdHeader = (v) => v === "jornaya lead id" || v === "jornayaleadid" || v === "jornaya_lead_id" || v.includes("jornaya");
+  const isStateHeader = (v) => v === "state" || v === "province";
+  const isCallerIdHeader = (v) => v === "caller id" || v === "callerid" || v === "caller_id";
+  const isDurationHeader = (v) => v === "duration" || v === "call_duration";
 
   const isDobHeader = (v) => {
     return (
@@ -279,6 +290,11 @@ const guessIndices = (rowLower) => {
     if (isDobHeader(v) && dobIdx === -1) {
       dobIdx = i;
     }
+    if (isZipcodeHeader(v) && zipcodeIdx === -1) zipcodeIdx = i;
+    if (isJornayaLeadIdHeader(v) && jornayaLeadIdIdx === -1) jornayaLeadIdIdx = i;
+    if (isStateHeader(v) && stateIdx === -1) stateIdx = i;
+    if (isCallerIdHeader(v) && callerIdIdx === -1) callerIdIdx = i;
+    if (isDurationHeader(v) && durationIdx === -1) durationIdx = i;
   });
 
   return {
@@ -291,6 +307,11 @@ const guessIndices = (rowLower) => {
     dispIdx,
     ageIdx,
     dobIdx,
+    zipcodeIdx,
+    jornayaLeadIdIdx,
+    stateIdx,
+    callerIdIdx,
+    durationIdx,
   };
 };
 
@@ -412,7 +433,13 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
       name = "",
       email = "",
       disposition = "",
-      age = null;
+      age = null,
+      dob = null,
+      zipcode = null,
+      jornaya_lead_id = null,
+      state = null,
+      caller_id = null,
+      duration = null;
 
     if (isHeaderDetected && headerIndices) {
       if (headerIndices.phoneIdx !== -1)
@@ -454,6 +481,35 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
         if (calculatedAge !== null) {
           age = calculatedAge;
         }
+        if (typeof rawDob === 'number' && rawDob > 10000 && rawDob < 100000) {
+           const d = new Date((rawDob - 25569) * 86400 * 1000);
+           dob = `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+        } else {
+           dob = String(rawDob || "").trim();
+        }
+      }
+
+      if (headerIndices.zipcodeIdx !== -1) zipcode = String(values[headerIndices.zipcodeIdx] || "").trim();
+      if (headerIndices.jornayaLeadIdIdx !== -1) jornaya_lead_id = String(values[headerIndices.jornayaLeadIdIdx] || "").trim();
+      if (headerIndices.stateIdx !== -1) state = String(values[headerIndices.stateIdx] || "").trim();
+      if (headerIndices.callerIdIdx !== -1) caller_id = String(values[headerIndices.callerIdIdx] || "").trim();
+      if (headerIndices.durationIdx !== -1) {
+         const rawDuration = values[headerIndices.durationIdx];
+         if (rawDuration !== undefined && rawDuration !== "") {
+            if (typeof rawDuration === 'number' && rawDuration < 1) {
+               duration = Math.round(rawDuration * 86400);
+            } else {
+               let durStr = String(rawDuration).trim();
+               if (durStr.includes(':')) {
+                 const parts = durStr.split(':').map(Number);
+                 if (parts.length === 3) duration = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                 else if (parts.length === 2) duration = parts[0] * 60 + parts[1];
+               } else {
+                 const parsedDur = parseInt(durStr, 10);
+                 if (!isNaN(parsedDur)) duration = parsedDur;
+               }
+            }
+         }
       }
 
       // Clean phone number initially
@@ -548,6 +604,8 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
       if (dIdx !== -1) disposition = String(values[dIdx] || "").trim();
     }
 
+    if (!phone && caller_id) phone = caller_id;
+
     if (phone) {
       const digitsOnly = phone.replace(/\D/g, "");
       if (digitsOnly.length >= 7 && digitsOnly.length <= 15) {
@@ -557,6 +615,12 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
           email: email || null,
           disposition: disposition || null,
           age: age || null,
+          dob: dob || null,
+          zipcode: zipcode || null,
+          jornaya_lead_id: jornaya_lead_id || null,
+          state: state || null,
+          caller_id: caller_id || null,
+          duration: duration || null,
         };
       }
     }

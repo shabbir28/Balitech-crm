@@ -27,7 +27,7 @@ const insertPremiumLeadsBatches = async (
 
     for (const record of batch) {
       valueStrings.push(
-        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8})`,
+        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10}, $${paramIndex + 11}, $${paramIndex + 12}, $${paramIndex + 13}, $${paramIndex + 14})`,
       );
       values.push(
         truncate(record.name, 150) || null,
@@ -39,14 +39,20 @@ const insertPremiumLeadsBatches = async (
         truncate(session.campaign_type, 50) || null,
         record.age || null,
         job_id || null,
+        record.dob || null,
+        record.zipcode || null,
+        record.jornaya_lead_id || null,
+        record.state || null,
+        record.caller_id || null,
+        record.duration || null,
       );
-      paramIndex += 9;
+      paramIndex += 15;
     }
 
     if (valueStrings.length === 0) continue;
 
     const query = `
-      INSERT INTO premium_data (name, phone, email, country_code, area_code, vendor_id, campaign_type, age, job_id)
+      INSERT INTO premium_data (name, phone, email, country_code, area_code, vendor_id, campaign_type, age, job_id, dob, zipcode, jornaya_lead_id, state, caller_id, duration)
       VALUES ${valueStrings.join(",")}
     `;
 

@@ -26,6 +26,21 @@ const dedupeAndNormalizeRecords = (records) => {
   for (const record of records) {
     const { phone, countryCode, areaCode } = parsePhone(record.phone);
     if (!phone) continue;
+    
+    const existing = deduped.get(phone);
+    
+    let currentDuration = parseInt(record.duration, 10);
+    if (isNaN(currentDuration)) currentDuration = 0;
+    
+    if (existing) {
+      let existingDuration = parseInt(existing.duration, 10);
+      if (isNaN(existingDuration)) existingDuration = 0;
+      
+      if (currentDuration <= existingDuration) {
+        continue;
+      }
+    }
+
     deduped.set(phone, {
       ...record,
       phone,

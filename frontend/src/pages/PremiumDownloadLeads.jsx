@@ -431,6 +431,8 @@ const PremiumDownloadLeads = () => {
         quantity: 1000,
         min_age: '',
         max_age: '',
+        min_duration: '',
+        max_duration: '',
         include_downloaded: false,
         quality: 'All',
     });
@@ -517,6 +519,8 @@ const PremiumDownloadLeads = () => {
                     states: form.states,
                     min_age: form.min_age,
                     max_age: form.max_age,
+                    min_duration: form.min_duration,
+                    max_duration: form.max_duration,
                     job_id: selectedFileId || undefined,
                     include_downloaded: form.include_downloaded,
                     quality: form.quality,
@@ -530,7 +534,7 @@ const PremiumDownloadLeads = () => {
             const timeoutId = setTimeout(() => setStateCounts({}), 0);
             return () => clearTimeout(timeoutId);
         }
-    }, [form.vendor_id, form.campaign_id, form.states, form.min_age, form.max_age, selectedFileId, form.include_downloaded, form.quality]);
+    }, [form.vendor_id, form.campaign_id, form.states, form.min_age, form.max_age, form.min_duration, form.max_duration, selectedFileId, form.include_downloaded, form.quality]);
 
     // Fetch vendor uploaded files whenever vendor changes
     useEffect(() => {
@@ -636,6 +640,8 @@ const PremiumDownloadLeads = () => {
                     quantity: 1000,
                     min_age: '',
                     max_age: '',
+                    min_duration: '',
+                    max_duration: '',
                     include_downloaded: false,
                     quality: 'All',
                 });
@@ -810,7 +816,7 @@ const PremiumDownloadLeads = () => {
                                             When available shows 0, enable this to re-export that vendor&apos;s full dataset (available, downloaded, and DNC)
                                             {selectedVendorPool != null && (
                                                 <span className="text-amber-400/90 font-semibold">
-                                                    {' '}({selectedVendorPool.toLocaleString()} leads in pool)
+                                                    {' '}({(form.states.length > 0 || form.min_age !== '' || form.max_age !== '' || form.min_duration !== '' || form.max_duration !== '' || (form.campaign_id && form.campaign_id !== 'all') || form.quality !== 'All') ? Object.values(stateCounts).reduce((a, b) => a + b, 0).toLocaleString() : selectedVendorPool.toLocaleString()} leads in pool)
                                                 </span>
                                             )}
                                         </span>
@@ -909,6 +915,28 @@ const PremiumDownloadLeads = () => {
                                             onChange={e => setForm({ ...form, max_age: e.target.value })}
                                             className="w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 hover:bg-[#0a0c14]/80 hover:border-brand-500/30 focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/20 text-white rounded-xl py-3.5 px-4 outline-none transition-all text-sm font-mono shadow-inner"
                                             placeholder="65"
+                                        />
+                                    </Field>
+                                </div>
+
+                                {/* Duration Range */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Field label="Min Duration" hint="Secs">
+                                        <input
+                                            type="number" min="0"
+                                            value={form.min_duration}
+                                            onChange={e => setForm({ ...form, min_duration: e.target.value })}
+                                            className="w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 hover:bg-[#0a0c14]/80 hover:border-brand-500/30 focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/20 text-white rounded-xl py-3.5 px-4 outline-none transition-all text-sm font-mono shadow-inner"
+                                            placeholder="1"
+                                        />
+                                    </Field>
+                                    <Field label="Max Duration" hint="Secs">
+                                        <input
+                                            type="number" min="0"
+                                            value={form.max_duration}
+                                            onChange={e => setForm({ ...form, max_duration: e.target.value })}
+                                            className="w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 hover:bg-[#0a0c14]/80 hover:border-brand-500/30 focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/20 text-white rounded-xl py-3.5 px-4 outline-none transition-all text-sm font-mono shadow-inner"
+                                            placeholder="25"
                                         />
                                     </Field>
                                 </div>
@@ -1065,8 +1093,12 @@ const PremiumDownloadLeads = () => {
                                             <span className="text-blue-400 font-mono font-black text-[13px]">{parseInt(fileStats.total_leads || 0).toLocaleString()}</span>
                                         </div>
                                         <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-2.5 flex flex-col justify-center items-center text-center">
-                                            <span className="text-[9px] text-emerald-400/80 font-bold uppercase tracking-wider mb-0.5">Available</span>
-                                            <span className="text-emerald-400 font-mono font-black text-[13px]">{parseInt(fileStats.available_leads || 0).toLocaleString()}</span>
+                                            <span className="text-[9px] text-emerald-400/80 font-bold uppercase tracking-wider mb-0.5">
+                                                {(form.states.length > 0 || form.min_age !== '' || form.max_age !== '' || form.min_duration !== '' || form.max_duration !== '' || (form.campaign_id && form.campaign_id !== 'all') || form.quality !== 'All') ? 'Matched' : 'Available'}
+                                            </span>
+                                            <span className="text-emerald-400 font-mono font-black text-[13px]">
+                                                {(form.states.length > 0 || form.min_age !== '' || form.max_age !== '' || form.min_duration !== '' || form.max_duration !== '' || (form.campaign_id && form.campaign_id !== 'all') || form.quality !== 'All') ? Object.values(stateCounts).reduce((a, b) => a + b, 0).toLocaleString() : parseInt(fileStats.available_leads || 0).toLocaleString()}
+                                            </span>
                                         </div>
                                         <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-2.5 flex flex-col justify-center items-center text-center">
                                             <span className="text-[9px] text-orange-400/80 font-bold uppercase tracking-wider mb-0.5">Downloaded</span>
@@ -1105,12 +1137,12 @@ const PremiumDownloadLeads = () => {
                                             </div>
                                             <div className="bg-teal-500/10 border border-teal-500/20 rounded-xl p-2.5 flex flex-col justify-center items-center text-center">
                                                 <span className="text-[9px] text-teal-400/80 font-bold uppercase tracking-wider mb-0.5">
-                                                    {form.include_downloaded ? 'Re-Download' : 'Available'}
+                                                    {(form.states.length > 0 || form.min_age !== '' || form.max_age !== '' || form.min_duration !== '' || form.max_duration !== '' || (form.campaign_id && form.campaign_id !== 'all') || form.quality !== 'All') ? 'Matched' : (form.include_downloaded ? 'Re-Download' : 'Available')}
                                                 </span>
                                                 <span className="text-teal-400 font-mono font-black text-[13px]">
-                                                    {selectedVendorPool != null
+                                                    {(form.states.length > 0 || form.min_age !== '' || form.max_age !== '' || form.min_duration !== '' || form.max_duration !== '' || (form.campaign_id && form.campaign_id !== 'all') || form.quality !== 'All') ? Object.values(stateCounts).reduce((a, b) => a + b, 0).toLocaleString() : (selectedVendorPool != null
                                                         ? selectedVendorPool.toLocaleString()
-                                                        : parseInt(selectedVendor.available_leads || 0).toLocaleString()}
+                                                        : parseInt(selectedVendor.available_leads || 0).toLocaleString())}
                                                 </span>
                                             </div>
                                             <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-2.5 flex flex-col justify-center items-center text-center">

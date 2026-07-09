@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { getAreaCodeState } from '../utils/areaCodes';
+
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, Database, ListFilter } from 'lucide-react';
 
 const PremiumLeadsTable = () => {
@@ -150,10 +150,10 @@ const PremiumLeadsTable = () => {
                 {/* Decorative glow */}
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-brand-500/5 rounded-full blur-[120px] pointer-events-none z-0"></div>
 
-                <div className="min-w-[1000px] relative z-10">
+                <div className="min-w-[1200px] relative z-10">
                     {/* Table Header */}
-                    <div className="grid grid-cols-[minmax(180px,1.5fr)_130px_minmax(150px,1.2fr)_80px_80px_80px_100px_90px_100px] p-5 border-b border-white/10 bg-[#0a0a0f]/80 backdrop-blur-md sticky top-0">
-                        {['Name', 'Phone', 'Email', 'Age', 'Area', 'State', 'Disposition', 'Quality', 'Status'].map(h => (
+                    <div className="grid grid-cols-[60px_100px_minmax(180px,1.5fr)_100px_minmax(150px,1fr)_80px_120px_100px] p-5 border-b border-white/10 bg-[#0a0a0f]/80 backdrop-blur-md sticky top-0">
+                        {['Age', 'Dob', 'Name', 'Zipcode', 'Jornaya Lead id', 'State', 'Caller id', 'Duration'].map(h => (
                             <span key={h} className="text-slate-400 text-[11px] font-bold uppercase tracking-widest pl-2">
                                 {h}
                             </span>
@@ -172,7 +172,17 @@ const PremiumLeadsTable = () => {
                             </div>
                         ) : (
                             leads.map((lead) => (
-                                <div key={lead.id} className="grid grid-cols-[minmax(180px,1.5fr)_130px_minmax(150px,1.2fr)_80px_80px_80px_100px_90px_100px] p-4 items-center hover:bg-white/5 transition-colors group cursor-default">
+                                <div key={lead.id} className="grid grid-cols-[60px_100px_minmax(180px,1.5fr)_100px_minmax(150px,1fr)_80px_120px_100px] p-4 items-center hover:bg-white/5 transition-colors group cursor-default">
+                                    {/* Age */}
+                                    <div className="text-white text-[13px] font-bold pl-2">
+                                        {lead.age !== null && lead.age !== undefined ? lead.age : '—'}
+                                    </div>
+
+                                    {/* DOB */}
+                                    <div className="text-slate-300 text-[13px] pl-2">
+                                        {lead.dob || '—'}
+                                    </div>
+
                                     {/* Name */}
                                     <div className="flex items-center gap-3 pr-4 pl-2">
                                         <div className="w-9 h-9 rounded-full shrink-0 bg-brand-500/10 border border-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-xs shadow-inner group-hover:scale-110 transition-transform">
@@ -185,73 +195,33 @@ const PremiumLeadsTable = () => {
                                         </div>
                                     </div>
                                     
-                                    {/* Phone */}
-                                    <div className="text-slate-300 text-[13px] font-mono tracking-wide">
-                                        {lead.phone}
+                                    {/* Zipcode */}
+                                    <div className="text-slate-300 text-[13px] pl-2">
+                                        {lead.zipcode || '—'}
                                     </div>
                                     
-                                    {/* Email */}
-                                    <div className="text-slate-500 text-[13px] pr-4 truncate font-medium">
-                                        {lead.email || '—'}
-                                    </div>
-                                    
-                                    {/* Age */}
-                                    <div className="text-white text-[13px] font-bold">
-                                        {lead.age !== null && lead.age !== undefined ? lead.age : '—'}
-                                    </div>
-
-                                    {/* Area Code */}
-                                    <div>
-                                        <span className="inline-flex px-2.5 py-1 rounded-md text-[11px] font-bold bg-[#0a0a0f] text-slate-400 border border-white/10 font-mono shadow-sm">
-                                            {(() => {
-                                                if (lead.area_code && lead.area_code !== 'Unknown') return lead.area_code;
-                                                const clean = lead.phone.replace(/\D/g, '');
-                                                if (clean.length === 11 && clean.startsWith('1')) return clean.substring(1, 4);
-                                                if (clean.length === 10) return clean.substring(0, 3);
-                                                return lead.area_code || '—';
-                                            })()}
-                                        </span>
+                                    {/* Jornaya ID */}
+                                    <div className="text-slate-300 text-[13px] truncate pr-2 pl-2" title={lead.jornaya_lead_id}>
+                                        {lead.jornaya_lead_id || '—'}
                                     </div>
 
                                     {/* State */}
-                                    <div>
+                                    <div className="pl-2">
                                         <span className="inline-flex px-3 py-1 rounded-md text-[10px] font-bold tracking-widest uppercase bg-purple-500/10 text-purple-400 border border-purple-500/20 shadow-sm">
-                                            {(() => {
-                                                let code = lead.area_code;
-                                                if (!code || code === 'Unknown') {
-                                                    const clean = lead.phone.replace(/\D/g, '');
-                                                    if (clean.length === 11 && clean.startsWith('1')) code = clean.substring(1, 4);
-                                                    else if (clean.length === 10) code = clean.substring(0, 3);
-                                                }
-                                                return getAreaCodeState(code);
-                                            })()}
+                                            {lead.state || '—'}
                                         </span>
                                     </div>
 
-                                    {/* Disposition */}
-                                    <div>
-                                        <span className="inline-flex px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider text-slate-300">
-                                            {lead.disposition || '—'}
-                                        </span>
+                                    {/* Caller ID */}
+                                    <div className="text-slate-300 text-[13px] pl-2">
+                                        {lead.caller_id || '—'}
                                     </div>
 
-                                    {/* Quality */}
-                                    <div>
-                                        <span className={`inline-flex px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider shadow-sm ${lead.quality === 'Bad' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
-                                            {lead.quality || 'Good'}
-                                        </span>
-                                    </div>
-
-                                    {/* Status */}
-                                    <div>
-                                        <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border shadow-sm ${
-                                            lead.status === 'available' 
-                                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
-                                                : 'bg-[#0a0a0f] text-slate-500 border-white/5'
-                                        }`}>
-                                            <div className={`w-1.5 h-1.5 rounded-full ${lead.status === 'available' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-slate-500'}`}></div>
-                                            {lead.status === 'available' ? 'Available' : 'Used'}
-                                        </span>
+                                    {/* Duration */}
+                                    <div className="text-slate-300 text-[13px] pl-2 font-mono">
+                                        {lead.duration !== null && lead.duration !== undefined ? 
+                                            `${Math.floor(lead.duration / 3600)}:${Math.floor((lead.duration % 3600) / 60).toString().padStart(2, '0')}:${(lead.duration % 60).toString().padStart(2, '0')}` 
+                                            : '—'}
                                     </div>
                                 </div>
                             ))
