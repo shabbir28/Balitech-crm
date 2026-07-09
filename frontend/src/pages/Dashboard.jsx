@@ -193,30 +193,19 @@ const Dashboard = () => {
                     <div style={{ maxWidth: '300px' }}>
                         <KpiCard index={2} icon={AlertCircle} label="Bad Refine" value={+totals.bad_refine_data} color="#ef4444" sub="Low quality data" />
                     </div>
+                    {refineCampaignStats && refineCampaignStats.length > 0 && refineCampaignStats.map((camp, idx) => (
+                        <div key={camp.name} style={{ maxWidth: '300px' }}>
+                            <KpiCard
+                                index={idx + 3}
+                                icon={Target}
+                                label={camp.name}
+                                value={+camp.count}
+                                color={COLORS[(idx + 2) % COLORS.length]}
+                                sub={`Good: ${(+camp.good_count || 0).toLocaleString()} · Bad: ${(+camp.bad_count || 0).toLocaleString()}`}
+                            />
+                        </div>
+                    ))}
                 </div>
-
-                {refineCampaignStats && refineCampaignStats.length > 0 && (
-                    <div style={{ marginTop: 20 }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
-                            <Target size={15} color="#14b8a6" />
-                            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.02em' }}>Refine Data by Campaign</h3>
-                        </div>
-                        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
-                            {refineCampaignStats.map((camp, idx) => (
-                                <div key={camp.name} style={{ maxWidth: '300px' }}>
-                                    <KpiCard
-                                        index={idx + 3}
-                                        icon={Target}
-                                        label={camp.name}
-                                        value={+camp.count}
-                                        color={COLORS[(idx + 2) % COLORS.length]}
-                                        sub={`Good: ${(+camp.good_count || 0).toLocaleString()} · Bad: ${(+camp.bad_count || 0).toLocaleString()}`}
-                                    />
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
             </div>
 
             {/* ── Premium Data Cards ── */}
@@ -229,30 +218,19 @@ const Dashboard = () => {
                     <div style={{ maxWidth: '300px' }}>
                         <KpiCard index={0} icon={Database} label="Total Premium Data" value={+totals.total_premium_data} color="#eab308" sub="Premium module leads" />
                     </div>
+                    {premiumCampaignStats && premiumCampaignStats.length > 0 && premiumCampaignStats.map((camp, idx) => (
+                        <div key={camp.name} style={{ maxWidth: '300px' }}>
+                            <KpiCard
+                                index={idx + 1}
+                                icon={Target}
+                                label={camp.name}
+                                value={+camp.count}
+                                color={COLORS[(idx + 4) % COLORS.length]}
+                                sub="Total premium leads"
+                            />
+                        </div>
+                    ))}
                 </div>
-
-                {premiumCampaignStats && premiumCampaignStats.length > 0 && (
-                    <div style={{ marginTop: 20 }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
-                            <Target size={15} color="#eab308" />
-                            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.02em' }}>Premium Data by Campaign</h3>
-                        </div>
-                        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
-                            {premiumCampaignStats.map((camp, idx) => (
-                                <div key={camp.name} style={{ maxWidth: '300px' }}>
-                                    <KpiCard
-                                        index={idx + 1}
-                                        icon={Target}
-                                        label={camp.name}
-                                        value={+camp.count}
-                                        color={COLORS[(idx + 4) % COLORS.length]}
-                                        sub="Total premium leads"
-                                    />
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
             </div>
 
             {/* ── Row 2: Vendor Bar + Lead Status Pie ── */}

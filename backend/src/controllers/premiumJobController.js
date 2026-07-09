@@ -183,19 +183,32 @@ const compareJob = async (req, res) => {
 
     const phones = uniqueRecords.map(r => String(r.phone));
     let existingCount = 0;
+    let replacedCount = 0;
     const existingBreakdown = {};
     if (phones.length > 0) {
       const existingResult = await db.query(
-        `SELECT p.phone, v.name as vendor_name 
+        `SELECT p.phone, p.duration, v.name as vendor_name 
          FROM premium_data p
          LEFT JOIN premium_vendors v ON p.vendor_id = v.vendor_id
          WHERE p.phone = ANY($1::varchar[])`,
         [phones]
       );
       existingCount = existingResult.rows.length;
+
+      const uploadedDurations = new Map();
+      for (const r of uniqueRecords) {
+        uploadedDurations.set(String(r.phone), parseInt(r.duration, 10) || 0);
+      }
+
       for (const row of existingResult.rows) {
         const vName = row.vendor_name || 'Unknown Vendor';
         existingBreakdown[vName] = (existingBreakdown[vName] || 0) + 1;
+        
+        const existingDuration = parseInt(row.duration, 10) || 0;
+        const upDuration = uploadedDurations.get(String(row.phone)) || 0;
+        if (upDuration > existingDuration) {
+           replacedCount++;
+        }
       }
     }
 
@@ -208,6 +221,7 @@ const compareJob = async (req, res) => {
       duplicates_in_file: duplicatesInFile,
       fresh_count: freshCount,
       existing_count: existingCount,
+      replaced_count: replacedCount,
       dnc_skipped: 0,
       dnc_skipped_dnc: 0,
       dnc_skipped_sale: 0,

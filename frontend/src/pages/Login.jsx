@@ -16,16 +16,16 @@ const Login = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        // const token = recaptchaRef.current?.getValue();
-        // if (!token) {
-        //     setError('Please complete the reCAPTCHA to continue');
-        //     return;
-        // }
+        const token = recaptchaRef.current?.getValue();
+        if (!token) {
+            setError('Please complete the reCAPTCHA to continue');
+            return;
+        }
 
         setLoading(true);
         setError('');
         try {
-            await login(formData.username, formData.password);
+            await login(formData.username, formData.password, token);
             navigate('/');
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to login');
@@ -108,13 +108,13 @@ const Login = () => {
                                 </div>
                             </div>
 
-                            {/* <div className="pt-2 flex justify-center">
+                            <div className="pt-2 flex justify-center">
                                 <ReCAPTCHA
                                     ref={recaptchaRef}
                                     sitekey="6LeLzwctAAAAAIRVXWG_PUJcMegb1k1B-o_s4q1w"
                                     theme="dark"
                                 />
-                            </div> */}
+                            </div>
 
                             <div className="pt-2">
                                 <button

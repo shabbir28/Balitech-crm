@@ -24,8 +24,8 @@ export const AuthProvider = ({ children }) => {
         // but local storage can be read synchronously.
     }, []);
 
-    const login = async (username, password) => {
-        const res = await api.post('/auth/login', { username, password });
+    const login = async (username, password, captchaToken) => {
+        const res = await api.post('/auth/login', { username, password, captchaToken });
         const { token, user: userData } = res.data;
         
         localStorage.setItem('token', token);

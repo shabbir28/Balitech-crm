@@ -142,6 +142,7 @@ const PremiumAddJob = () => {
             duplicates_in_file: 0,
             fresh_count: 0,
             existing_count: 0,
+            replaced_count: 0,
             dnc_skipped: 0,
             dnc_skipped_dnc: 0,
             dnc_skipped_sale: 0,
@@ -167,6 +168,7 @@ const PremiumAddJob = () => {
                     aggregate.duplicates_in_file += res.data.duplicates_in_file || 0;
                     aggregate.fresh_count += res.data.fresh_count || 0;
                     aggregate.existing_count += res.data.existing_count || 0;
+                    aggregate.replaced_count += res.data.replaced_count || 0;
                     aggregate.dnc_skipped += res.data.dnc_skipped || 0;
                     aggregate.dnc_skipped_dnc += res.data.dnc_skipped_dnc || 0;
                     aggregate.dnc_skipped_sale += res.data.dnc_skipped_sale || 0;
@@ -558,6 +560,9 @@ const PremiumAddJob = () => {
                                             <div className="absolute top-0 left-0 w-1 h-full bg-amber-500/70"></div>
                                             <p className="text-amber-400/80 text-[11px] uppercase tracking-widest font-bold mb-1 ml-2 text-left">Already Present</p>
                                             <p className="text-3xl font-extrabold text-white ml-2">{compareResult.existing_count}</p>
+                                            {compareResult.replaced_count > 0 && (
+                                                <p className="text-[11px] font-bold text-emerald-400 mt-1 ml-2">Will Replace: {compareResult.replaced_count}</p>
+                                            )}
                                             {compareResult.existing_breakdown && Object.keys(compareResult.existing_breakdown).length > 0 && (
                                                 <div className="mt-3 ml-2 text-[11px] border-t border-white/5 pt-3 flex-grow overflow-y-auto max-h-24 custom-scrollbar">
                                                     {Object.entries(compareResult.existing_breakdown).map(([campaign, count]) => (
