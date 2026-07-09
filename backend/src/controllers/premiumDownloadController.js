@@ -860,7 +860,7 @@ const getDownloadRequests = async (req, res) => {
             LEFT JOIN premium_campaigns c ON dr.campaign_id = c.campaign_id
             LEFT JOIN users rv ON dr.reviewed_by = rv.id
             ORDER BY
-                CASE dr.status WHEN 'pending' THEN 0 ELSE 1 END,
+                CASE LOWER(dr.status) WHEN 'pending' THEN 0 ELSE 1 END,
                 dr.requested_at DESC
         `);
     return res.json(result.rows);
@@ -932,7 +932,7 @@ const reviewDownloadRequest = async (req, res) => {
       return res.status(404).json({ message: "Download request not found." });
     }
     const dlReq = reqRes.rows[0];
-    if (dlReq.status !== "pending") {
+    if (dlReq.status.toLowerCase() !== "pending") {
       return res
         .status(400)
         .json({ message: `Request is already ${dlReq.status}.` });
