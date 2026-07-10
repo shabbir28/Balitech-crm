@@ -93,21 +93,32 @@ const lookupDncPhones = async (exec, phones) => {
   return { dncSet, dncSkippedDnc, dncSkippedSale };
 };
 
-const lookupExistingLeads = async (exec, phones) => {
+const lookupExistingLeads = async (exec, phones, currentCampaign) => {
   const existingSet = new Set();
   const existingBreakdown = {};
 
   for (const chunk of chunkArray(phones, 5000)) {
     await new Promise((resolve) => setImmediate(resolve));
     const existingRes = await exec.query(
-      "SELECT phone, COALESCE(campaign_type, 'Unknown Campaign') AS vendor_name FROM leads WHERE phone = ANY($1::text[])",
+      "SELECT phone, COALESCE(campaign_type, '') AS campaign_type FROM leads WHERE phone = ANY($1::text[])",
       [chunk],
     );
     for (const row of existingRes.rows) {
-      if (!existingSet.has(row.phone)) {
-        existingSet.add(row.phone);
-        const vName = row.vendor_name || "Unknown Campaign";
-        existingBreakdown[vName] = (existingBreakdown[vName] || 0) + 1;
+      const cType = row.campaign_type || "Unknown Campaign";
+      
+      const campaigns = cType.split(',').map(c => c.trim()).filter(Boolean);
+      if (campaigns.length === 0) campaigns.push("Unknown Campaign");
+      
+      for (const c of campaigns) {
+        existingBreakdown[c] = (existingBreakdown[c] || 0) + 1;
+      }
+      
+      // Add to existingSet only if currentCampaign is provided and matches,
+      // or if no currentCampaign is provided (backward compatibility)
+      if (!currentCampaign || campaigns.includes(currentCampaign)) {
+        if (!existingSet.has(row.phone)) {
+          existingSet.add(row.phone);
+        }
       }
     }
   }

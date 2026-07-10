@@ -191,12 +191,13 @@ const compareJob = async (req, res) => {
     }
 
     const sessionCheck = await db.query(
-      "SELECT id FROM upload_sessions WHERE id = $1",
+      "SELECT * FROM upload_sessions WHERE id = $1",
       [session_id],
     );
     if (sessionCheck.rows.length === 0) {
       return res.status(404).json({ message: "Session not found" });
     }
+    const session = sessionCheck.rows[0];
 
     const records = await processFileBuffer(
       req.file.path,
@@ -235,6 +236,7 @@ const compareJob = async (req, res) => {
     const { existingSet, existingBreakdown } = await lookupExistingLeads(
       db,
       phonesNotDnc,
+      session.campaign_type
     );
 
     const existingCount = existingSet.size;
@@ -415,6 +417,7 @@ const uploadFreshJob = async (req, res) => {
           const { existingSet, existingBreakdown } = await lookupExistingLeads(
             exec,
             phonesNotDnc,
+            session.campaign_type
           );
 
           const existingCount = existingSet.size;

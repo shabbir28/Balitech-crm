@@ -49,10 +49,24 @@ const insertFreshLeadsBatches = async (
     const query = `
       INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, campaign_type, age, job_id)
       VALUES ${valueStrings.join(",")}
-      ON CONFLICT (phone, workspace) DO NOTHING
+      ON CONFLICT (phone, workspace) DO UPDATE SET
+        campaign_type = CASE
+          WHEN leads.campaign_type IS NULL OR leads.campaign_type = '' THEN EXCLUDED.campaign_type
+          WHEN position(EXCLUDED.campaign_type in leads.campaign_type) = 0 
+          THEN leads.campaign_type || ', ' || EXCLUDED.campaign_type
+          ELSE leads.campaign_type
+        END,
+        job_id = COALESCE(EXCLUDED.job_id, leads.job_id)
+      RETURNING (xmax = 0) AS inserted
     `;
 
     const result = await withDeadlockRetry(() => exec.query(query, values));
+    const insertedInBatch = result.rows.reduce(
+      (acc, r) => acc + (r.inserted ? 1 : 0),
+      0,
+    );
+    // Even if it was updated (campaign appended), it counts as a fresh addition to this campaign.
+    // So we just add the batch length or result.rowCount. We'll use result.rowCount.
     insertedCount += result.rowCount;
   }
 
@@ -82,7 +96,7 @@ const insertLeadsUpsertBatches = async (
 
     for (const record of batch) {
       valueStrings.push(
-        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8})`,
+        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9})`,
       );
       values.push(
         truncate(record.name, 150) || null,
@@ -92,16 +106,17 @@ const insertLeadsUpsertBatches = async (
         record.areaCode,
         session.vendor_id,
         truncate(record.disposition, 100) || null,
+        truncate(session.campaign_type, 50),
         record.age || null,
         job_id || null,
       );
-      paramIndex += 9;
+      paramIndex += 10;
     }
 
     if (valueStrings.length === 0) continue;
 
     const query = `
-      INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, age, job_id)
+      INSERT INTO leads (name, phone, email, country_code, area_code, vendor_id, disposition, campaign_type, age, job_id)
       VALUES ${valueStrings.join(",")}
       ON CONFLICT (phone, workspace) DO UPDATE SET
         disposition = CASE
@@ -119,6 +134,12 @@ const insertLeadsUpsertBatches = async (
         age = CASE
           WHEN EXCLUDED.age IS NOT NULL THEN EXCLUDED.age
           ELSE leads.age
+        END,
+        campaign_type = CASE
+          WHEN leads.campaign_type IS NULL OR leads.campaign_type = '' THEN EXCLUDED.campaign_type
+          WHEN position(EXCLUDED.campaign_type in leads.campaign_type) = 0 
+          THEN leads.campaign_type || ', ' || EXCLUDED.campaign_type
+          ELSE leads.campaign_type
         END,
         job_id = COALESCE(EXCLUDED.job_id, leads.job_id)
       RETURNING (xmax = 0) AS inserted
