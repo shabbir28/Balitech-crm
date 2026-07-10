@@ -30,3 +30,11 @@ export const fetchCampaignSummary = () => {
 export const analyzeCleanFile = (jobId) => {
     return api.post('/dnc-checker/analyze-file', { jobId });
 };
+
+/**
+ * Fetch paginated list of DNC single lookups.
+ * @param {Object} params - { page, limit, search, status, startDate, endDate }
+ */
+export const fetchSingleLookups = (params = {}) => {
+    return api.get('/dnc-checker/single-lookups', { params });
+};

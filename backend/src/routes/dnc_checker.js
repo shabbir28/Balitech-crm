@@ -7,6 +7,8 @@ const {
     getDncJobById,
     getCampaignSummary,
     analyzeCleanFile,
+    createSingleDncResult,
+    getSingleChecks,
 } = require('../controllers/dncCheckerController');
 
 const verifyToken   = require('../middleware/auth');
@@ -17,12 +19,18 @@ const dncSyncAuth   = require('../middleware/dncSyncAuth');
 // POST /api/dnc-checker/results
 router.post('/results', dncSyncAuth, createDncResult);
 
+// POST /api/dnc-checker/single-result
+router.post('/single-result', dncSyncAuth, createSingleDncResult);
+
 // ─── CRM user routes (JWT auth + role check) ────────────────────────────────
 router.use(verifyToken);
 router.use(authorizeRole(['super_admin', 'admin']));
 
 // GET /api/dnc-checker/uploaded-files
 router.get('/uploaded-files', getUploadedFiles);
+
+// GET /api/dnc-checker/single-lookups
+router.get('/single-lookups', getSingleChecks);
 
 // GET /api/dnc-checker/uploaded-files/:id
 router.get('/uploaded-files/:id', getDncJobById);

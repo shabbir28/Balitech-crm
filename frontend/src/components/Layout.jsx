@@ -328,8 +328,7 @@ const Layout = ({ children }) => {
         { label: 'All Refine Data',     path: '/refine-data',              roles: ['super_admin','admin'],        icon: <FileStack className="h-4 w-4" /> },
         { label: 'Download Refined',    path: '/refine-download',          roles: ['super_admin','admin'],        icon: <FolderDown className="h-4 w-4" /> },
         { label: 'Already Downloaded (Refine)', path: '/refine-already-downloaded', roles: ['super_admin','admin'], icon: <History className="h-4 w-4" /> },
-        { label: 'DNC Checker Uploaded Files',  path: '/dnc-checker/uploaded-files', roles: ['super_admin','admin'], icon: <FileCheck2 className="h-4 w-4" /> },
-        { label: 'DNC Checker Campaigns',       path: '/dnc-checker/campaigns',      roles: ['super_admin','admin'], icon: <ShieldCheck className="h-4 w-4" /> },
+        { label: 'DNC Single Lookups',          path: '/dnc-checker/single-lookups', roles: ['super_admin','admin'], icon: <Search className="h-4 w-4" /> },
         { label: 'DNC Download Data',           path: '/dnc-checker/download',       roles: ['super_admin','admin'], icon: <FolderDown className="h-4 w-4" /> },
     ];
 
@@ -600,13 +599,9 @@ const Layout = ({ children }) => {
                                         dncCheckerMenuOpen ? 'max-h-[200px] opacity-100 mt-1' : 'max-h-0 opacity-0'
                                     }`}
                                 >
-                                    <NavLink to="/dnc-checker/uploaded-files" className={getSubClassName}>
-                                        <FileCheck2 className="h-[14px] w-[14px] shrink-0" />
-                                        <span>Uploaded Files</span>
-                                    </NavLink>
-                                    <NavLink to="/dnc-checker/campaigns" className={getSubClassName}>
-                                        <ShieldCheck className="h-[14px] w-[14px] shrink-0" />
-                                        <span>Campaigns</span>
+                                    <NavLink to="/dnc-checker/single-lookups" className={getSubClassName}>
+                                        <Search className="h-[14px] w-[14px] shrink-0" />
+                                        <span>Single Lookups</span>
                                     </NavLink>
                                     <NavLink to="/dnc-checker/download" className={getSubClassName}>
                                         <FolderDown className="h-[14px] w-[14px] shrink-0" />

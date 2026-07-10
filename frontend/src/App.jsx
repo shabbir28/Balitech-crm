@@ -36,6 +36,7 @@ import RefineCampaigns from './pages/RefineCampaigns';
 import RefineAddCampaign from './pages/RefineAddCampaign';
 import RefineAddJob from './pages/RefineAddJob';
 import DncUploadedFiles from './pages/DncUploadedFiles';
+import SingleLookups from './pages/SingleLookups';
 import DncCampaigns from './pages/DncCampaigns';
 import DncDownloadData from './pages/DncDownloadData';
 
@@ -140,8 +141,7 @@ const AppRoutes = () => {
             <Route path="/refine-campaigns/edit/:id" element={<ProtectedRoute roles={['super_admin', 'admin']}><RefineAddCampaign editMode /></ProtectedRoute>} />
 
             {/* DNC CHECKER RESULTS MODULE */}
-            <Route path="/dnc-checker/uploaded-files" element={<ProtectedRoute roles={['super_admin', 'admin']}><DncUploadedFiles /></ProtectedRoute>} />
-            <Route path="/dnc-checker/campaigns" element={<ProtectedRoute roles={['super_admin', 'admin']}><DncCampaigns /></ProtectedRoute>} />
+            <Route path="/dnc-checker/single-lookups" element={<ProtectedRoute roles={['super_admin', 'admin']}><SingleLookups /></ProtectedRoute>} />
             <Route path="/dnc-checker/download" element={<ProtectedRoute roles={['super_admin', 'admin']}><DncDownloadData /></ProtectedRoute>} />
 
             {/* PREMIUM DATA MODULE */}

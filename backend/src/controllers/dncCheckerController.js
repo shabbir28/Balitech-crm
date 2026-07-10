@@ -93,6 +93,57 @@ const createDncResult = async (req, res) => {
 };
 
 /**
+ * POST /api/dnc-checker/single-result
+ * Receive a single DNC check result from external DNC Checker website.
+ * Protected by dncSyncAuth middleware (static Bearer token).
+ */
+const createSingleDncResult = async (req, res) => {
+    try {
+        const {
+            phoneNumber,
+            dncStatus,
+            source,
+            checkedAt,
+            lineType,
+        } = req.body;
+
+        if (!phoneNumber || typeof phoneNumber !== 'string' || !phoneNumber.trim()) {
+            return res.status(400).json({ success: false, message: 'phoneNumber is required.' });
+        }
+        if (!dncStatus || typeof dncStatus !== 'string' || !dncStatus.trim()) {
+            return res.status(400).json({ success: false, message: 'dncStatus is required.' });
+        }
+
+        const params = [
+            phoneNumber.trim(),                              // $1
+            dncStatus.trim(),                                // $2
+            source ? String(source).trim() : 'checkdncnumber.com', // $3
+            checkedAt ? new Date(checkedAt) : new Date(),   // $4
+            lineType ? String(lineType).trim() : null,       // $5
+        ];
+
+        const sql = `
+            INSERT INTO dnc_single_checks
+                (phone_number, dnc_status, source, checked_at, line_type)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING *
+        `;
+
+        const result = await db.query(sql, params);
+        const inserted = result.rows[0];
+
+        return res.status(201).json({
+            success: true,
+            message: 'Single DNC result saved successfully.',
+            data: inserted,
+        });
+    } catch (err) {
+        console.error('createSingleDncResult error:', err);
+        return res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+};
+
+/**
  * GET /api/dnc-checker/uploaded-files
  * Return paginated list of DNC jobs with optional filters.
  */
@@ -166,6 +217,77 @@ const getUploadedFiles = async (req, res) => {
         });
     } catch (err) {
         console.error('getUploadedFiles error:', err);
+        return res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+};
+
+/**
+ * GET /api/dnc-checker/single-lookups
+ * Return paginated list of single DNC checks with optional filters.
+ */
+const getSingleChecks = async (req, res) => {
+    try {
+        const {
+            page = 1,
+            limit = 20,
+            search = '',
+            status = '',
+            startDate = '',
+            endDate = '',
+        } = req.query;
+
+        const pageNum  = Math.max(1, parseInt(page, 10) || 1);
+        const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+        const offset   = (pageNum - 1) * limitNum;
+
+        const conditions = [];
+        const params     = [];
+        let   p          = 1;
+
+        if (search && search.trim()) {
+            conditions.push(`phone_number ILIKE $${p}`);
+            params.push(`%${search.trim()}%`);
+            p++;
+        }
+        if (status && status.trim()) {
+            conditions.push(`dnc_status = $${p}`);
+            params.push(status.trim());
+            p++;
+        }
+        if (startDate) {
+            conditions.push(`checked_at >= $${p}`);
+            params.push(new Date(startDate));
+            p++;
+        }
+        if (endDate) {
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            conditions.push(`checked_at <= $${p}`);
+            params.push(end);
+            p++;
+        }
+
+        const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+        const countResult = await db.query(
+            `SELECT COUNT(*) AS total FROM dnc_single_checks ${where}`,
+            params
+        );
+        const total      = parseInt(countResult.rows[0].total, 10);
+        const totalPages = Math.ceil(total / limitNum);
+
+        const dataResult = await db.query(
+            `SELECT * FROM dnc_single_checks ${where} ORDER BY checked_at DESC LIMIT $${p} OFFSET $${p + 1}`,
+            [...params, limitNum, offset]
+        );
+
+        return res.json({
+            success: true,
+            data: dataResult.rows,
+            pagination: { page: pageNum, limit: limitNum, total, totalPages },
+        });
+    } catch (err) {
+        console.error('getSingleChecks error:', err);
         return res.status(500).json({ success: false, message: 'Internal server error.' });
     }
 };
@@ -300,4 +422,4 @@ const analyzeCleanFile = async (req, res) => {
     }
 };
 
-module.exports = { createDncResult, getUploadedFiles, getDncJobById, getCampaignSummary, analyzeCleanFile };
+module.exports = { createDncResult, createSingleDncResult, getUploadedFiles, getSingleChecks, getDncJobById, getCampaignSummary, analyzeCleanFile };
