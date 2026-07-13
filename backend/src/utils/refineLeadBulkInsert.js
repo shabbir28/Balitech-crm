@@ -33,7 +33,7 @@ const insertFreshLeadsBatches = async (
 
     for (const record of batch) {
       valueStrings.push(
-        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10})`,
+        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10}, $${paramIndex + 11}, $${paramIndex + 12})`,
       );
       values.push(
         truncate(record.name, 150) || null,
@@ -47,20 +47,34 @@ const insertFreshLeadsBatches = async (
         record.age || null,
         job_id || null,
         getQuality(record.disposition),
+        record.call_date || null,
+        record.duration || null,
       );
-      paramIndex += 11;
+      paramIndex += 13;
     }
 
     if (valueStrings.length === 0) continue;
 
     const query = `
-      INSERT INTO refine_data (name, phone, email, country_code, area_code, vendor_id, disposition, campaign_type, age, job_id, quality)
+      INSERT INTO refine_data (name, phone, email, country_code, area_code, vendor_id, disposition, campaign_type, age, job_id, quality, call_date, duration)
       VALUES ${valueStrings.join(",")}
-      ON CONFLICT (phone) DO NOTHING
+      ON CONFLICT (phone) DO UPDATE SET 
+        call_count = COALESCE(refine_data.call_count, 1) + 1, 
+        uploaded_at = CURRENT_TIMESTAMP,
+        campaign_type = CASE 
+          WHEN refine_data.campaign_type IS NULL OR refine_data.campaign_type = '' THEN EXCLUDED.campaign_type
+          WHEN refine_data.campaign_type ILIKE '%' || EXCLUDED.campaign_type || '%' THEN refine_data.campaign_type
+          ELSE refine_data.campaign_type || ', ' || EXCLUDED.campaign_type
+        END
+      RETURNING (xmax = 0) AS inserted
     `;
 
     const result = await withDeadlockRetry(() => exec.query(query, values));
-    insertedCount += result.rowCount;
+    const insertedInBatch = result.rows.reduce(
+      (acc, r) => acc + (r.inserted ? 1 : 0),
+      0,
+    );
+    insertedCount += insertedInBatch;
   }
 
   return insertedCount;
@@ -89,7 +103,7 @@ const insertLeadsUpsertBatches = async (
 
     for (const record of batch) {
       valueStrings.push(
-        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10})`,
+        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10}, $${paramIndex + 11}, $${paramIndex + 12})`,
       );
       values.push(
         truncate(record.name, 150) || null,
@@ -103,14 +117,16 @@ const insertLeadsUpsertBatches = async (
         record.age || null,
         job_id || null,
         getQuality(record.disposition),
+        record.call_date || null,
+        record.duration || null,
       );
-      paramIndex += 11;
+      paramIndex += 13;
     }
 
     if (valueStrings.length === 0) continue;
 
     const query = `
-      INSERT INTO refine_data (name, phone, email, country_code, area_code, vendor_id, disposition, campaign_type, age, job_id, quality)
+      INSERT INTO refine_data (name, phone, email, country_code, area_code, vendor_id, disposition, campaign_type, age, job_id, quality, call_date, duration)
       VALUES ${valueStrings.join(",")}
       ON CONFLICT (phone) DO UPDATE SET
         disposition = CASE
@@ -133,7 +149,14 @@ const insertLeadsUpsertBatches = async (
           WHEN EXCLUDED.quality IS NOT NULL THEN EXCLUDED.quality
           ELSE refine_data.quality
         END,
-        job_id = COALESCE(EXCLUDED.job_id, refine_data.job_id)
+        job_id = COALESCE(EXCLUDED.job_id, refine_data.job_id),
+        call_count = COALESCE(refine_data.call_count, 1) + 1,
+        uploaded_at = CURRENT_TIMESTAMP,
+        campaign_type = CASE 
+          WHEN refine_data.campaign_type IS NULL OR refine_data.campaign_type = '' THEN EXCLUDED.campaign_type
+          WHEN refine_data.campaign_type ILIKE '%' || EXCLUDED.campaign_type || '%' THEN refine_data.campaign_type
+          ELSE refine_data.campaign_type || ', ' || EXCLUDED.campaign_type
+        END
       RETURNING (xmax = 0) AS inserted
     `;
 

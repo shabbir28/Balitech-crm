@@ -420,7 +420,7 @@ const uploadFreshJob = async (req, res) => {
           const existingCount = existingSet.size;
           const freshCount = phonesNotDnc.length - existingCount;
           const freshRecords = uniqueRecords.filter(
-            (r) => !dncSet.has(r.phone) && !existingSet.has(r.phone),
+            (r) => !dncSet.has(r.phone),
           );
 
           const inserted = await insertFreshLeadsBatches(exec, {

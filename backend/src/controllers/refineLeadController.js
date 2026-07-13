@@ -67,7 +67,7 @@ const uploadLeads = async (req, res) => {
 
         deduped.forEach((record) => {
           valueStrings.push(
-            `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7})`,
+            `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9})`,
           );
           values.push(
             record.name || null,
@@ -78,19 +78,23 @@ const uploadLeads = async (req, res) => {
             vendor_id,
             record.disposition || null,
             record.age || null,
+            record.call_date || null,
+            record.duration || null,
           );
-          paramIndex += 8;
+          paramIndex += 10;
         });
 
         if (values.length > 0) {
           const query = `
-                        INSERT INTO refine_data (name, phone, email, country_code, area_code, vendor_id, disposition, age)
+                        INSERT INTO refine_data (name, phone, email, country_code, area_code, vendor_id, disposition, age, call_date, duration)
                         VALUES ${valueStrings.join(",")}
                         ON CONFLICT (phone) DO UPDATE
                         SET disposition = CASE
                           WHEN EXCLUDED.disposition IS NOT NULL AND EXCLUDED.disposition <> '' THEN EXCLUDED.disposition
                           ELSE refine_data.disposition
-                        END
+                        END,
+                        call_count = COALESCE(refine_data.call_count, 1) + 1,
+                        uploaded_at = CURRENT_TIMESTAMP
                         RETURNING (xmax = 0) AS inserted
                     `;
           const result = await client.query(query, values);

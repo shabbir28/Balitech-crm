@@ -106,10 +106,11 @@ const guessIndices = (rowLower) => {
   let stateIdx = -1;
   let callerIdIdx = -1;
   let durationIdx = -1;
+  let callDateIdx = -1;
 
   const isPhoneHeader = (v) => {
     // Explicitly ignore any source number / src_number column headers
-    if (v.includes("src") || v.includes("source")) {
+    if (v.includes("src") || v.includes("source") || v.includes("code")) {
       return false;
     }
     // Strong exact matches for phone-number columns
@@ -179,7 +180,8 @@ const guessIndices = (rowLower) => {
   const isJornayaLeadIdHeader = (v) => v === "jornaya lead id" || v === "jornayaleadid" || v === "jornaya_lead_id" || v.includes("jornaya");
   const isStateHeader = (v) => v === "state" || v === "province";
   const isCallerIdHeader = (v) => v === "caller id" || v === "callerid" || v === "caller_id";
-  const isDurationHeader = (v) => v === "duration" || v === "call_duration";
+  const isDurationHeader = (v) => v === "duration" || v === "call_duration" || v === "length_in_sec" || v === "length_in_seconds";
+  const isCallDateHeader = (v) => v === "call_date" || v === "calldate" || v === "call date";
 
   const isDobHeader = (v) => {
     return (
@@ -214,7 +216,9 @@ const guessIndices = (rowLower) => {
       !v.includes("phone") &&
       !v.includes("telephone") &&
       !v.includes("mobile") &&
-      !v.includes("number")
+      !v.includes("number") &&
+      !v.includes("file") &&
+      !v.includes("campaign")
     )
       return true;
     return false;
@@ -295,6 +299,7 @@ const guessIndices = (rowLower) => {
     if (isStateHeader(v) && stateIdx === -1) stateIdx = i;
     if (isCallerIdHeader(v) && callerIdIdx === -1) callerIdIdx = i;
     if (isDurationHeader(v) && durationIdx === -1) durationIdx = i;
+    if (isCallDateHeader(v) && callDateIdx === -1) callDateIdx = i;
   });
 
   return {
@@ -312,6 +317,7 @@ const guessIndices = (rowLower) => {
     stateIdx,
     callerIdIdx,
     durationIdx,
+    callDateIdx,
   };
 };
 
@@ -439,7 +445,8 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
       jornaya_lead_id = null,
       state = null,
       caller_id = null,
-      duration = null;
+      duration = null,
+      call_date = null;
 
     if (isHeaderDetected && headerIndices) {
       if (headerIndices.phoneIdx !== -1)
@@ -511,6 +518,7 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
             }
          }
       }
+      if (headerIndices.callDateIdx !== -1) call_date = String(values[headerIndices.callDateIdx] || "").trim();
 
       // Clean phone number initially
       let digitsOnly = phone ? phone.replace(/\D/g, "") : "";
@@ -621,6 +629,7 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
           state: state || null,
           caller_id: caller_id || null,
           duration: duration || null,
+          call_date: call_date || null,
         };
       }
     }

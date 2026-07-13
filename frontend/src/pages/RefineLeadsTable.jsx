@@ -152,8 +152,8 @@ const RefineLeadsTable = () => {
 
                 <div className="min-w-[1000px] relative z-10">
                     {/* Table Header */}
-                    <div className="grid grid-cols-[minmax(180px,1.5fr)_130px_minmax(150px,1.2fr)_80px_80px_80px_100px_90px_100px] p-5 border-b border-white/10 bg-[#0a0a0f]/80 backdrop-blur-md sticky top-0">
-                        {['Name', 'Phone', 'Email', 'Age', 'Area', 'State', 'Disposition', 'Quality', 'Status'].map(h => (
+                    <div className="grid grid-cols-[minmax(180px,1.5fr)_130px_minmax(150px,1.2fr)_80px_80px_80px_100px_90px_70px_100px_80px_100px_140px_100px] p-5 border-b border-white/10 bg-[#0a0a0f]/80 backdrop-blur-md sticky top-0">
+                        {['Name', 'Phone', 'Email', 'Age', 'Area', 'State', 'Disposition', 'Quality', 'Call Count', 'Call Date', 'Time', 'Length in Sec', 'Campaigns', 'Status'].map(h => (
                             <span key={h} className="text-slate-400 text-[11px] font-bold uppercase tracking-widest pl-2">
                                 {h}
                             </span>
@@ -172,7 +172,7 @@ const RefineLeadsTable = () => {
                             </div>
                         ) : (
                             leads.map((lead) => (
-                                <div key={lead.id} className="grid grid-cols-[minmax(180px,1.5fr)_130px_minmax(150px,1.2fr)_80px_80px_80px_100px_90px_100px] p-4 items-center hover:bg-white/5 transition-colors group cursor-default">
+                                <div key={lead.id} className="grid grid-cols-[minmax(180px,1.5fr)_130px_minmax(150px,1.2fr)_80px_80px_80px_100px_90px_70px_100px_80px_100px_140px_100px] p-4 items-center hover:bg-white/5 transition-colors group cursor-default">
                                     {/* Name */}
                                     <div className="flex items-center gap-3 pr-4 pl-2">
                                         <div className="w-9 h-9 rounded-full shrink-0 bg-brand-500/10 border border-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-xs shadow-inner group-hover:scale-110 transition-transform">
@@ -240,6 +240,37 @@ const RefineLeadsTable = () => {
                                         <span className={`inline-flex px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider shadow-sm ${lead.quality === 'Bad' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
                                             {lead.quality || 'Good'}
                                         </span>
+                                    </div>
+
+                                    {/* Calls */}
+                                    <div>
+                                        <span className="inline-flex px-2 py-1 rounded-md text-[11px] font-bold bg-[#0a0a0f] text-brand-400 border border-brand-500/20 shadow-sm">
+                                            {lead.call_count || 1}
+                                        </span>
+                                    </div>
+
+                                    {/* Call Date */}
+                                    <div className="text-slate-300 text-[12px]">
+                                        {lead.call_date ? new Date(lead.call_date).toLocaleDateString() : '—'}
+                                    </div>
+
+                                    {/* Time */}
+                                    <div className="text-slate-400 text-[12px]">
+                                        {lead.call_date ? new Date(lead.call_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                                    </div>
+
+                                    {/* Length in Sec */}
+                                    <div className="text-slate-300 text-[12px] font-mono">
+                                        {lead.duration !== null && lead.duration !== undefined ? lead.duration : '—'}
+                                    </div>
+
+                                    {/* Campaigns */}
+                                    <div className="flex flex-wrap gap-1 pr-2">
+                                        {lead.campaign_type ? lead.campaign_type.split(',').map((camp, idx) => (
+                                            <span key={idx} className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/20 whitespace-nowrap">
+                                                {camp.trim()}
+                                            </span>
+                                        )) : <span className="text-slate-500 text-[11px]">—</span>}
                                     </div>
 
                                     {/* Status */}
