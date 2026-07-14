@@ -17,6 +17,42 @@ const createSession = async (req, res) => {
 
 const getSessions = async (req, res) => {
   try {
+    let { page = 1, limit = 20, search = '', from = '', to = '' } = req.query;
+    page = parseInt(page);
+    limit = parseInt(limit);
+    const offset = (page - 1) * limit;
+
+    let whereClause = "WHERE 1=1";
+    let params = [];
+    let paramCount = 1;
+
+    if (search) {
+      whereClause += ` AND (v.name ILIKE $${paramCount} OR v.company ILIKE $${paramCount} OR s.id::text ILIKE $${paramCount})`;
+      params.push(`%${search}%`);
+      paramCount++;
+    }
+
+    if (from) {
+      whereClause += ` AND s.created_at >= $${paramCount}`;
+      params.push(from);
+      paramCount++;
+    }
+
+    if (to) {
+      whereClause += ` AND s.created_at <= $${paramCount}`;
+      params.push(to);
+      paramCount++;
+    }
+
+    const countRes = await db.query(`
+      SELECT COUNT(DISTINCT s.id) as total
+      FROM van_sessions s
+      LEFT JOIN van_vendors v ON s.vendor_id = v.vendor_id
+      ${whereClause}
+    `, params);
+    
+    const total = parseInt(countRes.rows[0].total);
+
     const result = await db.query(`
       SELECT s.*, v.name as vendor_name,
              COUNT(j.id)::int as job_count,
@@ -24,10 +60,18 @@ const getSessions = async (req, res) => {
       FROM van_sessions s
       LEFT JOIN van_vendors v ON s.vendor_id = v.vendor_id
       LEFT JOIN van_jobs j ON j.session_id = s.id
+      ${whereClause}
       GROUP BY s.id, v.name
       ORDER BY s.created_at DESC
-    `);
-    res.json(result.rows);
+      LIMIT $${paramCount} OFFSET $${paramCount + 1}
+    `, [...params, limit, offset]);
+
+    res.json({
+      data: result.rows,
+      total,
+      page,
+      limit
+    });
   } catch (err) {
     console.error("Error fetching van_sessions:", err);
     res.status(500).json({ message: "Server error" });
