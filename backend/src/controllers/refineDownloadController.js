@@ -249,6 +249,8 @@ async function buildFilters(
     job_id,
     include_downloaded,
     quality,
+    min_duration,
+    max_duration,
   },
 ) {
   const includeAllVendorLeads =
@@ -332,6 +334,16 @@ async function buildFilters(
   if (max_age !== undefined && max_age !== null && max_age !== "") {
     filters.push(`age <= $${paramIdx++}`);
     params.push(parseInt(max_age));
+  }
+
+  if (min_duration !== undefined && min_duration !== null && min_duration !== "") {
+    filters.push(`duration >= $${paramIdx++}`);
+    params.push(parseInt(min_duration));
+  }
+
+  if (max_duration !== undefined && max_duration !== null && max_duration !== "") {
+    filters.push(`duration <= $${paramIdx++}`);
+    params.push(parseInt(max_duration));
   }
 
   if (quality && quality !== "All") {
@@ -619,6 +631,8 @@ const downloadLeads = async (req, res) => {
       campaign_id,
       min_age,
       max_age,
+      min_duration,
+      max_duration,
       force_scrub,
       async_scrub,
       job_id,
@@ -652,6 +666,8 @@ const downloadLeads = async (req, res) => {
       user_id: req.user.id,
       min_age,
       max_age,
+      min_duration,
+      max_duration,
       force_scrub: forceScrub,
       async_scrub: asyncScrub,
       job_id,
@@ -737,6 +753,8 @@ const createDownloadRequest = async (req, res) => {
       campaign_id,
       min_age,
       max_age,
+      min_duration,
+      max_duration,
       job_id,
       include_downloaded,
     } = req.body;
@@ -759,8 +777,8 @@ const createDownloadRequest = async (req, res) => {
 
     const result = await db.query(
       `INSERT INTO refine_download_requests
-               (admin_id, vendor_id, campaign_id, quantity, states, min_age, max_age, job_id, include_downloaded)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+               (admin_id, vendor_id, campaign_id, quantity, states, min_age, max_age, min_duration, max_duration, job_id, include_downloaded)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
              RETURNING *`,
       [
         req.user.id,
@@ -770,6 +788,8 @@ const createDownloadRequest = async (req, res) => {
         states && states.length ? states : null,
         min_age || null,
         max_age || null,
+        min_duration || null,
+        max_duration || null,
         job_id || null,
         include_downloaded === true || include_downloaded === "true",
       ],
@@ -821,6 +841,8 @@ const getDownloadRequests = async (req, res) => {
                 dr.rejection_reason,
                 dr.min_age,
                 dr.max_age,
+                dr.min_duration,
+                dr.max_duration,
                 dr.requested_at,
                 dr.reviewed_at,
                 u.username  AS admin_username,
@@ -861,6 +883,8 @@ const getMyDownloadRequests = async (req, res) => {
                 dr.rejection_reason,
                 dr.min_age,
                 dr.max_age,
+                dr.min_duration,
+                dr.max_duration,
                 dr.requested_at,
                 dr.reviewed_at,
                 v.name AS vendor_name,
@@ -947,6 +971,8 @@ const reviewDownloadRequest = async (req, res) => {
       quantity: dlReq.quantity,
       min_age: dlReq.min_age,
       max_age: dlReq.max_age,
+      min_duration: dlReq.min_duration,
+      max_duration: dlReq.max_duration,
       user_id: dlReq.admin_id,
       approved_by_id: req.user.id,
       job_id: dlReq.job_id,
@@ -1395,6 +1421,8 @@ const getStateCounts = async (req, res) => {
       states,
       min_age,
       max_age,
+      min_duration,
+      max_duration,
       job_id,
       include_downloaded,
       quality,
@@ -1407,6 +1435,8 @@ const getStateCounts = async (req, res) => {
         states,
         min_age,
         max_age,
+        min_duration,
+        max_duration,
         job_id,
         include_downloaded,
         quality,

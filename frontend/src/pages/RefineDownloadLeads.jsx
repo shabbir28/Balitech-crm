@@ -431,6 +431,8 @@ const RefineDownloadLeads = () => {
         quantity: 1000,
         min_age: '',
         max_age: '',
+        min_duration: '',
+        max_duration: '',
         include_downloaded: false,
         quality: 'All',
     });
@@ -517,6 +519,8 @@ const RefineDownloadLeads = () => {
                     states: form.states,
                     min_age: form.min_age,
                     max_age: form.max_age,
+                    min_duration: form.min_duration,
+                    max_duration: form.max_duration,
                     job_id: selectedFileId || undefined,
                     include_downloaded: form.include_downloaded,
                     quality: form.quality,
@@ -530,7 +534,7 @@ const RefineDownloadLeads = () => {
             const timeoutId = setTimeout(() => setStateCounts({}), 0);
             return () => clearTimeout(timeoutId);
         }
-    }, [form.vendor_id, form.campaign_id, form.states, form.min_age, form.max_age, selectedFileId, form.include_downloaded, form.quality]);
+    }, [form.vendor_id, form.campaign_id, form.states, form.min_age, form.max_age, form.min_duration, form.max_duration, selectedFileId, form.include_downloaded, form.quality]);
 
     // Fetch vendor uploaded files whenever vendor changes
     useEffect(() => {
@@ -636,6 +640,8 @@ const RefineDownloadLeads = () => {
                     quantity: 1000,
                     min_age: '',
                     max_age: '',
+                    min_duration: '',
+                    max_duration: '',
                     include_downloaded: false,
                     quality: 'All',
                 });
@@ -909,6 +915,28 @@ const RefineDownloadLeads = () => {
                                             onChange={e => setForm({ ...form, max_age: e.target.value })}
                                             className="w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 hover:bg-[#0a0c14]/80 hover:border-brand-500/30 focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/20 text-white rounded-xl py-3.5 px-4 outline-none transition-all text-sm font-mono shadow-inner"
                                             placeholder="65"
+                                        />
+                                    </Field>
+                                </div>
+
+                                {/* Duration Range */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Field label="Min Duration" hint="Optional (seconds)">
+                                        <input
+                                            type="number" min="0"
+                                            value={form.min_duration}
+                                            onChange={e => setForm({ ...form, min_duration: e.target.value })}
+                                            className="w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 hover:bg-[#0a0c14]/80 hover:border-brand-500/30 focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/20 text-white rounded-xl py-3.5 px-4 outline-none transition-all text-sm font-mono shadow-inner"
+                                            placeholder="30"
+                                        />
+                                    </Field>
+                                    <Field label="Max Duration" hint="Optional (seconds)">
+                                        <input
+                                            type="number" min="0"
+                                            value={form.max_duration}
+                                            onChange={e => setForm({ ...form, max_duration: e.target.value })}
+                                            className="w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 hover:bg-[#0a0c14]/80 hover:border-brand-500/30 focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/20 text-white rounded-xl py-3.5 px-4 outline-none transition-all text-sm font-mono shadow-inner"
+                                            placeholder="300"
                                         />
                                     </Field>
                                 </div>
