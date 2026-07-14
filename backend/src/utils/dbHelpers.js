@@ -93,6 +93,21 @@ const lookupDncPhones = async (exec, phones) => {
   return { dncSet, dncSkippedDnc, dncSkippedSale };
 };
 
+const lookupDeadPhones = async (exec, phones) => {
+  const deadSet = new Set();
+  for (const chunk of chunkArray(phones, 5000)) {
+    await new Promise((resolve) => setImmediate(resolve));
+    const deadRes = await exec.query(
+      "SELECT phone FROM dead_numbers WHERE phone = ANY($1::text[])",
+      [chunk]
+    );
+    for (const row of deadRes.rows) {
+      deadSet.add(row.phone);
+    }
+  }
+  return deadSet;
+};
+
 const lookupExistingLeads = async (exec, phones, currentCampaign) => {
   const existingSet = new Set();
   const existingBreakdown = {};
@@ -142,6 +157,7 @@ module.exports = {
   sessionLockKey,
   withSessionUploadLock,
   lookupDncPhones,
+  lookupDeadPhones,
   lookupExistingLeads,
   safeRollback,
 };

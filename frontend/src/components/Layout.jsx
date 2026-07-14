@@ -7,7 +7,7 @@ import {
     LayoutTemplate, Building2, Target, FolderUp, Scale, Layers,
     FileStack, ShieldBan, FolderDown, TerminalSquare, UserCheck,
     GitCompareArrows, ClipboardList, Bell, CheckCheck,
-    Download, CheckCircle2, XCircle, Users, History, ShieldCheck, FileCheck2
+    Download, CheckCircle2, XCircle, Users, History, ShieldCheck, FileCheck2, Filter
 } from 'lucide-react';
 
 // ─── Notification Bell Component ─────────────────────────────
@@ -279,6 +279,15 @@ const Layout = ({ children }) => {
         }
     }, [location.pathname]);
 
+    const isDeadNumbersPath = location.pathname.startsWith('/dead-numbers');
+    const [deadNumbersMenuOpen, setDeadNumbersMenuOpen] = useState(isDeadNumbersPath);
+
+    useEffect(() => {
+        if (location.pathname.startsWith('/dead-numbers')) {
+            setDeadNumbersMenuOpen(true);
+        }
+    }, [location.pathname]);
+
     const isPremiumPath = location.pathname.startsWith('/premium');
     const [premiumMenuOpen, setPremiumMenuOpen] = useState(isPremiumPath);
 
@@ -321,6 +330,7 @@ const Layout = ({ children }) => {
         { label: 'Logs',              path: '/logs',              roles: ['super_admin','admin'],        icon: <TerminalSquare className="h-4 w-4" /> },
         { label: 'Users',             path: '/users',             roles: ['super_admin'],               icon: <UserCheck className="h-4 w-4" /> },
         { label: 'Download Requests', path: '/download-requests', roles: ['super_admin'],               icon: <ClipboardList className="h-4 w-4" /> },
+        { label: 'Filters',           path: '/filters',           roles: ['super_admin','admin'],        icon: <Filter className="h-4 w-4" /> },
         { label: 'Refine DNC',          path: '/refine-dnc',               roles: ['super_admin','admin'],        icon: <ShieldBan className="h-4 w-4" /> },
         { label: 'Refine Vendors',      path: '/refine-vendors',           roles: ['super_admin','admin'],        icon: <Building2 className="h-4 w-4" /> },
         { label: 'Refine Campaigns',    path: '/refine-campaigns',         roles: ['super_admin','admin'],        icon: <Target className="h-4 w-4" /> },
@@ -487,6 +497,36 @@ const Layout = ({ children }) => {
                                 <NavLink to="/sessions" className={getClassName}>
                                     <Layers className="h-[15px] w-[15px] shrink-0" /><span>Sessions</span>
                                 </NavLink>
+                                <button
+                                    type="button"
+                                    onClick={() => setDeadNumbersMenuOpen((open) => !open)}
+                                    className={`w-full flex items-center px-3.5 py-2.5 text-[13px] font-medium rounded-xl transition-all duration-200 gap-3 mb-0.5 border ${
+                                        isDeadNumbersPath
+                                            ? 'bg-gradient-to-r from-red-500/15 to-transparent text-white border-red-500/25'
+                                            : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border-transparent'
+                                    }`}
+                                >
+                                    <ShieldBan className="h-[15px] w-[15px] shrink-0 text-red-400" />
+                                    <span className="flex-1 text-left">Dead Numbers</span>
+                                    <ChevronDown
+                                        className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${deadNumbersMenuOpen ? 'rotate-180' : ''}`}
+                                    />
+                                </button>
+
+                                <div
+                                    className={`overflow-hidden transition-all duration-300 ease-out ${
+                                        deadNumbersMenuOpen ? 'max-h-[200px] opacity-100 mt-1' : 'max-h-0 opacity-0'
+                                    }`}
+                                >
+                                    <NavLink to="/dead-numbers/upload" className={getSubClassName}>
+                                        <FolderUp className="h-[14px] w-[14px] shrink-0" />
+                                        <span>Upload Dead Numbers</span>
+                                    </NavLink>
+                                    <NavLink to="/dead-numbers/all" className={getSubClassName}>
+                                        <FileStack className="h-[14px] w-[14px] shrink-0" />
+                                        <span>All Dead Numbers</span>
+                                    </NavLink>
+                                </div>
                             </div>
 
                             <div>
@@ -502,6 +542,9 @@ const Layout = ({ children }) => {
                                 </NavLink>
                                 <NavLink to="/already-downloaded" className={getClassName}>
                                     <History className="h-[15px] w-[15px] shrink-0" /><span>Already Downloaded</span>
+                                </NavLink>
+                                <NavLink to="/filters" className={getClassName}>
+                                    <Filter className="h-[15px] w-[15px] shrink-0" /><span>Filters</span>
                                 </NavLink>
                                 <NavLink to="/logs" className={getClassName}>
                                     <TerminalSquare className="h-[15px] w-[15px] shrink-0" /><span>Logs</span>

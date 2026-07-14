@@ -14,6 +14,7 @@ const getStats = async (req, res) => {
       refineCampaignStatsResult,
       premiumStatsResult,
       premiumCampaignStatsResult,
+      deadNumbersStatsResult,
     ] = await Promise.all([
       // 1. Leads Overall Stats (Single Scan)
       db.query(`
@@ -122,6 +123,12 @@ const getStats = async (req, res) => {
                 GROUP BY campaign_type
                 ORDER BY count DESC
             `),
+
+      // 11. Dead Numbers
+      db.query(`
+                SELECT COUNT(*)::int AS total_dead_numbers
+                FROM dead_numbers
+            `),
     ]);
 
     // Construct totals object
@@ -129,12 +136,14 @@ const getStats = async (req, res) => {
     const otherStats = otherTotalsResult.rows[0];
     const refineStats = refineStatsResult.rows[0];
     const premiumStats = premiumStatsResult.rows[0];
+    const deadNumbersStats = deadNumbersStatsResult.rows[0] || { total_dead_numbers: 0 };
     
     const totals = {
       ...leadsStats,
       ...otherStats,
       ...refineStats,
-      ...premiumStats
+      ...premiumStats,
+      ...deadNumbersStats
     };
 
     // Construct lead status breakdown from leadsStats

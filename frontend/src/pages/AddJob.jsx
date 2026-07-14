@@ -145,6 +145,7 @@ const AddJob = () => {
             dnc_skipped: 0,
             dnc_skipped_dnc: 0,
             dnc_skipped_sale: 0,
+            dead_skipped: 0,
             fresh_sample: [],
             existing_breakdown: {},
         };
@@ -170,6 +171,7 @@ const AddJob = () => {
                     aggregate.dnc_skipped += res.data.dnc_skipped || 0;
                     aggregate.dnc_skipped_dnc += res.data.dnc_skipped_dnc || 0;
                     aggregate.dnc_skipped_sale += res.data.dnc_skipped_sale || 0;
+                    aggregate.dead_skipped += res.data.dead_skipped || 0;
 
                     if (res.data.existing_breakdown) {
                         for (const [vendorName, count] of Object.entries(res.data.existing_breakdown)) {
@@ -223,6 +225,7 @@ const AddJob = () => {
             dnc_skipped: 0,
             dnc_skipped_dnc: 0,
             dnc_skipped_sale: 0,
+            dead_skipped: 0,
             inserted: 0,
             updated: 0,
             duplicates_skipped: 0,
@@ -254,6 +257,7 @@ const AddJob = () => {
                     aggregate.dnc_skipped += data.dnc_skipped || 0;
                     aggregate.dnc_skipped_dnc += data.dnc_skipped_dnc || 0;
                     aggregate.dnc_skipped_sale += data.dnc_skipped_sale || 0;
+                    aggregate.dead_skipped += data.dead_skipped || 0;
                     aggregate.inserted += data.inserted || 0;
                     aggregate.updated += data.updated || 0;
                     aggregate.duplicates_skipped += data.duplicates_skipped || 0;
@@ -580,6 +584,11 @@ const AddJob = () => {
                                             <p className="text-2xl font-extrabold text-white ml-2 mt-1">
                                                 {compareResult.dnc_skipped_dnc} / {compareResult.dnc_skipped_sale}
                                             </p>
+                                        </div>
+                                        <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-red-500/30 transition-colors">
+                                            <div className="absolute top-0 left-0 w-1 h-full bg-red-500/50"></div>
+                                            <p className="text-red-400/80 text-[11px] uppercase tracking-widest font-bold mb-1 ml-2 text-left">Dead Numbers Skipped</p>
+                                            <p className="text-3xl font-extrabold text-white ml-2">{compareResult.dead_skipped || 0}</p>
                                         </div>
                                     </div>
 

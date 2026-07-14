@@ -37,6 +37,8 @@ const refineDncRoutes = require("./routes/refine_dnc");
 const refineVendorRoutes = require("./routes/refine_vendors");
 const refineCampaignRoutes = require("./routes/refine_campaigns");
 const dncCheckerRoutes    = require("./routes/dnc_checker");
+const filterRoutes = require("./routes/filters");
+const deadNumberRoutes = require("./routes/deadNumberRoutes");
 
 const premiumVendorRoutes = require("./routes/premium_vendors");
 const premiumCampaignRoutes = require("./routes/premium_campaigns");
@@ -184,6 +186,8 @@ app.use("/api/refine-dnc", refineDncRoutes);
 app.use("/api/refine-vendors", refineVendorRoutes);
 app.use("/api/refine-campaigns", refineCampaignRoutes);
 app.use("/api/dnc-checker",     dncCheckerRoutes);
+app.use("/api/filters", filterRoutes);
+app.use("/api/dead-numbers", deadNumberRoutes);
 
 app.use("/api/premium-vendors", premiumVendorRoutes);
 app.use("/api/premium-campaigns", premiumCampaignRoutes);

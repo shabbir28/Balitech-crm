@@ -382,6 +382,9 @@ const DownloadLeads = () => {
     const [campaigns, setCampaigns]     = useState([]);
     const [loadingV, setLoadingV]       = useState(true);
     const [loadingC, setLoadingC]       = useState(true);
+    const [filters, setFilters]         = useState([]);
+    const [loadingFilters, setLoadingFilters] = useState(true);
+    const [selectedFilterId, setSelectedFilterId] = useState("");
 
     const [form, setForm] = useState({
         states: [],
@@ -416,10 +419,14 @@ const DownloadLeads = () => {
     const [fileStats, setFileStats] = useState(null);
 
     useEffect(() => {
-        Promise.all([api.get('/vendors?counts=true'), api.get('/campaigns')])
-            .then(([v, c]) => { setVendors(v.data); setCampaigns(c.data.filter(x => x.status === 'Active')); })
+        Promise.all([api.get('/vendors?counts=true'), api.get('/campaigns'), api.get('/filters')])
+            .then(([v, c, f]) => { 
+                setVendors(v.data); 
+                setCampaigns(c.data.filter(x => x.status === 'Active')); 
+                setFilters(f.data);
+            })
             .catch(() => {})
-            .finally(() => { setLoadingV(false); setLoadingC(false); });
+            .finally(() => { setLoadingV(false); setLoadingC(false); setLoadingFilters(false); });
     }, []);
 
     useEffect(() => () => {
@@ -814,7 +821,27 @@ const DownloadLeads = () => {
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
+                                <Field label="Data Filter Preset" hint="Auto-selects states for you">
+                                    <SelectInput
+                                        value={selectedFilterId}
+                                        onChange={e => {
+                                            const filterId = e.target.value;
+                                            setSelectedFilterId(filterId);
+                                            const selectedFilter = filters.find(f => String(f.id) === String(filterId));
+                                            if (selectedFilter && selectedFilter.states) {
+                                                setForm(prev => ({ ...prev, states: selectedFilter.states }));
+                                            }
+                                        }}
+                                        disabled={loadingFilters}
+                                    >
+                                        <option value="" disabled>{loadingFilters ? 'Loading filters...' : 'Choose a preset...'}</option>
+                                        {filters.map(f => (
+                                            <option key={f.id} value={f.id}>{f.name} ({f.states?.length || 0} states)</option>
+                                        ))}
+                                    </SelectInput>
+                                </Field>
+
                                 {/* State Filter */}
                                 <Field label="State Filter" hint="Leave empty for all states">
                                     <div className="relative" ref={stateRef}>
@@ -848,7 +875,9 @@ const DownloadLeads = () => {
                                         )}
                                     </div>
                                 </Field>
+                            </div>
 
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                 {/* Age Range */}
                                 <div className="grid grid-cols-2 gap-3">
                                     <Field label="Min Age" hint="Optional">
@@ -1086,8 +1115,8 @@ const DownloadLeads = () => {
                                     )}
 
                                     {/* Scrollable grid of mini-cards */}
-                                    <div className="max-h-[350px] overflow-y-auto custom-scrollbar pr-1.5">
-                                        <div className="grid grid-cols-4 gap-1.5">
+                                    <div className="max-h-[350px] overflow-y-auto custom-scrollbar pr-2">
+                                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2.5">
                                             {Object.entries(stateCounts)
                                                 .sort((a, b) => b[1] - a[1]) // Sort by count descending
                                                 .map(([state, count]) => {
@@ -1096,23 +1125,23 @@ const DownloadLeads = () => {
                                                     const stateName = US_STATES.find(s => s.abbr === state)?.name || state;
 
                                                     return (
-                                                        <div key={state} className="group relative bg-[#0a0c14]/50 border border-white/5 hover:border-brand-500/30 rounded-xl p-2 overflow-hidden transition-all duration-300 shadow-sm hover:shadow-brand-500/10 hover:bg-[#0a0c14]/80 flex flex-col justify-between min-h-[56px]">
+                                                        <div key={state} className="group relative bg-[#0a0c14]/60 border border-white/10 hover:border-brand-500/40 rounded-xl p-2.5 overflow-hidden transition-all duration-300 shadow-sm hover:shadow-brand-500/20 hover:bg-[#0a0c14]/90 flex flex-col justify-between min-h-[60px]">
                                                             {/* Progress bar indicator at bottom */}
                                                             <div 
-                                                                className="absolute bottom-0 left-0 h-[2px] bg-gradient-to-r from-brand-500 to-violet-500 transition-all duration-1000 ease-out z-0 opacity-80" 
+                                                                className="absolute bottom-0 left-0 h-[3px] bg-gradient-to-r from-brand-500 to-violet-500 transition-all duration-1000 ease-out z-0 opacity-80" 
                                                                 style={{ width: `${pct}%` }}
                                                             />
                                                             
-                                                            <div className="relative z-10 flex justify-between items-start mb-0.5">
-                                                                <span className="text-[10px] font-black text-white leading-none">{state}</span>
+                                                            <div className="relative z-10 flex justify-between items-start mb-1">
+                                                                <span className="text-[12px] font-black text-white leading-none tracking-wide">{state}</span>
                                                             </div>
                                                             
                                                             <div className="relative z-10">
-                                                                <div className={`font-mono font-black text-[11px] tracking-tight leading-none ${count > 0 ? 'text-emerald-400' : 'text-slate-600'}`}>
+                                                                <div className={`font-mono font-black text-[14px] tracking-tight leading-none ${count > 0 ? 'text-emerald-400' : 'text-slate-500'}`}>
                                                                     {count.toLocaleString()}
                                                                 </div>
-                                                                <div className="text-[7px] text-slate-500 font-bold uppercase tracking-widest mt-0.5 truncate max-w-full">
-                                                                    {stateName}
+                                                                <div className="text-[10px] text-slate-400 font-medium capitalize mt-1 truncate max-w-full">
+                                                                    {stateName.toLowerCase()}
                                                                 </div>
                                                             </div>
                                                         </div>

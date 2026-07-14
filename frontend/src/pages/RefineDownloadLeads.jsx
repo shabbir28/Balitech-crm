@@ -1178,8 +1178,8 @@ const RefineDownloadLeads = () => {
                                                                 <div className={`font-mono font-black text-[11px] tracking-tight leading-none ${count > 0 ? 'text-emerald-400' : 'text-slate-600'}`}>
                                                                     {count.toLocaleString()}
                                                                 </div>
-                                                                <div className="text-[7px] text-slate-500 font-bold uppercase tracking-widest mt-0.5 truncate max-w-full">
-                                                                    {stateName}
+                                                                <div className="text-[9px] text-slate-400 font-medium capitalize mt-0.5 truncate max-w-full">
+                                                                    {stateName.toLowerCase()}
                                                                 </div>
                                                             </div>
                                                         </div>

@@ -56,7 +56,8 @@ const insertFreshLeadsBatches = async (
           THEN leads.campaign_type || ', ' || EXCLUDED.campaign_type
           ELSE leads.campaign_type
         END,
-        job_id = COALESCE(EXCLUDED.job_id, leads.job_id)
+        job_id = COALESCE(EXCLUDED.job_id, leads.job_id),
+        uploaded_at = CURRENT_TIMESTAMP
       RETURNING (xmax = 0) AS inserted
     `;
 
@@ -141,7 +142,8 @@ const insertLeadsUpsertBatches = async (
           THEN leads.campaign_type || ', ' || EXCLUDED.campaign_type
           ELSE leads.campaign_type
         END,
-        job_id = COALESCE(EXCLUDED.job_id, leads.job_id)
+        job_id = COALESCE(EXCLUDED.job_id, leads.job_id),
+        uploaded_at = CURRENT_TIMESTAMP
       RETURNING (xmax = 0) AS inserted
     `;
 

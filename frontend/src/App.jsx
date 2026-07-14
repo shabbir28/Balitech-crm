@@ -23,6 +23,9 @@ import AddCampaign from './pages/AddCampaign';
 import SecuritySettings from './pages/SecuritySettings';
 import CompareFiles from './pages/CompareFiles';
 import AlreadyDownloaded from './pages/AlreadyDownloaded';
+import Filters from './pages/Filters';
+import DeadNumbersUpload from './pages/DeadNumbersUpload';
+import AllDeadNumbers from './pages/AllDeadNumbers';
 
 import RefineVendors from './pages/RefineVendors';
 import RefineUploadLeads from './pages/RefineUploadLeads';
@@ -88,10 +91,13 @@ const AppRoutes = () => {
             <Route path="/" element={<ProtectedRoute roles={['super_admin', 'admin']}><Dashboard /></ProtectedRoute>} />
             <Route path="/leads" element={<ProtectedRoute roles={['super_admin', 'admin']}><LeadsTable /></ProtectedRoute>} />
             <Route path="/logs" element={<ProtectedRoute roles={['super_admin', 'admin']}><Logs /></ProtectedRoute>} />
+            <Route path="/filters" element={<ProtectedRoute roles={['super_admin', 'admin']}><Filters /></ProtectedRoute>} />
             <Route path="/sessions" element={<ProtectedRoute roles={['super_admin', 'admin']}><SessionsList /></ProtectedRoute>} />
             <Route path="/sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><SessionDetails /></ProtectedRoute>} />
             <Route path="/sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><AddJob /></ProtectedRoute>} />
             <Route path="/dnc" element={<ProtectedRoute roles={['super_admin', 'admin']}><Dnc /></ProtectedRoute>} />
+            <Route path="/dead-numbers/upload" element={<ProtectedRoute roles={['super_admin', 'admin']}><DeadNumbersUpload /></ProtectedRoute>} />
+            <Route path="/dead-numbers/all" element={<ProtectedRoute roles={['super_admin', 'admin']}><AllDeadNumbers /></ProtectedRoute>} />
 
             {/* Vendors - super_admin, admin, data_entry */}
             <Route path="/vendors" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><Vendors /></ProtectedRoute>} />

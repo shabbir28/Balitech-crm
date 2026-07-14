@@ -90,7 +90,8 @@ const uploadLeads = async (req, res) => {
                         SET disposition = CASE
                           WHEN EXCLUDED.disposition IS NOT NULL AND EXCLUDED.disposition <> '' THEN EXCLUDED.disposition
                           ELSE leads.disposition
-                        END
+                        END,
+                        uploaded_at = CURRENT_TIMESTAMP
                         RETURNING (xmax = 0) AS inserted
                     `;
           const result = await client.query(query, values);
@@ -155,24 +156,29 @@ const getLeads = async (req, res) => {
     }
 
     if (search) {
-      const searchTerm = `%${search}%`;
-      const possibleAreaCodes = getAreaCodesForStateSearch(search);
+      const cleanSearch = search.trim();
+      const searchTerm = `%${cleanSearch}%`;
+      const digitsOnly = cleanSearch.replace(/\D/g, "");
+      const phoneSearchTerm = digitsOnly ? `%${digitsOnly}%` : searchTerm;
+      
+      const possibleAreaCodes = getAreaCodesForStateSearch(cleanSearch);
 
       // Build the dynamic area code clause if matches were found
       let areaCodeClause = "";
       if (possibleAreaCodes.length > 0) {
         const placeholders = possibleAreaCodes
-          .map((_, i) => `$${params.length + 2 + i}`)
+          .map((_, i) => `$${params.length + 3 + i}`)
           .join(",");
         areaCodeClause = ` OR area_code IN (${placeholders})`;
       }
 
-      params.push(searchTerm); // For name, phone, email
+      params.push(searchTerm); // For name, email
+      params.push(phoneSearchTerm); // For phone
 
       query += ` AND (
-                name ILIKE $${params.length} 
+                name ILIKE $${params.length - 1} 
                 OR phone ILIKE $${params.length} 
-                OR email ILIKE $${params.length}
+                OR email ILIKE $${params.length - 1}
                 ${areaCodeClause}
             )`;
 

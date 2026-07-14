@@ -151,6 +151,7 @@ const Dashboard = () => {
                 <KpiCard index={5} icon={ShieldBan} label="DNC Numbers"        value={+totals.dnc_count}       color="#f43f5e" sub="Blocked lines" />
                 <KpiCard index={6} icon={FolderUp}  label="Upload Sessions"    value={+totals.total_sessions}  color="#f59e0b" sub="All sessions" />
                 <KpiCard index={7} icon={Layers}    label="SALE Numbers"       value={+totals.sale_count}      color="#8b5cf6" sub="Converted lines" />
+                <KpiCard index={8} icon={ShieldBan} label="Dead Numbers"       value={+totals.total_dead_numbers || 0} color="#dc2626" sub="Permanently deleted" />
             </div>
 
             {/* ── Campaign Cards Row ── */}
@@ -238,9 +239,9 @@ const Dashboard = () => {
                 {/* Vendor-wise leads */}
                 <Card>
                     <CardHead title="Leads by Vendor" subtitle="Total records per data provider" icon={Building2} color="#a855f7" />
-                    <div style={{ padding:'24px 16px 20px', height:290 }}>
+                    <div style={{ padding:'24px 16px 20px', height:290, minHeight:0, minWidth:0 }}>
                         {rdy && vendorDistribution?.length ? (
-                            <ResponsiveContainer width="99%" height="100%">
+                            <ResponsiveContainer width="99%" height="100%" minHeight={1} minWidth={1}>
                                 <BarChart data={vendorDistribution} margin={{ top:5, right:5, left:-20, bottom:0 }}>
                                     <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
                                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill:'#4b5563', fontSize:11, fontWeight:600 }} dy={12} />
@@ -258,10 +259,10 @@ const Dashboard = () => {
                 {/* Lead Status Donut */}
                 <Card>
                     <CardHead title="Lead Status" subtitle="Breakdown by current state" icon={Database} color="#3b82f6" />
-                    <div style={{ padding:'16px 16px 0' }}>
-                        <div style={{ position:'relative', height:200 }}>
+                    <div style={{ padding:'16px 16px 0', minHeight:0, minWidth:0 }}>
+                        <div style={{ position:'relative', height:200, minHeight:0, minWidth:0 }}>
                             {rdy && statusPieData.length ? (
-                                <ResponsiveContainer width="99%" height="100%">
+                                <ResponsiveContainer width="99%" height="100%" minHeight={1} minWidth={1}>
                                     <PieChart>
                                         <Pie data={statusPieData} innerRadius={60} outerRadius={88} paddingAngle={4} dataKey="value" nameKey="name" stroke="transparent" cornerRadius={6} animationDuration={1400}>
                                             {statusPieData.map((s,i)=><Cell key={i} fill={s.fill} />)}
@@ -296,9 +297,9 @@ const Dashboard = () => {
                 {/* Campaign Leads */}
                 <Card>
                     <CardHead title="Leads by Campaign" subtitle="Records tied to each active campaign" icon={Target} color="#06b6d4" />
-                    <div style={{ padding:'24px 16px 20px', height:270 }}>
+                    <div style={{ padding:'24px 16px 20px', height:270, minHeight:0, minWidth:0 }}>
                         {rdy && campaignStats?.length ? (
-                            <ResponsiveContainer width="99%" height="100%">
+                            <ResponsiveContainer width="99%" height="100%" minHeight={1} minWidth={1}>
                                 <BarChart data={campaignStats} layout="vertical" margin={{ top:5, right:20, left:10, bottom:0 }}>
                                     <CartesianGrid stroke="rgba(255,255,255,0.04)" horizontal={false}/>
                                     <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill:'#4b5563', fontSize:11, fontWeight:600 }} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v} />
@@ -319,9 +320,9 @@ const Dashboard = () => {
                             <span style={{ fontSize:11, color:'#8b5cf6', fontWeight:700, display:'flex', alignItems:'center', gap:5 }}><span style={{ width:8,height:8,borderRadius:2,background:'#8b5cf6',display:'inline-block'}} />SALE</span>
                         </div>}
                     />
-                    <div style={{ padding:'24px 16px 20px', height:270 }}>
+                    <div style={{ padding:'24px 16px 20px', height:270, minHeight:0, minWidth:0 }}>
                         {rdy && dncStats?.length ? (
-                            <ResponsiveContainer width="99%" height="100%">
+                            <ResponsiveContainer width="99%" height="100%" minHeight={1} minWidth={1}>
                                 <BarChart data={dncStats} layout="vertical" margin={{ top:5, right:20, left:10, bottom:0 }}>
                                     <CartesianGrid stroke="rgba(255,255,255,0.04)" horizontal={false}/>
                                     <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill:'#4b5563', fontSize:11, fontWeight:600 }} />

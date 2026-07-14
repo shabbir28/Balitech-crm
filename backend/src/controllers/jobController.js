@@ -5,6 +5,7 @@ const { parsePhone } = require("../utils/phoneParser");
 const { cleanupFile } = require("../middleware/upload");
 const {
   lookupDncPhones,
+  lookupDeadPhones,
   lookupExistingLeads,
   withSessionUploadLock,
   isRetryableDbError,
@@ -230,9 +231,12 @@ const compareJob = async (req, res) => {
       db,
       uniquePhones,
     );
+    const deadSet = await lookupDeadPhones(db, uniquePhones);
+    
     const dncSkipped = dncSet.size;
+    const deadSkipped = deadSet.size;
 
-    const phonesNotDnc = uniquePhones.filter((p) => !dncSet.has(p));
+    const phonesNotDnc = uniquePhones.filter((p) => !dncSet.has(p) && !deadSet.has(p));
     const { existingSet, existingBreakdown } = await lookupExistingLeads(
       db,
       phonesNotDnc,
@@ -266,6 +270,7 @@ const compareJob = async (req, res) => {
       fresh_count: freshCount,
       existing_count: existingCount,
       dnc_skipped: dncSkipped,
+      dead_skipped: deadSkipped,
       dnc_skipped_dnc: dncSkippedDnc,
       dnc_skipped_sale: dncSkippedSale,
       fresh_sample: freshSample,
@@ -413,7 +418,9 @@ const uploadFreshJob = async (req, res) => {
             exec,
             uniquePhones,
           );
-          const phonesNotDnc = uniquePhones.filter((p) => !dncSet.has(p));
+          const deadSet = await lookupDeadPhones(exec, uniquePhones);
+          
+          const phonesNotDnc = uniquePhones.filter((p) => !dncSet.has(p) && !deadSet.has(p));
           const { existingSet, existingBreakdown } = await lookupExistingLeads(
             exec,
             phonesNotDnc,
@@ -423,7 +430,7 @@ const uploadFreshJob = async (req, res) => {
           const existingCount = existingSet.size;
           const freshCount = phonesNotDnc.length - existingCount;
           const freshRecords = uniqueRecords.filter(
-            (r) => !dncSet.has(r.phone) && !existingSet.has(r.phone),
+            (r) => !dncSet.has(r.phone) && !deadSet.has(r.phone) && !existingSet.has(r.phone),
           );
 
           const inserted = await insertFreshLeadsBatches(exec, {
