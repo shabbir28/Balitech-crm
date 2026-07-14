@@ -7,7 +7,7 @@ import {
     LayoutTemplate, Building2, Target, FolderUp, Scale, Layers,
     FileStack, ShieldBan, FolderDown, TerminalSquare, UserCheck,
     GitCompareArrows, ClipboardList, Bell, CheckCheck,
-    Download, CheckCircle2, XCircle, Users, History, ShieldCheck, FileCheck2, Filter
+    Download, CheckCircle2, XCircle, Users, History, ShieldCheck, FileCheck2, Filter, Truck
 } from 'lucide-react';
 
 // ─── Notification Bell Component ─────────────────────────────
@@ -270,6 +270,16 @@ const Layout = ({ children }) => {
         { to: '/premium-already-downloaded', icon: History, label: 'Already Downloaded (Premium)' },
     ];
 
+    const VAN_NAV_ITEMS = [
+        { to: '/van-vendors', icon: Truck, label: 'Van Vendors' },
+        { to: '/van-campaigns', icon: Target, label: 'Van Campaigns' },
+        { to: '/van-upload', icon: FolderUp, label: 'Upload Van Data' },
+        { to: '/van-sessions', icon: Layers, label: 'Van Sessions' },
+        { to: '/van-data', icon: FileStack, label: 'All Van Data' },
+        { to: '/van-download', icon: FolderDown, label: 'Download Van Data' },
+        { to: '/van-already-downloaded', icon: History, label: 'Already Downloaded' },
+    ];
+
     const isRefinePath = location.pathname.startsWith('/refine');
     const [refineMenuOpen, setRefineMenuOpen] = useState(isRefinePath);
 
@@ -294,6 +304,15 @@ const Layout = ({ children }) => {
     useEffect(() => {
         if (location.pathname.startsWith('/premium')) {
             setPremiumMenuOpen(true);
+        }
+    }, [location.pathname]);
+
+    const isVanPath = location.pathname.startsWith('/van');
+    const [vanMenuOpen, setVanMenuOpen] = useState(isVanPath);
+
+    useEffect(() => {
+        if (location.pathname.startsWith('/van')) {
+            setVanMenuOpen(true);
         }
     }, [location.pathname]);
 
@@ -608,6 +627,41 @@ const Layout = ({ children }) => {
                                     }`}
                                 >
                                     {PREMIUM_NAV_ITEMS.map((item) => {
+                                        const ItemIcon = item.icon;
+                                        return (
+                                            <NavLink key={item.to} to={item.to} className={getSubClassName}>
+                                                <ItemIcon className="h-[14px] w-[14px] shrink-0" />
+                                                <span>{item.label}</span>
+                                            </NavLink>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* VAN DESK Collapsible */}
+                            <div className="mt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setVanMenuOpen((open) => !open)}
+                                    className={`w-full flex items-center px-3.5 py-2.5 text-[13px] font-medium rounded-xl transition-all duration-200 gap-3 mb-0.5 border ${
+                                        isVanPath
+                                            ? 'bg-gradient-to-r from-violet-500/15 to-transparent text-white border-violet-500/25'
+                                            : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border-transparent'
+                                    }`}
+                                >
+                                    <Truck className="h-[15px] w-[15px] shrink-0 text-violet-400" />
+                                    <span className="flex-1 text-left">Van Desk</span>
+                                    <ChevronDown
+                                        className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${vanMenuOpen ? 'rotate-180' : ''}`}
+                                    />
+                                </button>
+
+                                <div
+                                    className={`overflow-hidden transition-all duration-300 ease-out ${
+                                        vanMenuOpen ? 'max-h-[520px] opacity-100 mt-1' : 'max-h-0 opacity-0'
+                                    }`}
+                                >
+                                    {VAN_NAV_ITEMS.map((item) => {
                                         const ItemIcon = item.icon;
                                         return (
                                             <NavLink key={item.to} to={item.to} className={getSubClassName}>

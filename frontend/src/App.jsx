@@ -54,6 +54,18 @@ import PremiumCampaigns from './pages/PremiumCampaigns';
 import PremiumAddCampaign from './pages/PremiumAddCampaign';
 import PremiumAddJob from './pages/PremiumAddJob';
 
+// Van Desk Module
+import VanVendors from './pages/VanVendors';
+import VanCampaigns from './pages/VanCampaigns';
+import VanAddCampaign from './pages/VanAddCampaign';
+import VanUploadLeads from './pages/VanUploadLeads';
+import VanSessionsList from './pages/VanSessionsList';
+import VanSessionDetails from './pages/VanSessionDetails';
+import VanAddJob from './pages/VanAddJob';
+import VanLeadsTable from './pages/VanLeadsTable';
+import VanDownloadLeads from './pages/VanDownloadLeads';
+import VanAlreadyDownloaded from './pages/VanAlreadyDownloaded';
+
 
 const ProtectedRoute = ({ children, roles }) => {
     const { user, loading } = useContext(AuthContext);
@@ -162,6 +174,19 @@ const AppRoutes = () => {
             <Route path="/premium-campaigns" element={<ProtectedRoute roles={['super_admin', 'admin']}><PremiumCampaigns /></ProtectedRoute>} />
             <Route path="/premium-campaigns/add" element={<ProtectedRoute roles={['super_admin', 'admin']}><PremiumAddCampaign /></ProtectedRoute>} />
             <Route path="/premium-campaigns/edit/:id" element={<ProtectedRoute roles={['super_admin', 'admin']}><PremiumAddCampaign editMode /></ProtectedRoute>} />
+
+            {/* VAN DESK MODULE */}
+            <Route path="/van-vendors" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><VanVendors /></ProtectedRoute>} />
+            <Route path="/van-campaigns" element={<ProtectedRoute roles={['super_admin', 'admin']}><VanCampaigns /></ProtectedRoute>} />
+            <Route path="/van-campaigns/add" element={<ProtectedRoute roles={['super_admin', 'admin']}><VanAddCampaign /></ProtectedRoute>} />
+            <Route path="/van-campaigns/edit/:id" element={<ProtectedRoute roles={['super_admin', 'admin']}><VanAddCampaign editMode /></ProtectedRoute>} />
+            <Route path="/van-upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><VanUploadLeads /></ProtectedRoute>} />
+            <Route path="/van-sessions" element={<ProtectedRoute roles={['super_admin', 'admin']}><VanSessionsList /></ProtectedRoute>} />
+            <Route path="/van-sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><VanSessionDetails /></ProtectedRoute>} />
+            <Route path="/van-sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']}><VanAddJob /></ProtectedRoute>} />
+            <Route path="/van-data" element={<ProtectedRoute roles={['super_admin', 'admin']}><VanLeadsTable /></ProtectedRoute>} />
+            <Route path="/van-download" element={<ProtectedRoute roles={['super_admin', 'admin']}><VanDownloadLeads /></ProtectedRoute>} />
+            <Route path="/van-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin']}><VanAlreadyDownloaded /></ProtectedRoute>} />
 
             {/* Catch all */}
             <Route path="*" element={<Navigate to="/" replace />} />

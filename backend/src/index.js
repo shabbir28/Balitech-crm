@@ -48,6 +48,14 @@ const premiumDataRoutes = require("./routes/premium_data");
 const premiumDownloadRoutes = require("./routes/premium_download");
 const premiumDncRoutes = require("./routes/premium_dnc");
 
+// Van Desk
+const vanVendorRoutes = require("./routes/van_vendors");
+const vanCampaignRoutes = require("./routes/van_campaigns");
+const vanSessionRoutes = require("./routes/van_sessions");
+const vanJobRoutes = require("./routes/van_jobs");
+const vanDataRoutes = require("./routes/van_data");
+const vanDownloadRoutes = require("./routes/van_download");
+
 const enforceIPWhitelist = require("./middleware/ipWhitelist");
  
 if (!process.env.JWT_SECRET) {
@@ -196,6 +204,14 @@ app.use("/api/premium-jobs", premiumJobRoutes);
 app.use("/api/premium-data", premiumDataRoutes);
 app.use("/api/premium-download", premiumDownloadRoutes);
 app.use("/api/premium-dnc", premiumDncRoutes);
+
+// Van Desk
+app.use("/api/van-vendors", vanVendorRoutes);
+app.use("/api/van-campaigns", vanCampaignRoutes);
+app.use("/api/van-sessions", vanSessionRoutes);
+app.use("/api/van-jobs", vanJobRoutes);
+app.use("/api/van-data", vanDataRoutes);
+app.use("/api/van-download", vanDownloadRoutes);
  
 // =========================
 

@@ -234,6 +234,19 @@ const Dashboard = () => {
                 </div>
             </div>
 
+            {/* ── Van Desk Data Cards ── */}
+            <div style={{ marginBottom: 32 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
+                    <Layers size={16} color="#8b5cf6" />
+                    <h2 style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', letterSpacing: '0.02em' }}>Van Desk Data</h2>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
+                    <div style={{ maxWidth: '300px' }}>
+                        <KpiCard index={0} icon={Database} label="Total Van Desk Data" value={+(totals.total_van_data || 0)} color="#8b5cf6" sub="Van Desk leads" />
+                    </div>
+                </div>
+            </div>
+
             {/* ── Row 2: Vendor Bar + Lead Status Pie ── */}
             <div style={{ display:'grid', gridTemplateColumns:'1fr 340px', gap:20, marginBottom:20, animation:'fadeUp .5s .25s ease both' }}>
                 {/* Vendor-wise leads */}

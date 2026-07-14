@@ -1,0 +1,770 @@
+import React, { useState } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import api from '../services/api';
+import { UploadCloud, CheckCircle, ArrowRight, Settings, UserCircle, Database, ChevronRight, FileX, FileSpreadsheet, Server, Cpu } from 'lucide-react';
+
+const BULK_UPLOAD_TIMEOUT_MS = 5 * 60 * 1000; // 5 min just for the upload POST itself
+const DEADLOCK_RETRY_ATTEMPTS = 4;
+const DEADLOCK_RETRY_DELAY_MS = 800;
+const POLL_INTERVAL_MS = 2500; // poll every 2.5s
+const POLL_MAX_WAIT_MS = 30 * 60 * 1000; // give up polling after 30 min
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const postFileWithRetry = async (url, formData, fileLabel, onUploadProgress) => {
+    let lastErr;
+    for (let attempt = 1; attempt <= DEADLOCK_RETRY_ATTEMPTS; attempt++) {
+        try {
+            return await api.post(url, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                timeout: BULK_UPLOAD_TIMEOUT_MS,
+                onUploadProgress: (progressEvent) => {
+                    if (onUploadProgress && progressEvent.total) {
+                        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                        onUploadProgress(percentCompleted);
+                    }
+                }
+            });
+        } catch (err) {
+            lastErr = err;
+            const retryable =
+                err.response?.status === 503 ||
+                err.response?.data?.retryable === true;
+            if (!retryable || attempt >= DEADLOCK_RETRY_ATTEMPTS) {
+                err.failedFile = fileLabel;
+                throw err;
+            }
+            await sleep(DEADLOCK_RETRY_DELAY_MS * attempt);
+        }
+    }
+    lastErr.failedFile = fileLabel;
+    throw lastErr;
+};
+
+/**
+ * Upload fresh file â†’ get job_id (202) â†’ poll until Completed/Failed
+ * Returns the completed job data (same shape as old sync response)
+ */
+const uploadFreshAndPoll = async (formData, fileLabel, onStatusUpdate, onUploadProgress) => {
+    // Step 1: Submit the file â€” backend returns 202 immediately
+    const initRes = await api.post('/Van-jobs/upload-fresh', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: BULK_UPLOAD_TIMEOUT_MS,
+        onUploadProgress: (progressEvent) => {
+            if (onUploadProgress && progressEvent.total) {
+                const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                onUploadProgress(percentCompleted);
+            }
+        }
+    });
+
+    const jobId = initRes.data?.job_id;
+    if (!jobId) throw Object.assign(new Error('No job_id returned'), { failedFile: fileLabel });
+
+    // Step 2: Poll until done
+    const deadline = Date.now() + POLL_MAX_WAIT_MS;
+    while (Date.now() < deadline) {
+        await sleep(POLL_INTERVAL_MS);
+        const pollRes = await api.get(`/Van-jobs/${jobId}/status`);
+        const job = pollRes.data;
+        if (onStatusUpdate) onStatusUpdate(job.status);
+
+        if (job.status === 'Completed') {
+            return {
+                total_processed: job.total_rows || 0,
+                total_unique_phones: job.total_rows || 0,
+                duplicates_in_file: job.duplicates_in_file || 0,
+                fresh_count: job.fresh_count || 0,
+                existing_count: job.existing_count || 0,
+                dnc_skipped: job.dnc_skipped || 0,
+                dnc_skipped_dnc: job.dnc_skipped_dnc || 0,
+                dnc_skipped_sale: job.dnc_skipped_sale || 0,
+                inserted: job.inserted || 0,
+                updated: job.updated || 0,
+                duplicates_skipped: (job.fresh_count || 0) - (job.inserted || 0),
+                existing_breakdown: {},
+            };
+        }
+        if (job.status === 'Failed') {
+            throw Object.assign(
+                new Error(job.error_message || 'Upload processing failed'),
+                { failedFile: fileLabel }
+            );
+        }
+        // status === 'Processing' â†’ keep polling
+    }
+    throw Object.assign(new Error('Upload timed out waiting for processing'), { failedFile: fileLabel });
+};
+
+const VanAddJob = () => {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const location = useLocation();
+    
+    const [step, setStep] = useState(1);
+    const [files, setFiles] = useState([]);
+    const [comparing, setComparing] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const [fileProgresses, setFileProgresses] = useState({});
+    const [error, setError] = useState('');
+    const [result, setResult] = useState(null);
+    const [compareResult, setCompareResult] = useState(null);
+
+    const isBulk = new URLSearchParams(location.search).get('bulk') === 'true';
+
+    const handleFileChange = (e) => {
+        const selected = Array.from(e.target.files);
+        if (selected.length > 0) {
+            setFiles(isBulk ? selected : [selected[0]]);
+            setError('');
+            setCompareResult(null);
+            setResult(null);
+            setStep(1);
+        }
+    };
+
+    const handleCompare = async () => {
+        if (files.length === 0) {
+            setError('Please select a file to compare');
+            return;
+        }
+
+        setComparing(true);
+        setError('');
+        setCompareResult(null);
+        setResult(null);
+        setFileProgresses({});
+
+        const aggregate = {
+            total_processed: 0,
+            total_unique_phones: 0,
+            duplicates_in_file: 0,
+            fresh_count: 0,
+            existing_count: 0,
+            dnc_skipped: 0,
+            dnc_skipped_dnc: 0,
+            dnc_skipped_sale: 0,
+            dead_skipped: 0,
+            main_leads_overlap: 0,
+            fresh_sample: [],
+            existing_breakdown: {},
+        };
+
+        try {
+            for (let i = 0; i < files.length; i++) {
+                const fileLabel = files[i]?.name || `File ${i + 1}`;
+                try {
+                    const formData = new FormData();
+                    formData.append('file', files[i]);
+                    formData.append('session_id', id);
+
+                    const res = await postFileWithRetry('/Van-jobs/compare', formData, fileLabel, (percent) => {
+                        setFileProgresses(prev => ({ ...prev, [i]: percent }));
+                    });
+                    setProgress(Math.round(((i + 1) / files.length) * 100));
+
+                    aggregate.total_processed += res.data.total_processed || 0;
+                    aggregate.total_unique_phones += res.data.total_unique_phones || 0;
+                    aggregate.duplicates_in_file += res.data.duplicates_in_file || 0;
+                    aggregate.fresh_count += res.data.fresh_count || 0;
+                    aggregate.existing_count += res.data.existing_count || 0;
+                    aggregate.dnc_skipped += res.data.dnc_skipped || 0;
+                    aggregate.dnc_skipped_dnc += res.data.dnc_skipped_dnc || 0;
+                    aggregate.dnc_skipped_sale += res.data.dnc_skipped_sale || 0;
+                    aggregate.dead_skipped += res.data.dead_skipped || 0;
+                    aggregate.main_leads_overlap += res.data.main_leads_overlap || 0;
+
+                    if (res.data.existing_breakdown) {
+                        for (const [vendorName, count] of Object.entries(res.data.existing_breakdown)) {
+                            aggregate.existing_breakdown[vendorName] = (aggregate.existing_breakdown[vendorName] || 0) + count;
+                        }
+                    }
+
+                    if (Array.isArray(res.data.fresh_sample)) {
+                        aggregate.fresh_sample.push(...res.data.fresh_sample);
+                        aggregate.fresh_sample = aggregate.fresh_sample.slice(0, 25);
+                    }
+                } catch (fileErr) {
+                    console.error(`Error comparing file ${fileLabel}:`, fileErr);
+                    const detail = fileErr.response?.data?.error || fileErr.response?.data?.message || fileErr.message;
+                    aggregate.failed_files = aggregate.failed_files || [];
+                    aggregate.failed_files.push({ name: fileLabel, error: detail });
+                    setFileProgresses(prev => ({ ...prev, [i]: -1 }));
+                    setProgress(Math.round(((i + 1) / files.length) * 100));
+                }
+            }
+            
+            setProgress(100);
+            setCompareResult(aggregate);
+            setStep(3); // Preview step
+        } catch (err) {
+            const detail = err.response?.data?.error || err.response?.data?.message;
+            const label = err.failedFile || 'Compare failed';
+            setError(detail ? `${label}: ${detail}` : (err.code === 'ECONNABORTED' ? 'Compare timed out â€” try fewer files at once' : 'Server error comparing file(s)'));
+        } finally {
+            setComparing(false);
+        }
+    };
+
+    const handleUploadFresh = async () => {
+        if (files.length === 0) {
+            setError('Please select a file to upload fresh numbers');
+            return;
+        }
+
+        setUploading(true);
+        setError('');
+        setResult(null);
+        setFileProgresses({});
+
+        const aggregate = {
+            total_processed: 0,
+            total_unique_phones: 0,
+            duplicates_in_file: 0,
+            fresh_count: 0,
+            existing_count: 0,
+            dnc_skipped: 0,
+            dnc_skipped_dnc: 0,
+            dnc_skipped_sale: 0,
+            dead_skipped: 0,
+            inserted: 0,
+            updated: 0,
+            duplicates_skipped: 0,
+            existing_breakdown: {},
+        };
+
+        try {
+            for (let i = 0; i < files.length; i++) {
+                const fileLabel = files[i]?.name || `File ${i + 1}`;
+                try {
+                    const formData = new FormData();
+                    formData.append('file', files[i]);
+                    formData.append('session_id', id);
+
+                    // Uses async polling â€” no 504 timeout possible
+                    const data = await uploadFreshAndPoll(formData, fileLabel, (status) => {
+                        // Optional: show per-file status in UI
+                        console.log(`[${fileLabel}] Status: ${status}`);
+                    }, (percent) => {
+                        setFileProgresses(prev => ({ ...prev, [i]: percent }));
+                    });
+                    setProgress(Math.round(((i + 1) / files.length) * 100));
+
+                    aggregate.total_processed += data.total_processed || 0;
+                    aggregate.total_unique_phones += data.total_unique_phones || 0;
+                    aggregate.duplicates_in_file += data.duplicates_in_file || 0;
+                    aggregate.fresh_count += data.fresh_count || 0;
+                    aggregate.existing_count += data.existing_count || 0;
+                    aggregate.dnc_skipped += data.dnc_skipped || 0;
+                    aggregate.dnc_skipped_dnc += data.dnc_skipped_dnc || 0;
+                    aggregate.dnc_skipped_sale += data.dnc_skipped_sale || 0;
+                    aggregate.dead_skipped += data.dead_skipped || 0;
+                    aggregate.inserted += data.inserted || 0;
+                    aggregate.updated += data.updated || 0;
+                    aggregate.duplicates_skipped += data.duplicates_skipped || 0;
+
+                    if (data.existing_breakdown) {
+                        for (const [vendorName, count] of Object.entries(data.existing_breakdown)) {
+                            aggregate.existing_breakdown[vendorName] = (aggregate.existing_breakdown[vendorName] || 0) + count;
+                        }
+                    }
+                } catch (fileErr) {
+                    console.error(`Error uploading file ${fileLabel}:`, fileErr);
+                    const detail = fileErr.response?.data?.error || fileErr.response?.data?.message || fileErr.message;
+                    aggregate.failed_files = aggregate.failed_files || [];
+                    aggregate.failed_files.push({ name: fileLabel, error: detail });
+                    setFileProgresses(prev => ({ ...prev, [i]: -1 }));
+                    setProgress(Math.round(((i + 1) / files.length) * 100));
+                }
+            }
+
+            setProgress(100);
+            setResult(aggregate);
+            setStep(4);
+        } catch (err) {
+            const detail = err.response?.data?.error || err.response?.data?.message || err.message;
+            const label = err.failedFile || 'Upload failed';
+            setError(detail ? `${label}: ${detail}` : 'Server error uploading fresh file(s)');
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const formatBytes = (bytes) => {
+        if (!bytes || bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    };
+
+    return (
+        <div className="w-full flex justify-center pb-20 font-sans">
+            <div className="w-full max-w-6xl space-y-6 text-slate-200">
+                
+                {/* Header Breadcrumb */}
+                <div className="flex items-center space-x-2 text-[13px] text-slate-400 bg-[#1e1e2d] px-5 py-3.5 rounded-2xl shadow-sm border border-white/5 mx-auto">
+                    <span className="text-violet-400 font-bold flex items-center cursor-pointer hover:text-violet-300 transition-colors" onClick={() => navigate(`/Van-sessions/${id}`)}>
+                        <Database className="w-4 h-4 mr-2" /> Import Contact
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+                    <span className="text-slate-300 font-mono truncate max-w-xs">{id}</span>
+                    
+                    <div className="ml-auto flex items-center space-x-4 text-slate-500">
+                        <Settings className="w-[18px] h-[18px] hover:text-white cursor-pointer transition-colors" />
+                        <UserCircle className="w-6 h-6 hover:text-white cursor-pointer transition-colors" />
+                    </div>
+                </div>
+
+                <div className="bg-[#1e1e2d] rounded-[2rem] shadow-2xl border border-white/5 relative overflow-hidden flex flex-col items-center pt-8 sm:pt-12">
+                    
+                    {/* Stepper */}
+                    <div className="w-full max-w-4xl px-4 sm:px-12 mb-10 sm:mb-14 relative z-10">
+                        {/* Connecting Line */}
+                        <div className="absolute top-[28px] left-[15%] right-[15%] h-[2px] bg-white/5 -z-10 rounded-full"></div>
+                        
+                        {/* Progress Line */}
+                        <div className="absolute top-[28px] left-[15%] h-[2px] bg-violet-500 -z-10 rounded-full transition-all duration-500 ease-out" 
+                             style={{ width: step === 1 ? '0%' : step === 2 ? '33.3%' : step === 3 ? '66.6%' : '100%' }}></div>
+
+                        <div className="flex justify-between items-start relative z-10">
+                            {['Import File', 'Map Columns', 'Preview', 'Import'].map((label, index) => {
+                                const stepNum = index + 1;
+                                const isActive = step === stepNum;
+                                const isPast = step > stepNum;
+                                
+                                return (
+                                    <div key={label} className="flex flex-col items-center w-24 sm:w-32 text-center group">
+                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-sm ${
+                                            isActive || isPast 
+                                                ? 'bg-gradient-to-br from-violet-500 to-violet-600 text-white shadow-[0_0_20px_rgba(59,130,246,0.3)] border border-violet-400/50 scale-110' 
+                                                : 'bg-[#0a0a0f] text-slate-500 border border-white/10'
+                                        }`}>
+                                            {isPast ? <CheckCircle className="w-6 h-6 stroke-[3]" /> : <span className="font-bold text-lg">{stepNum}</span>}
+                                        </div>
+                                        <span className={`text-[12px] sm:text-[13px] mt-4 font-semibold tracking-wide transition-colors ${
+                                            isActive || isPast ? 'text-violet-400' : 'text-slate-500 group-hover:text-slate-400'
+                                        }`}>
+                                            {label}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Content Area */}
+                    <div className="flex-1 w-full bg-[#0a0a0f]/40 sm:p-12 p-6 text-slate-200 flex flex-col border-t border-white/5 relative z-10 min-h-[400px]">
+                        {step === 1 && (
+                            <div className="w-full max-w-5xl mx-auto flex flex-col md:flex-row gap-8 lg:gap-16 items-center">
+                                <div className="flex-1 w-full animate-fade-in relative z-10">
+                                    <h2 className="text-3xl font-extrabold text-white mb-2 tracking-tight">Import File</h2>
+                                    <p className="text-slate-400 mb-8 text-[14px] font-medium">Click below to drop your CSV, Excel, or TXT file into the CRM securely.</p>
+                                    
+                                    <div className="group relative border-2 border-dashed border-white/20 hover:border-violet-500/50 rounded-3xl p-10 text-center bg-[#1e1e2d]/50 hover:bg-violet-500/5 transition-all duration-300">
+                                        <input 
+                                            type="file" 
+                                            accept=".csv, .xls, .xlsx, .txt" 
+                                            multiple={isBulk}
+                                            onChange={handleFileChange}
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                                        />
+                                        <div className="flex justify-center mb-5">
+                                            <div className="bg-[#0a0a0f] text-violet-400 p-4 rounded-2xl border border-white/5 shadow-inner group-hover:scale-110 transition-transform duration-300 group-hover:shadow-[0_0_30px_rgba(59,130,246,0.2)]">
+                                                <UploadCloud className="w-8 h-8" />
+                                            </div>
+                                        </div>
+                                        <p className="text-white font-bold text-lg mb-1">Click or drag and drop to import</p>
+                                        <p className="text-slate-500 text-sm font-medium">Maximum file size: 50MB</p>
+                                    </div>
+
+                                    {files.length > 0 && (
+                                        <div className="mt-8 animate-fade-in">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <h3 className="text-sm font-bold text-slate-300 uppercase tracking-widest">Added Files</h3>
+                                            </div>
+                                            <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-2 cursor-default">
+                                                {files.map((f, i) => (
+                                                    <div key={i} className="flex flex-col bg-[#1e1e2d] border border-white/5 py-3 px-4 rounded-xl hover:bg-white/5 transition-colors">
+                                                        <div className="flex justify-between items-center">
+                                                            <div className="flex items-center gap-3">
+                                                                <FileSpreadsheet className="w-4 h-4 text-violet-400" />
+                                                                <span className="text-slate-200 truncate text-[14px] font-medium max-w-[200px] sm:max-w-xs">{f.name}</span>
+                                                            </div>
+                                                            <span className="text-slate-500 text-xs font-mono bg-[#0a0a0f] px-2 py-1 rounded-md border border-white/5">{formatBytes(f.size)}</span>
+                                                        </div>
+                                                        {fileProgresses[i] !== undefined && (
+                                                            <div className="mt-3 w-full">
+                                                                <div className="flex justify-between items-center mb-1">
+                                                                    <span className={`text-[9px] font-bold uppercase tracking-widest ${fileProgresses[i] === -1 ? 'text-red-400' : 'text-violet-400'}`}>
+                                                                        {fileProgresses[i] === -1 ? 'Failed' : fileProgresses[i] === 100 ? 'Processing...' : 'Uploading'}
+                                                                    </span>
+                                                                    <span className={`text-[10px] font-bold ${fileProgresses[i] === -1 ? 'text-red-400' : 'text-slate-400'}`}>
+                                                                        {fileProgresses[i] === -1 ? 'Error' : `${fileProgresses[i]}%`}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="w-full bg-[#0a0a0f] rounded-full h-1 overflow-hidden border border-white/5">
+                                                                    <div className={`${fileProgresses[i] === -1 ? 'bg-red-500' : 'bg-violet-500'} h-full rounded-full transition-all duration-300`} style={{ width: fileProgresses[i] === -1 ? '100%' : `${fileProgresses[i]}%` }}></div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            
+                                            <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl mt-6 flex items-start">
+                                                <FileX className="w-5 h-5 text-amber-400 mr-3 mt-0.5 shrink-0" />
+                                                <div>
+                                                    <h4 className="font-bold text-amber-400 text-[14px]">Automatic Cleanup</h4>
+                                                    <p className="text-[13px] text-amber-200/70 mt-1 font-medium leading-relaxed">System will auto-scan and skip any completely empty rows during processing to optimize database integrity.</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-8 flex flex-col items-end">
+                                                {comparing && isBulk && (
+                                                    <div className="w-full mb-6">
+                                                        <div className="flex justify-between text-[12px] font-bold text-violet-400 mb-2 tracking-wide uppercase">
+                                                            <span>Comparing {files.length} files...</span>
+                                                            <span>{progress}%</span>
+                                                        </div>
+                                                        <div className="w-full bg-[#1e1e2d] rounded-full h-1.5 overflow-hidden border border-white/5">
+                                                            <div className="bg-violet-500 h-full rounded-full transition-all duration-300 shadow-[0_0_10px_rgba(59,130,246,0.8)]" style={{ width: `${progress}%` }}></div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                <button 
+                                                    onClick={handleCompare}
+                                                    disabled={comparing}
+                                                    className="bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 text-white px-8 py-3.5 rounded-xl font-semibold transition-all shadow-[0_4px_14px_rgba(59,130,246,0.3)] flex items-center gap-2 active:scale-[0.98] text-[14px] disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    {comparing ? (
+                                                        <>
+                                                            <div className="relative flex items-center justify-center w-5 h-5">
+                                                                <div className="absolute inset-0 bg-white/30 rounded-full animate-ping opacity-70"></div>
+                                                                <img src="/favicon.png" alt="Loading" className="w-5 h-5 relative z-10 animate-[spin_1.5s_linear_infinite] drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
+                                                            </div>
+                                                            Comparing Data...
+                                                        </>
+                                                    ) : (
+                                                        <>{isBulk ? 'Start Bulk Compare' : 'Start Compare'} <ArrowRight className="w-4 h-4" strokeWidth={2.5} /></>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                    
+                                    {error && (
+                                        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl mt-6 text-sm font-medium flex items-center gap-3 animate-fade-in">
+                                            <div className="w-1.5 h-1.5 bg-red-400 rounded-full shrink-0"></div>
+                                            {error}
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                {/* Character Illustration: Import Bot */}
+                                <div className="hidden md:flex flex-1 items-center justify-center relative w-full h-[350px]">
+                                    {/* Glowing background */}
+                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-violet-500/20 rounded-full blur-[80px] pointer-events-none"></div>
+
+                                    <div className="relative z-10 animate-[bounce_4s_infinite]">
+                                        {/* Bot Antenna */}
+                                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-1.5 h-6 bg-slate-600 rounded-t-full flex justify-center">
+                                            <div className="absolute -top-3 w-4 h-4 rounded-full bg-violet-400 animate-pulse shadow-[0_0_15px_rgba(59,130,246,0.8)]"></div>
+                                        </div>
+                                        
+                                        {/* Bot Body/Head */}
+                                        <div className="w-48 h-40 bg-gradient-to-b from-[#1e1e2d] to-[#0a0a0f] border-2 border-violet-500/40 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col items-center justify-center relative overflow-hidden group">
+                                            {/* Screen Face */}
+                                            <div className="w-36 h-20 bg-[#050508] rounded-2xl flex flex-col items-center justify-center mt-2 border border-white/5 relative overflow-hidden shadow-inner">
+                                                {/* Scanning line */}
+                                                <div className="absolute -top-10 w-full h-1 bg-violet-500 shadow-[0_0_15px_rgba(59,130,246,0.8)] animate-[ping_3s_infinite]" style={{ animationDuration: '2s' }}></div>
+                                                
+                                                {/* Eyes */}
+                                                <div className="flex gap-8 mb-2 mt-1">
+                                                    <div className="w-5 h-6 rounded-full bg-violet-400 shadow-[0_0_10px_rgba(59,130,246,0.8)] group-hover:scale-y-50 group-hover:bg-violet-300 transition-all duration-300"></div>
+                                                    <div className="w-5 h-6 rounded-full bg-violet-400 shadow-[0_0_10px_rgba(59,130,246,0.8)] group-hover:scale-y-50 group-hover:bg-violet-300 transition-all duration-300"></div>
+                                                </div>
+                                                {/* Mouth / Data Loader */}
+                                                <div className="w-12 h-2.5 bg-slate-800 rounded-full overflow-hidden mt-1.5 border border-white/5">
+                                                    <div className="w-1/3 h-full bg-emerald-400 opacity-80" style={{ animation: 'bounce 1s infinite alternate' }}></div>
+                                                </div>
+                                            </div>
+                                            
+                                            {/* Neck/Collar detail */}
+                                            <div className="absolute bottom-0 w-full h-4 bg-violet-500/10 blur-sm"></div>
+                                        </div>
+
+                                        {/* Floating Hands */}
+                                        <div className="absolute top-[40%] -left-8 w-6 h-14 bg-[#1e1e2d] border border-violet-500/30 rounded-full animate-[bounce_3s_infinite_reverse] shadow-lg"></div>
+                                        <div className="absolute top-[40%] -right-8 w-6 h-14 bg-[#1e1e2d] border border-violet-500/30 rounded-full animate-[bounce_2.5s_infinite_reverse] shadow-lg"></div>
+                                        
+                                        {/* Floating files getting "sucked" in */}
+                                        <div className="absolute -top-16 -right-16 bg-[#0a0a0f] p-3 rounded-2xl border border-white/10 shadow-xl opacity-80 animate-[bounce_4s_infinite]">
+                                            <FileSpreadsheet className="w-7 h-7 text-violet-400" />
+                                        </div>
+                                        <div className="absolute -bottom-10 -left-16 bg-[#0a0a0f] p-3.5 rounded-2xl border border-emerald-500/20 shadow-xl opacity-80 animate-[bounce_3s_infinite_reverse]">
+                                            <Database className="w-7 h-7 text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Data Stream base */}
+                                    <div className="absolute bottom-10 w-full h-16 flex justify-center items-end gap-3 opacity-40">
+                                        {[
+                                            { h: 45, d: 1.5 },
+                                            { h: 25, d: 2.1 },
+                                            { h: 55, d: 1.2 },
+                                            { h: 35, d: 2.8 },
+                                            { h: 60, d: 1.7 },
+                                            { h: 30, d: 2.4 }
+                                        ].map((bar, i) => (
+                                            <div 
+                                                key={i} 
+                                                className="w-1.5 rounded-t-full" 
+                                                style={{ 
+                                                    height: `${bar.h}px`,
+                                                    backgroundColor: i % 2 === 0 ? '#3b82f6' : '#10b981',
+                                                    animation: `pulse ${bar.d}s infinite alternate`
+                                                }}
+                                            ></div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        
+                        {step === 3 && compareResult && (
+                            <div className="w-full max-w-4xl mx-auto text-center py-4 animate-fade-in relative z-10">
+                                {/* Ambient Glow */}
+                                <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-96 h-96 bg-violet-500/10 rounded-full blur-[100px] pointer-events-none"></div>
+
+                                <div className="mx-auto bg-[#1e1e2d]/60 backdrop-blur-md border border-white/5 shadow-2xl rounded-3xl p-8 sm:p-10 text-left relative overflow-hidden">
+                                    <h2 className="text-3xl font-bold text-white mb-2 tracking-tight">Preview Results</h2>
+                                    <p className="text-slate-400 text-[14px] font-medium mb-8">
+                                        Fresh numbers will be uploaded to CRM. Existing, DNC, and Sale numbers will be skipped.
+                                    </p>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 mb-8">
+                                        <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-violet-500/30 transition-colors">
+                                            <div className="absolute top-0 left-0 w-1 h-full bg-slate-500"></div>
+                                            <p className="text-slate-500 text-[11px] uppercase tracking-widest font-bold mb-1 ml-2 text-left">Total Valid Rows</p>
+                                            <p className="text-3xl font-extrabold text-white ml-2">{compareResult.total_processed}</p>
+                                        </div>
+                                        <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-red-500/30 transition-colors">
+                                            <div className="absolute top-0 left-0 w-1 h-full bg-red-500/50"></div>
+                                            <p className="text-red-400/70 text-[11px] uppercase tracking-widest font-bold mb-1 ml-2 text-left">Invalid/Dupes</p>
+                                            <p className="text-3xl font-extrabold text-white ml-2">{compareResult.duplicates_in_file}</p>
+                                        </div>
+                                        <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-violet-500/50 transition-colors">
+                                            <div className="absolute top-0 left-0 w-1 h-full bg-violet-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]"></div>
+                                            <p className="text-violet-400 text-[11px] uppercase tracking-widest font-bold mb-1 ml-2 text-left">Fresh Numbers</p>
+                                            <p className="text-3xl font-extrabold text-white ml-2">{compareResult.fresh_count}</p>
+                                        </div>
+                                        <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-amber-500/30 transition-colors flex flex-col">
+                                            <div className="absolute top-0 left-0 w-1 h-full bg-amber-500/70"></div>
+                                            <p className="text-amber-400/80 text-[11px] uppercase tracking-widest font-bold mb-1 ml-2 text-left">Already Present</p>
+                                            <p className="text-3xl font-extrabold text-white ml-2">{compareResult.existing_count}</p>
+                                            {compareResult.existing_breakdown && Object.keys(compareResult.existing_breakdown).length > 0 && (
+                                                <div className="mt-3 ml-2 text-[11px] border-t border-white/5 pt-3 flex-grow overflow-y-auto max-h-24 custom-scrollbar">
+                                                    {Object.entries(compareResult.existing_breakdown).map(([campaign, count]) => (
+                                                        <div key={campaign} className="flex justify-between text-slate-400 py-0.5">
+                                                            <span className="truncate pr-2" title={campaign}>{campaign}:</span>
+                                                            <span className="font-mono text-slate-300">{count}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-purple-500/30 transition-colors">
+                                            <div className="absolute top-0 left-0 w-1 h-full bg-purple-500/50"></div>
+                                            <p className="text-purple-400/80 text-[11px] uppercase tracking-widest font-bold mb-1 ml-2 text-left">Total DNC Skipped</p>
+                                            <p className="text-3xl font-extrabold text-white ml-2">{compareResult.dnc_skipped}</p>
+                                        </div>
+                                        <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-purple-500/30 transition-colors">
+                                            <div className="absolute top-0 left-0 w-1 h-full bg-purple-500/50"></div>
+                                            <p className="text-purple-400/80 text-[11px] uppercase tracking-widest font-bold mb-1 ml-2 text-left">DNC / SALE Skipped</p>
+                                            <p className="text-2xl font-extrabold text-white ml-2 mt-1">
+                                                {compareResult.dnc_skipped_dnc} / {compareResult.dnc_skipped_sale}
+                                            </p>
+                                        </div>
+                                        <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-red-500/30 transition-colors">
+                                            <div className="absolute top-0 left-0 w-1 h-full bg-red-500/50"></div>
+                                            <p className="text-red-400/80 text-[11px] uppercase tracking-widest font-bold mb-1 ml-2 text-left">Dead Numbers Skipped</p>
+                                            <p className="text-3xl font-extrabold text-white ml-2">{compareResult.dead_skipped || 0}</p>
+                                        </div>
+                                        <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-blue-500/30 transition-colors">
+                                            <div className="absolute top-0 left-0 w-1 h-full bg-blue-500/50"></div>
+                                            <p className="text-blue-400/80 text-[11px] uppercase tracking-widest font-bold mb-1 ml-2 text-left">Main Leads Overlap</p>
+                                            <p className="text-3xl font-extrabold text-white ml-2">{compareResult.main_leads_overlap || 0}</p>
+                                        </div>
+                                    </div>
+
+                                    {Array.isArray(compareResult.fresh_sample) && compareResult.fresh_sample.length > 0 && (
+                                        <div className="mb-6 bg-[#0a0a0f] p-5 rounded-2xl border border-white/5">
+                                            <p className="text-slate-400 font-bold text-[12px] uppercase tracking-widest mb-3">Fresh Sample Preview</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {compareResult.fresh_sample.map((x, idx) => (
+                                                    <span key={`${x.phone}-${idx}`} className="bg-[#1e1e2d] text-slate-300 text-[11px] font-mono px-2.5 py-1 rounded-md border border-white/5">
+                                                        {x.phone}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {compareResult.failed_files && compareResult.failed_files.length > 0 && (
+                                        <div className="mb-6 bg-red-500/10 p-5 rounded-2xl border border-red-500/20">
+                                            <p className="text-red-400 font-bold text-[12px] uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                <FileX className="w-4 h-4" /> Skipped / Failed Files
+                                            </p>
+                                            <div className="flex flex-col gap-2 max-h-40 overflow-y-auto custom-scrollbar">
+                                                {compareResult.failed_files.map((errItem, idx) => (
+                                                    <div key={idx} className="bg-[#1e1e2d] text-slate-300 text-[12px] px-3 py-2 rounded-md border border-red-500/10 flex flex-col sm:flex-row justify-between gap-2">
+                                                        <span className="font-bold text-red-300 truncate w-full sm:w-1/3" title={errItem.name}>{errItem.name}</span>
+                                                        <span className="text-red-400/80 truncate w-full sm:w-2/3 sm:text-right" title={errItem.error}>{errItem.error}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="flex items-center justify-between gap-4 mt-8 pt-6 border-t border-white/5">
+                                        <button
+                                            onClick={() => setStep(1)}
+                                            disabled={uploading}
+                                            className="bg-[#0a0a0f] hover:bg-white/5 border border-white/10 text-slate-300 px-6 py-3.5 rounded-xl font-semibold transition-all flex items-center gap-2 active:scale-[0.98] text-[14px]"
+                                        >
+                                            <ArrowRight className="w-4 h-4 rotate-180" strokeWidth={2.5} /> Back
+                                        </button>
+                                        <button
+                                            onClick={handleUploadFresh}
+                                            disabled={uploading}
+                                            className="bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 text-white px-8 py-3.5 rounded-xl font-semibold transition-all shadow-[0_4px_14px_rgba(59,130,246,0.3)] flex items-center gap-2 active:scale-[0.98] text-[14px]"
+                                        >
+                                            {uploading ? (
+                                                <>
+                                                    <div className="relative flex items-center justify-center w-5 h-5">
+                                                        <div className="absolute inset-0 bg-white/30 rounded-full animate-ping opacity-70"></div>
+                                                        <img src="/favicon.png" alt="Loading" className="w-5 h-5 relative z-10 animate-[spin_1.5s_linear_infinite] drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
+                                                    </div>
+                                                    Processing Data...
+                                                </>
+                                            ) : (
+                                                <>{'Upload Fresh Numbers'} <ArrowRight className="w-4 h-4" strokeWidth={2.5} /></>
+                                            )}
+                                        </button>
+                                    </div>
+                                    
+                                    {uploading && isBulk && (
+                                        <div className="mt-8">
+                                            <div className="flex justify-between text-[12px] font-bold text-violet-400 mb-2 tracking-wide uppercase">
+                                                <span>Uploading {files.length} files...</span>
+                                                <span>{progress}%</span>
+                                            </div>
+                                            <div className="w-full bg-[#0a0a0f] rounded-full h-1.5 overflow-hidden border border-white/5">
+                                                <div className="bg-violet-500 h-full rounded-full transition-all duration-300 shadow-[0_0_10px_rgba(59,130,246,0.8)]" style={{ width: `${progress}%` }}></div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {step === 4 && result && (
+                            <div className="w-full max-w-lg mx-auto text-center py-6 animate-fade-in relative z-10">
+                                {/* Ambient Glow */}
+                                <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-96 h-96 bg-emerald-500/10 rounded-full blur-[100px] pointer-events-none"></div>
+
+                                <div className="relative z-10">
+                                    <div className="w-24 h-24 bg-emerald-500/10 border border-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-[0_0_30px_rgba(16,185,129,0.2)]">
+                                        <CheckCircle className="w-12 h-12 text-emerald-400" />
+                                    </div>
+                                    <h2 className="text-3xl font-extrabold text-white mb-6 tracking-tight">Upload Successful!</h2>
+                                    
+                                    <div className="bg-[#1e1e2d]/80 backdrop-blur-md border border-white/5 rounded-3xl p-6 sm:p-8 text-left mb-8 shadow-2xl">
+                                        <ul className="space-y-4 text-[14px]">
+                                            <li className="flex justify-between border-b border-white/5 pb-3">
+                                                <span className="text-slate-400 font-medium">Total Valid Rows</span>
+                                                <span className="font-bold text-white">{result.total_processed}</span>
+                                            </li>
+                                            <li className="flex justify-between border-b border-white/5 pb-3">
+                                                <span className="text-slate-400 font-medium">Invalid / Dupes Skipped</span>
+                                                <span className="font-bold text-red-400">{result.duplicates_in_file || 0}</span>
+                                            </li>
+                                            <li className="flex justify-between border-b border-white/5 pb-3">
+                                                <span className="text-slate-400 font-medium">Fresh Inserted</span>
+                                                <span className="font-bold text-emerald-400 text-[16px]">{result.inserted}</span>
+                                            </li>
+                                            <li className="flex justify-between border-b border-white/5 pb-3">
+                                                <span className="text-slate-400 font-medium">Already Present</span>
+                                                <div className="text-right">
+                                                    <span className="font-bold text-amber-400">{result.existing_count || 0}</span>
+                                                    {result.existing_breakdown && Object.keys(result.existing_breakdown).length > 0 && (
+                                                        <div className="mt-2 space-y-1">
+                                                            {Object.entries(result.existing_breakdown).map(([campaign, count]) => (
+                                                                <div key={campaign} className="flex justify-end gap-3 text-[12px] opacity-80">
+                                                                    <span className="truncate max-w-[150px] font-medium" title={campaign}>{campaign}:</span>
+                                                                    <span className="text-amber-300/80 font-mono">{count}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </li>
+                                            {result.updated > 0 && (
+                                                <li className="flex justify-between border-b border-white/5 pb-3 animate-fade-in">
+                                                    <span className="text-slate-400 font-medium">Existing Updated with Info</span>
+                                                    <span className="font-bold text-sky-400">{result.updated}</span>
+                                                </li>
+                                            )}
+                                            <li className="flex justify-between border-b border-white/5 pb-3">
+                                                <span className="text-slate-400 font-medium">DNC Skipped Total</span>
+                                                <span className="font-bold text-purple-400">{result.dnc_skipped || 0}</span>
+                                            </li>
+                                            <li className="flex justify-between pt-1 pb-3 border-b border-white/5">
+                                                <span className="text-slate-400 font-medium">DNC / SALE Split</span>
+                                                <span className="font-bold text-purple-400">
+                                                    <span className="opacity-70">DNC: </span>{(result.dnc_skipped_dnc || 0)} <span className="mx-1 text-slate-600">|</span> <span className="opacity-70">SALE: </span>{(result.dnc_skipped_sale || 0)}
+                                                </span>
+                                            </li>
+                                            <li className="flex justify-between pt-1">
+                                                <span className="text-slate-400 font-medium">Main Leads Overlap</span>
+                                                <span className="font-bold text-blue-400">{result.main_leads_overlap || 0}</span>
+                                            </li>
+                                        </ul>
+                                    </div>
+
+                                    {result.failed_files && result.failed_files.length > 0 && (
+                                        <div className="bg-[#1e1e2d]/80 backdrop-blur-md border border-red-500/20 rounded-3xl p-6 sm:p-8 text-left mb-8 shadow-2xl">
+                                            <p className="text-red-400 font-bold text-[12px] uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                <FileX className="w-4 h-4" /> Skipped / Failed Files
+                                            </p>
+                                            <div className="flex flex-col gap-2 max-h-40 overflow-y-auto custom-scrollbar">
+                                                {result.failed_files.map((errItem, idx) => (
+                                                    <div key={idx} className="bg-[#0a0a0f] text-slate-300 text-[12px] px-3 py-2 rounded-md border border-red-500/10 flex flex-col sm:flex-row justify-between gap-2">
+                                                        <span className="font-bold text-red-300 truncate w-full sm:w-1/3" title={errItem.name}>{errItem.name}</span>
+                                                        <span className="text-red-400/80 truncate w-full sm:w-2/3 sm:text-right" title={errItem.error}>{errItem.error}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <button 
+                                        onClick={() => navigate(`/Van-sessions/${id}`)}
+                                        className="bg-[#0a0a0f] border border-white/10 hover:bg-white/5 text-slate-200 px-8 py-4 rounded-xl font-bold transition-all w-full shadow-sm active:scale-[0.98] text-[14px]"
+                                    >
+                                        Return to Session Overview
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default VanAddJob;
+
