@@ -403,7 +403,7 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
     );
 };
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ──────────────────────────────────────────────────────────
 const VanDownloadLeads = () => {
     const { user } = useContext(AuthContext);
     const isSuperAdmin = user?.role === 'super_admin';
@@ -411,8 +411,11 @@ const VanDownloadLeads = () => {
 
     const [vendors, setVendors]         = useState([]);
     const [campaigns, setCampaigns]     = useState([]);
+    const [filters, setFilters]         = useState([]);
     const [loadingV, setLoadingV]       = useState(true);
     const [loadingC, setLoadingC]       = useState(true);
+    const [loadingFilters, setLoadingFilters] = useState(true);
+    const [selectedFilterId, setSelectedFilterId] = useState("");
 
     const [form, setForm] = useState({
         states: [],
@@ -424,7 +427,7 @@ const VanDownloadLeads = () => {
         min_duration: '',
         max_duration: '',
         include_downloaded: false,
-        quality: 'All',
+        quality: 'Good',
     });
     const [submitting, setSubmitting]   = useState(false);
     const [error, setError]             = useState('');
@@ -450,10 +453,14 @@ const VanDownloadLeads = () => {
     const [fileStats, setFileStats] = useState(null);
 
     useEffect(() => {
-        Promise.all([api.get('/Van-vendors?counts=true'), api.get('/Van-campaigns')])
-            .then(([v, c]) => { setVendors(v.data); setCampaigns(c.data.filter(x => x.status === 'Active')); })
+        Promise.all([api.get('/Van-vendors?counts=true'), api.get('/Van-campaigns'), api.get('/filters')])
+            .then(([v, c, f]) => { 
+                setVendors(v.data); 
+                setCampaigns(c.data.filter(x => x.status === 'Active')); 
+                setFilters(f?.data || []);
+            })
             .catch(() => {})
-            .finally(() => { setLoadingV(false); setLoadingC(false); });
+            .finally(() => { setLoadingV(false); setLoadingC(false); setLoadingFilters(false); });
     }, []);
 
     useEffect(() => () => {
@@ -656,10 +663,9 @@ const VanDownloadLeads = () => {
     const handleDownloadCSV = async (req) => {
         setDlId(req.id);
         try {
-            const res = await api.get(`/Van-download/requests/${req.id}/file`);
-            setScrubSummaryData(res.data);
+            const res = await api.get(`/van-download/requests/${req.id}/file`);
             if (res.data?.goodCsv) {
-                downloadBlob(res.data.goodCsv, res.data.summary?.fileName || `leads_request_${req.id}.csv`);
+                downloadBlob(res.data.goodCsv, `van_leads_request_${req.id}.csv`);
             }
         } catch { alert('Download failed. Try again.'); }
         finally { setDlId(null); }
@@ -767,7 +773,7 @@ const VanDownloadLeads = () => {
                                         <option key={v.vendor_id} value={v.vendor_id}>
                                             {v.name}
                                             {v.available_leads != null
-                                                ? ` â€” ${vendorDownloadPool(v).toLocaleString()} ${form.include_downloaded ? 're-downloadable' : 'available'}`
+                                                ? ` - ${vendorDownloadPool(v).toLocaleString()} ${form.include_downloaded ? 're-downloadable' : 'available'}`
                                                 : ''}
                                         </option>
                                     ))}
@@ -839,7 +845,7 @@ const VanDownloadLeads = () => {
                                         </option>
                                         {vendorFiles.map(file => (
                                             <option key={file.id} value={file.id}>
-                                                {file.file_name} ({new Date(file.created_at).toLocaleDateString()} â€” {file.total_rows?.toLocaleString() || 0} rows)
+                                                {file.file_name} ({new Date(file.created_at).toLocaleDateString()} - {file.total_rows?.toLocaleString() || 0} rows)
                                             </option>
                                         ))}
                                     </SelectInput>
@@ -853,6 +859,27 @@ const VanDownloadLeads = () => {
                             )}
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                {/* Data Filter Preset */}
+                                <Field label="Data Filter Preset" hint="Auto-selects states for you">
+                                    <SelectInput
+                                        value={selectedFilterId}
+                                        onChange={e => {
+                                            const filterId = e.target.value;
+                                            setSelectedFilterId(filterId);
+                                            const selectedFilter = filters.find(f => String(f.id) === String(filterId));
+                                            if (selectedFilter && selectedFilter.states) {
+                                                setForm(prev => ({ ...prev, states: selectedFilter.states }));
+                                            }
+                                        }}
+                                        disabled={loadingFilters}
+                                    >
+                                        <option value="" disabled>{loadingFilters ? 'Loading filters...' : 'Choose a preset...'}</option>
+                                        {filters.map(f => (
+                                            <option key={f.id} value={f.id}>{f.name} ({f.states?.length || 0} states)</option>
+                                        ))}
+                                    </SelectInput>
+                                </Field>
+
                                 {/* State Filter */}
                                 <Field label="State Filter" hint="Leave empty for all states">
                                     <div className="relative" ref={stateRef}>

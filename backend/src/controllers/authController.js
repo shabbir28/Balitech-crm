@@ -65,6 +65,7 @@ const login = async (req, res) => {
         profile_picture: user.profile_picture,
         role: user.role,
         status: user.status,
+        accessible_modules: user.accessible_modules || [],
       },
     });
   } catch (err) {

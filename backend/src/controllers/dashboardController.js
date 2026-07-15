@@ -16,6 +16,7 @@ const getStats = async (req, res) => {
       premiumCampaignStatsResult,
       deadNumbersStatsResult,
       vanStatsResult,
+      vanCampaignStatsResult,
     ] = await Promise.all([
       // 1. Leads Overall Stats (Single Scan)
       db.query(`
@@ -112,13 +113,20 @@ const getStats = async (req, res) => {
 
       // 9. Premium Data Total Stats
       db.query(`
-                SELECT COUNT(*)::int AS total_premium_data
+                SELECT 
+                    COUNT(*)::int AS total_premium_data,
+                    COUNT(CASE WHEN status = 'available' THEN 1 END)::int AS total_premium_available,
+                    COUNT(CASE WHEN status = 'downloaded' THEN 1 END)::int AS total_premium_downloaded
                 FROM premium_data
             `),
 
       // 10. Premium Data per campaign
       db.query(`
-                SELECT campaign_type AS name, COUNT(*)::int AS count
+                SELECT 
+                    campaign_type AS name, 
+                    COUNT(*)::int AS count,
+                    COUNT(CASE WHEN status = 'available' THEN 1 END)::int AS available_count,
+                    COUNT(CASE WHEN status = 'downloaded' THEN 1 END)::int AS downloaded_count
                 FROM premium_data
                 WHERE campaign_type IS NOT NULL AND TRIM(campaign_type) <> ''
                 GROUP BY campaign_type
@@ -133,8 +141,28 @@ const getStats = async (req, res) => {
             
       // 12. Van Data
       db.query(`
-                SELECT COUNT(*)::int AS total_van_data
+                SELECT 
+                    COUNT(*)::int AS total_van_data,
+                    COUNT(CASE WHEN status = 'available' THEN 1 END)::int AS total_van_available,
+                    COUNT(CASE WHEN status = 'downloaded' THEN 1 END)::int AS total_van_downloaded
                 FROM van_data
+            `),
+
+      // 13. Van Data per campaign
+      db.query(`
+                SELECT
+                    COALESCE(c.name, s.campaign_type, 'Untagged') AS name,
+                    COUNT(*)::int AS count,
+                    COUNT(CASE WHEN d.status = 'available' THEN 1 END)::int AS available_count,
+                    COUNT(CASE WHEN d.status = 'downloaded' THEN 1 END)::int AS downloaded_count
+                FROM van_data d
+                LEFT JOIN van_sessions s ON d.session_id = s.id
+                LEFT JOIN van_campaigns c ON 
+                  (s.campaign_type ~ '^[0-9]+$' AND c.campaign_id = NULLIF(s.campaign_type, '')::int)
+                  OR (s.campaign_type !~ '^[0-9]+$' AND c.name ILIKE s.campaign_type)
+                WHERE s.campaign_type IS NOT NULL AND TRIM(s.campaign_type) <> ''
+                GROUP BY COALESCE(c.name, s.campaign_type, 'Untagged')
+                ORDER BY count DESC
             `),
     ]);
 
@@ -170,6 +198,7 @@ const getStats = async (req, res) => {
       recentSessions: recentSessionsResult.rows,
       refineCampaignStats: refineCampaignStatsResult.rows,
       premiumCampaignStats: premiumCampaignStatsResult.rows,
+      vanCampaignStats: vanCampaignStatsResult.rows,
     });
   } catch (err) {
     console.error("Dashboard Stats Error:", err);

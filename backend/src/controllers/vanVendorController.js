@@ -75,4 +75,22 @@ const deleteVendor = async (req, res) => {
   }
 };
 
-module.exports = { createVendor, getVendors, updateVendor, deleteVendor };
+const getVendorFiles = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await db.query(
+      `SELECT j.id, j.file_name, j.created_at, j.total_rows, j.status
+       FROM van_jobs j
+       JOIN van_sessions s ON j.session_id = s.id
+       WHERE s.vendor_id = $1
+       ORDER BY j.created_at DESC`,
+      [id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error fetching vendor files:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+module.exports = { createVendor, getVendors, updateVendor, deleteVendor, getVendorFiles };

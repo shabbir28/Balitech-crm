@@ -37,7 +37,7 @@ const getUsers = async (req, res) => {
     const countQuery = `SELECT COUNT(*) FROM users ${whereClause}`;
     const dataQuery = `
             SELECT id, username, first_name, last_name, email, phone, date_of_birth, 
-                   profile_picture, role, status, created_at
+                   profile_picture, role, status, created_at, accessible_modules
             FROM users 
             ${whereClause}
             ORDER BY created_at DESC
@@ -64,7 +64,7 @@ const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
     const { rows } = await db.query(
-      `SELECT id, username, first_name, last_name, email, phone, date_of_birth, profile_picture, role, status, created_at FROM users WHERE id = $1`,
+      `SELECT id, username, first_name, last_name, email, phone, date_of_birth, profile_picture, role, status, created_at, accessible_modules FROM users WHERE id = $1`,
       [id],
     );
     if (rows.length === 0)
@@ -87,6 +87,7 @@ const createUser = async (req, res) => {
     password,
     role,
     username,
+    accessible_modules,
   } = req.body;
 
   if (!first_name || !last_name || !email || !password || !role) {
@@ -132,9 +133,9 @@ const createUser = async (req, res) => {
     }
 
     const { rows } = await db.query(
-      `INSERT INTO users (username, first_name, last_name, email, phone, date_of_birth, password_hash, role, status, profile_picture, created_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', $9, $10)
-             RETURNING id, username, first_name, last_name, email, phone, role, status, profile_picture, created_at`,
+      `INSERT INTO users (username, first_name, last_name, email, phone, date_of_birth, password_hash, role, status, profile_picture, created_by, accessible_modules)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', $9, $10, $11)
+             RETURNING id, username, first_name, last_name, email, phone, role, status, profile_picture, created_at, accessible_modules`,
       [
         finalUsername,
         first_name,
@@ -146,6 +147,7 @@ const createUser = async (req, res) => {
         role,
         profile_picture,
         req.user.id,
+        accessible_modules ? (typeof accessible_modules === 'string' ? accessible_modules : JSON.stringify(accessible_modules)) : JSON.stringify([]),
       ],
     );
 
@@ -170,6 +172,7 @@ const updateUser = async (req, res) => {
     role,
     status,
     password,
+    accessible_modules,
   } = req.body;
 
   try {
@@ -207,9 +210,10 @@ const updateUser = async (req, res) => {
                 role = COALESCE($6, role),
                 status = COALESCE($7, status),
                 profile_picture = $8,
-                password_hash = $9
+                password_hash = $9,
+                accessible_modules = COALESCE($11, accessible_modules)
              WHERE id = $10
-             RETURNING id, username, first_name, last_name, email, phone, role, status, profile_picture, created_at`,
+             RETURNING id, username, first_name, last_name, email, phone, role, status, profile_picture, created_at, accessible_modules`,
       [
         first_name,
         last_name,
@@ -221,6 +225,7 @@ const updateUser = async (req, res) => {
         profile_picture,
         password_hash,
         id,
+        accessible_modules ? (typeof accessible_modules === 'string' ? accessible_modules : JSON.stringify(accessible_modules)) : null,
       ],
     );
 

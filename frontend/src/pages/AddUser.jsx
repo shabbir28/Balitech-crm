@@ -13,13 +13,21 @@ const FormField = ({ label, children, error }) => (
     </div>
 );
 
+const AVAILABLE_MODULES = [
+    { id: 'core', label: 'Core CRM (Standard Data)' },
+    { id: 'refine', label: 'Refine Data' },
+    { id: 'premium', label: 'Premium Data' },
+    { id: 'van_desk', label: 'Van Desk' },
+    { id: 'dnc_checker', label: 'DNC Checker' }
+];
+
 const AddUser = ({ editMode }) => {
     const navigate = useNavigate();
     const { id } = useParams();
     const fileInputRef = useRef();
     const [form, setForm] = useState({
         first_name: '', last_name: '', email: '', phone: '',
-        date_of_birth: '', password: '', confirm_password: '', role: '',
+        date_of_birth: '', password: '', confirm_password: '', role: '', accessible_modules: [],
     });
     const [profileFile, setProfileFile] = useState(null);
     const [profilePreview, setProfilePreview] = useState(null);
@@ -50,6 +58,7 @@ const AddUser = ({ editMode }) => {
                     role: u.role || '',
                     password: '',
                     confirm_password: '',
+                    accessible_modules: u.accessible_modules || [],
                 }));
                 if (u.profile_picture) {
                     setProfilePreview(`${import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000'}${u.profile_picture}`);
@@ -63,6 +72,17 @@ const AddUser = ({ editMode }) => {
         const { name, value } = e.target;
         setForm(prev => ({ ...prev, [name]: value }));
         if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+    };
+
+    const toggleModule = (modId) => {
+        setForm(prev => {
+            const current = prev.accessible_modules || [];
+            if (current.includes(modId)) {
+                return { ...prev, accessible_modules: current.filter(m => m !== modId) };
+            } else {
+                return { ...prev, accessible_modules: [...current, modId] };
+            }
+        });
     };
 
     const handleFileChange = (file) => {
@@ -107,7 +127,11 @@ const AddUser = ({ editMode }) => {
         try {
             const formData = new FormData();
             Object.entries(form).forEach(([k, v]) => {
-                if (k !== 'confirm_password' && v) formData.append(k, v);
+                if (k === 'accessible_modules') {
+                    formData.append(k, JSON.stringify(v || []));
+                } else if (k !== 'confirm_password' && v) {
+                    formData.append(k, v);
+                }
             });
             if (profileFile) formData.append('profile_picture', profileFile);
 
@@ -243,6 +267,27 @@ const AddUser = ({ editMode }) => {
                                 </select>
                             </FormField>
                         </div>
+
+                        {(form.role === 'admin' || form.role === 'data_entry') && (
+                            <div className="md:col-span-2 mt-2">
+                                <FormField label="Module Access">
+                                    <p className="text-[11px] text-slate-500 mb-3 -mt-1 font-medium">
+                                        Select which modules this user can access. Super Admins bypass this and access everything.
+                                    </p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        {AVAILABLE_MODULES.map(mod => (
+                                            <label key={mod.id} className="flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-[#0a0a0f] hover:border-brand-500/50 cursor-pointer transition-all">
+                                                <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${form.accessible_modules?.includes(mod.id) ? 'bg-brand-500 border-brand-500' : 'border-white/20'}`}>
+                                                    {form.accessible_modules?.includes(mod.id) && <Check className="w-3.5 h-3.5 text-white" />}
+                                                </div>
+                                                <span className="text-sm text-slate-300 font-medium">{mod.label}</span>
+                                                <input type="checkbox" className="hidden" checked={form.accessible_modules?.includes(mod.id) || false} onChange={() => toggleModule(mod.id)} />
+                                            </label>
+                                        ))}
+                                    </div>
+                                </FormField>
+                            </div>
+                        )}
                     </div>
                 </div>
 

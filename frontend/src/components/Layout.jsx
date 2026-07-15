@@ -215,18 +215,29 @@ const Layout = ({ children }) => {
     const isDataEntry  = role === 'data_entry';
     const isFullAccess = isSuperAdmin || isAdmin;
 
+    const hasModule = (mod) => {
+        if (isSuperAdmin) return true;
+        let modules = user?.accessible_modules;
+        if (!modules) return false;
+        if (typeof modules === 'string') {
+            try { modules = JSON.parse(modules); } catch { return false; }
+        }
+        return Array.isArray(modules) && modules.includes(mod);
+    };
+
     // Pending download requests count (superadmin sidebar badge)
     const [pendingCount, setPendingCount] = useState(0);
     useEffect(() => {
         if (!isSuperAdmin) return;
         const fetchPendingCount = async () => {
             try {
-                const [res1, res2, res3] = await Promise.all([
+                const [res1, res2, res3, res4] = await Promise.all([
                     api.get('/download/requests').catch(() => ({ data: [] })),
                     api.get('/premium-download/requests').catch(() => ({ data: [] })),
-                    api.get('/refine-download/requests').catch(() => ({ data: [] }))
+                    api.get('/refine-download/requests').catch(() => ({ data: [] })),
+                    api.get('/van-download/requests').catch(() => ({ data: [] }))
                 ]);
-                const allReqs = [...(res1.data || []), ...(res2.data || []), ...(res3.data || [])];
+                const allReqs = [...(res1.data || []), ...(res2.data || []), ...(res3.data || []), ...(res4.data || [])];
                 setPendingCount(allReqs.filter(r => r.status?.toLowerCase() === 'pending').length);
             } catch { /* silent */ }
         };
@@ -359,6 +370,13 @@ const Layout = ({ children }) => {
         { label: 'Already Downloaded (Refine)', path: '/refine-already-downloaded', roles: ['super_admin','admin'], icon: <History className="h-4 w-4" /> },
         { label: 'DNC Single Lookups',          path: '/dnc-checker/single-lookups', roles: ['super_admin','admin'], icon: <Search className="h-4 w-4" /> },
         { label: 'DNC Download Data',           path: '/dnc-checker/download',       roles: ['super_admin','admin'], icon: <FolderDown className="h-4 w-4" /> },
+        { label: 'Van Vendors',                 path: '/van-vendors',              roles: ['super_admin','admin','data_entry'], icon: <Truck className="h-4 w-4" /> },
+        { label: 'Van Campaigns',               path: '/van-campaigns',            roles: ['super_admin','admin'],        icon: <Target className="h-4 w-4" /> },
+        { label: 'Upload Van Data',             path: '/van-upload',               roles: ['super_admin','admin','data_entry'], icon: <FolderUp className="h-4 w-4" /> },
+        { label: 'Van Sessions',                path: '/van-sessions',             roles: ['super_admin','admin'],        icon: <Layers className="h-4 w-4" /> },
+        { label: 'All Van Data',                path: '/van-data',                 roles: ['super_admin','admin'],        icon: <FileStack className="h-4 w-4" /> },
+        { label: 'Download Van Data',           path: '/van-download',             roles: ['super_admin','admin'],        icon: <FolderDown className="h-4 w-4" /> },
+        { label: 'Already Downloaded (Van)',    path: '/van-already-downloaded',   roles: ['super_admin','admin'], icon: <History className="h-4 w-4" /> },
     ];
 
     const matchesSearchText = (value, query) =>
@@ -367,12 +385,21 @@ const Layout = ({ children }) => {
     const entityMatchesQuery = (entity, fields, query) =>
         fields.some((field) => matchesSearchText(entity[field], query));
 
+    const isPageAllowed = (p) => {
+        if (!p.roles.includes(role)) return false;
+        if (p.path.startsWith('/refine-') && !hasModule('refine')) return false;
+        if (p.path.startsWith('/premium-') && !hasModule('premium')) return false;
+        if (p.path.startsWith('/van-') && !hasModule('van_desk')) return false;
+        if (p.path.startsWith('/dnc-checker') && !hasModule('dnc_checker')) return false;
+        if (!p.path.startsWith('/refine-') && !p.path.startsWith('/premium-') && !p.path.startsWith('/van-') && !p.path.startsWith('/dnc-checker') && p.path !== '/' && p.path !== '/users' && p.path !== '/security' && p.path !== '/download-requests') {
+            if (!hasModule('core')) return false;
+        }
+        return true;
+    };
+
     const filteredPages = searchQuery.trim()
-        ? ALL_PAGES.filter(p =>
-            p.roles.includes(role) &&
-            p.label.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-        : ALL_PAGES.filter(p => p.roles.includes(role));
+        ? ALL_PAGES.filter(p => isPageAllowed(p) && p.label.toLowerCase().includes(searchQuery.toLowerCase()))
+        : ALL_PAGES.filter(p => isPageAllowed(p));
 
     const vendorSearchQuery = searchQuery.trim().toLowerCase();
     const filteredVendors = vendorSearchQuery
@@ -548,29 +575,32 @@ const Layout = ({ children }) => {
                                 </div>
                             </div>
 
-                            <div>
-                                <p className="px-3 text-[10px] font-bold text-slate-600 uppercase tracking-[0.15em] mb-2">Operations</p>
-                                <NavLink to="/leads" className={getClassName}>
-                                    <FileStack className="h-[15px] w-[15px] shrink-0" /><span>All Data</span>
-                                </NavLink>
-                                <NavLink to="/dnc" className={getClassName}>
-                                    <ShieldBan className="h-[15px] w-[15px] shrink-0" /><span>DNC</span>
-                                </NavLink>
-                                <NavLink to="/download" className={getClassName}>
-                                    <FolderDown className="h-[15px] w-[15px] shrink-0" /><span>Download Data</span>
-                                </NavLink>
-                                <NavLink to="/already-downloaded" className={getClassName}>
-                                    <History className="h-[15px] w-[15px] shrink-0" /><span>Already Downloaded</span>
-                                </NavLink>
-                                <NavLink to="/filters" className={getClassName}>
-                                    <Filter className="h-[15px] w-[15px] shrink-0" /><span>Filters</span>
-                                </NavLink>
-                                <NavLink to="/logs" className={getClassName}>
-                                    <TerminalSquare className="h-[15px] w-[15px] shrink-0" /><span>Logs</span>
-                                </NavLink>
-                            </div>
+                            {hasModule('core') && (
+                                <div>
+                                    <p className="px-3 text-[10px] font-bold text-slate-600 uppercase tracking-[0.15em] mb-2">Operations</p>
+                                    <NavLink to="/leads" className={getClassName}>
+                                        <FileStack className="h-[15px] w-[15px] shrink-0" /><span>All Data</span>
+                                    </NavLink>
+                                    <NavLink to="/dnc" className={getClassName}>
+                                        <ShieldBan className="h-[15px] w-[15px] shrink-0" /><span>DNC</span>
+                                    </NavLink>
+                                    <NavLink to="/download" className={getClassName}>
+                                        <FolderDown className="h-[15px] w-[15px] shrink-0" /><span>Download Data</span>
+                                    </NavLink>
+                                    <NavLink to="/already-downloaded" className={getClassName}>
+                                        <History className="h-[15px] w-[15px] shrink-0" /><span>Already Downloaded</span>
+                                    </NavLink>
+                                    <NavLink to="/filters" className={getClassName}>
+                                        <Filter className="h-[15px] w-[15px] shrink-0" /><span>Filters</span>
+                                    </NavLink>
+                                    <NavLink to="/logs" className={getClassName}>
+                                        <TerminalSquare className="h-[15px] w-[15px] shrink-0" /><span>Logs</span>
+                                    </NavLink>
+                                </div>
+                            )}
 
-                            <div className="mt-4">
+                            {hasModule('refine') && (
+                                <div className="mt-4">
                                 <button
                                     type="button"
                                     onClick={() => setRefineMenuOpen((open) => !open)}
@@ -602,9 +632,11 @@ const Layout = ({ children }) => {
                                         );
                                     })}
                                 </div>
-                            </div>
+                                </div>
+                            )}
 
-                            <div className="mt-4">
+                            {hasModule('premium') && (
+                                <div className="mt-4">
                                 <button
                                     type="button"
                                     onClick={() => setPremiumMenuOpen((open) => !open)}
@@ -636,10 +668,12 @@ const Layout = ({ children }) => {
                                         );
                                     })}
                                 </div>
-                            </div>
+                                </div>
+                            )}
 
                             {/* VAN DESK Collapsible */}
-                            <div className="mt-4">
+                            {hasModule('van_desk') && (
+                                <div className="mt-4">
                                 <button
                                     type="button"
                                     onClick={() => setVanMenuOpen((open) => !open)}
@@ -671,10 +705,12 @@ const Layout = ({ children }) => {
                                         );
                                     })}
                                 </div>
-                            </div>
+                                </div>
+                            )}
 
                             {/* DNC Checker Results Collapsible */}
-                            <div className="mt-4">
+                            {hasModule('dnc_checker') && (
+                                <div className="mt-4">
                                 <button
                                     type="button"
                                     onClick={() => setDncCheckerMenuOpen((open) => !open)}
@@ -705,7 +741,8 @@ const Layout = ({ children }) => {
                                         <span>Download Data</span>
                                     </NavLink>
                                 </div>
-                            </div>
+                                </div>
+                            )}
 
                             {isSuperAdmin && (
                                 <div>
@@ -733,18 +770,101 @@ const Layout = ({ children }) => {
                     {isDataEntry && (
                         <div>
                             <p className="px-3 text-[10px] font-bold text-slate-600 uppercase tracking-[0.15em] mb-2">Tasks</p>
-                            <NavLink to="/vendors" className={getClassName}>
-                                <Building2 className="h-[15px] w-[15px] shrink-0" /><span>Vendors</span>
-                            </NavLink>
-                            <NavLink to="/premium-vendors" className={getClassName}>
-                                <Building2 className="h-[15px] w-[15px] shrink-0" /><span>Premium Vendors</span>
-                            </NavLink>
-                            <NavLink to="/upload" className={getClassName}>
-                                <FolderUp className="h-[15px] w-[15px] shrink-0" /><span>Upload Data</span>
-                            </NavLink>
-                            <NavLink to="/premium-upload" className={getClassName}>
-                                <FolderUp className="h-[15px] w-[15px] shrink-0" /><span>Upload Premium Data</span>
-                            </NavLink>
+                            
+                            {hasModule('core') && (
+                                <div className="mt-2">
+                                    <NavLink to="/vendors" className={getClassName}>
+                                        <Building2 className="h-[15px] w-[15px] shrink-0" /><span>Vendors</span>
+                                    </NavLink>
+                                    <NavLink to="/upload" className={getClassName}>
+                                        <FolderUp className="h-[15px] w-[15px] shrink-0" /><span>Upload Data</span>
+                                    </NavLink>
+                                </div>
+                            )}
+
+                            {hasModule('refine') && (
+                                <div className="mt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setRefineMenuOpen((open) => !open)}
+                                        className={`w-full flex items-center px-3.5 py-2.5 text-[13px] font-medium rounded-xl transition-all duration-200 gap-3 mb-0.5 border ${
+                                            isRefinePath
+                                                ? 'bg-gradient-to-r from-teal-500/15 to-transparent text-white border-teal-500/25'
+                                                : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border-transparent'
+                                        }`}
+                                    >
+                                        <Layers className="h-[15px] w-[15px] shrink-0 text-teal-400" />
+                                        <span className="flex-1 text-left">Refine Data</span>
+                                        <ChevronDown
+                                            className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${refineMenuOpen ? 'rotate-180' : ''}`}
+                                        />
+                                    </button>
+                                    <div className={`overflow-hidden transition-all duration-300 ease-out ${refineMenuOpen ? 'max-h-[520px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+                                        <NavLink to="/refine-vendors" className={getSubClassName}>
+                                            <Building2 className="h-[14px] w-[14px] shrink-0" /><span>Refine Vendors</span>
+                                        </NavLink>
+                                        <NavLink to="/refine-upload" className={getSubClassName}>
+                                            <FolderUp className="h-[14px] w-[14px] shrink-0" /><span>Upload Refine Data</span>
+                                        </NavLink>
+                                    </div>
+                                </div>
+                            )}
+
+                            {hasModule('premium') && (
+                                <div className="mt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setPremiumMenuOpen((open) => !open)}
+                                        className={`w-full flex items-center px-3.5 py-2.5 text-[13px] font-medium rounded-xl transition-all duration-200 gap-3 mb-0.5 border ${
+                                            isPremiumPath
+                                                ? 'bg-gradient-to-r from-teal-500/15 to-transparent text-white border-teal-500/25'
+                                                : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border-transparent'
+                                        }`}
+                                    >
+                                        <Layers className="h-[15px] w-[15px] shrink-0 text-teal-400" />
+                                        <span className="flex-1 text-left">Premium Data</span>
+                                        <ChevronDown
+                                            className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${premiumMenuOpen ? 'rotate-180' : ''}`}
+                                        />
+                                    </button>
+                                    <div className={`overflow-hidden transition-all duration-300 ease-out ${premiumMenuOpen ? 'max-h-[520px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+                                        <NavLink to="/premium-vendors" className={getSubClassName}>
+                                            <Building2 className="h-[14px] w-[14px] shrink-0" /><span>Premium Vendors</span>
+                                        </NavLink>
+                                        <NavLink to="/premium-upload" className={getSubClassName}>
+                                            <FolderUp className="h-[14px] w-[14px] shrink-0" /><span>Upload Premium Data</span>
+                                        </NavLink>
+                                    </div>
+                                </div>
+                            )}
+
+                            {hasModule('van_desk') && (
+                                <div className="mt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setVanMenuOpen((open) => !open)}
+                                        className={`w-full flex items-center px-3.5 py-2.5 text-[13px] font-medium rounded-xl transition-all duration-200 gap-3 mb-0.5 border ${
+                                            isVanPath
+                                                ? 'bg-gradient-to-r from-violet-500/15 to-transparent text-white border-violet-500/25'
+                                                : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border-transparent'
+                                        }`}
+                                    >
+                                        <Truck className="h-[15px] w-[15px] shrink-0 text-violet-400" />
+                                        <span className="flex-1 text-left">Van Desk</span>
+                                        <ChevronDown
+                                            className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${vanMenuOpen ? 'rotate-180' : ''}`}
+                                        />
+                                    </button>
+                                    <div className={`overflow-hidden transition-all duration-300 ease-out ${vanMenuOpen ? 'max-h-[520px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+                                        <NavLink to="/van-vendors" className={getSubClassName}>
+                                            <Building2 className="h-[14px] w-[14px] shrink-0" /><span>Van Vendors</span>
+                                        </NavLink>
+                                        <NavLink to="/van-upload" className={getSubClassName}>
+                                            <FolderUp className="h-[14px] w-[14px] shrink-0" /><span>Upload Van Data</span>
+                                        </NavLink>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </nav>

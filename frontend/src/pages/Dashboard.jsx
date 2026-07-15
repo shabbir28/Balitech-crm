@@ -121,7 +121,7 @@ const Dashboard = () => {
 
     if (!data) return <div style={{ color:'#f87171', padding:32 }}>Failed to load stats.</div>;
 
-    const { totals, vendorDistribution, campaignStats, dncStats, leadStatusBreakdown, recentSessions, refineCampaignStats, premiumCampaignStats } = data;
+    const { totals, vendorDistribution, campaignStats, dncStats, leadStatusBreakdown, recentSessions, refineCampaignStats, premiumCampaignStats, vanCampaignStats } = data;
 
     // enrich lead status for pie
     const STATUS_COLORS = { available:'#10b981', downloaded:'#3b82f6', dnc:'#f97316', sold:'#a855f7', duplicate:'#6b7280' };
@@ -217,17 +217,23 @@ const Dashboard = () => {
                 </div>
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
                     <div style={{ maxWidth: '300px' }}>
-                        <KpiCard index={0} icon={Database} label="Total Premium Data" value={+totals.total_premium_data} color="#eab308" sub="Premium module leads" />
+                        <KpiCard index={0} icon={Database} label="Total Premium Data" value={+(totals.total_premium_data || 0)} color="#eab308" sub="Premium module leads" />
+                    </div>
+                    <div style={{ maxWidth: '300px' }}>
+                        <KpiCard index={1} icon={CheckCircle2} label="Total premium available" value={+(totals.total_premium_available || 0)} color="#10b981" sub="Ready to download" />
+                    </div>
+                    <div style={{ maxWidth: '300px' }}>
+                        <KpiCard index={2} icon={Download} label="Total premium downloaded" value={+(totals.total_premium_downloaded || 0)} color="#f97316" sub="Already downloaded" />
                     </div>
                     {premiumCampaignStats && premiumCampaignStats.length > 0 && premiumCampaignStats.map((camp, idx) => (
                         <div key={camp.name} style={{ maxWidth: '300px' }}>
                             <KpiCard
-                                index={idx + 1}
+                                index={idx + 3}
                                 icon={Target}
                                 label={camp.name}
                                 value={+camp.count}
                                 color={COLORS[(idx + 4) % COLORS.length]}
-                                sub="Total premium leads"
+                                sub={`Avail: ${(+camp.available_count || 0).toLocaleString()} · DL: ${(+camp.downloaded_count || 0).toLocaleString()}`}
                             />
                         </div>
                     ))}
@@ -242,8 +248,26 @@ const Dashboard = () => {
                 </div>
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
                     <div style={{ maxWidth: '300px' }}>
-                        <KpiCard index={0} icon={Database} label="Total Van Desk Data" value={+(totals.total_van_data || 0)} color="#8b5cf6" sub="Van Desk leads" />
+                        <KpiCard index={0} icon={Database} label="Total van desk data" value={+(totals.total_van_data || 0)} color="#8b5cf6" sub="Van Desk leads" />
                     </div>
+                    <div style={{ maxWidth: '300px' }}>
+                        <KpiCard index={1} icon={CheckCircle2} label="Total van available" value={+(totals.total_van_available || 0)} color="#10b981" sub="Ready to download" />
+                    </div>
+                    <div style={{ maxWidth: '300px' }}>
+                        <KpiCard index={2} icon={Download} label="Total van downloaded" value={+(totals.total_van_downloaded || 0)} color="#f97316" sub="Already downloaded" />
+                    </div>
+                    {vanCampaignStats && vanCampaignStats.length > 0 && vanCampaignStats.map((camp, idx) => (
+                        <div key={camp.name} style={{ maxWidth: '300px' }}>
+                            <KpiCard
+                                index={idx + 3}
+                                icon={Target}
+                                label={camp.name ? camp.name.charAt(0).toUpperCase() + camp.name.slice(1).toLowerCase() : 'Untagged'}
+                                value={+camp.count}
+                                color={COLORS[(idx + 5) % COLORS.length]}
+                                sub="Total uploaded"
+                            />
+                        </div>
+                    ))}
                 </div>
             </div>
 

@@ -73,8 +73,6 @@ const saveDownloadLogPayload = async (logId, payload) => {
 const upsertDncNumbersBatched = async ({
   queryFn,
   badItems,
-  createdBy,
-  notePrefix,
   campaignId = null,
 }) => {
   if (!Array.isArray(badItems) || badItems.length === 0) return;
@@ -87,28 +85,22 @@ const upsertDncNumbersBatched = async ({
 
     for (const badItem of chunk) {
       valueStrings.push(
-        `($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4}, $${idx + 5})`,
+        `($${idx}, $${idx + 1}, $${idx + 2})`,
       );
       insertValues.push(
         badItem.phone,
         "DNC",
-        "Blacklist Alliance API",
-        `${notePrefix}${badItem.reason}`,
-        createdBy || null,
         campaignId || null,
       );
-      idx += 6;
+      idx += 3;
     }
 
     await queryFn(
       `
-        INSERT INTO premium_dnc_numbers (phone, dnc_type, source, notes, created_by, campaign_id)
+        INSERT INTO premium_dnc_numbers (phone, dnc_type, campaign_id)
         VALUES ${valueStrings.join(",")}
         ON CONFLICT (phone) DO UPDATE
         SET dnc_type = EXCLUDED.dnc_type,
-            source = EXCLUDED.source,
-            notes = EXCLUDED.notes,
-            created_by = EXCLUDED.created_by,
             campaign_id = COALESCE(EXCLUDED.campaign_id, premium_dnc_numbers.campaign_id)
       `,
       insertValues,

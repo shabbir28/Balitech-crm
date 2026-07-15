@@ -416,6 +416,9 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
 // ─────────────────────────────────────────────────────────────
 const PremiumDownloadLeads = () => {
     const { user } = useContext(AuthContext);
+    const [filters, setFilters]         = useState([]);
+    const [loadingFilters, setLoadingFilters] = useState(true);
+    const [selectedFilterId, setSelectedFilterId] = useState("");
     const isSuperAdmin = user?.role === 'super_admin';
     const isAdmin      = user?.role === 'admin';
 
@@ -460,10 +463,14 @@ const PremiumDownloadLeads = () => {
     const [fileStats, setFileStats] = useState(null);
 
     useEffect(() => {
-        Promise.all([api.get('/premium-vendors?counts=true'), api.get('/premium-campaigns')])
-            .then(([v, c]) => { setVendors(v.data); setCampaigns(c.data.filter(x => x.status === 'Active')); })
+        Promise.all([api.get('/premium-vendors?counts=true'), api.get('/premium-campaigns'), api.get('/filters')])
+            .then(([v, c, f]) => { 
+                setVendors(v.data); 
+                setCampaigns(c.data.filter(x => x.status === 'Active')); 
+                setFilters(f?.data || []);
+            })
             .catch(() => {})
-            .finally(() => { setLoadingV(false); setLoadingC(false); });
+            .finally(() => { setLoadingV(false); setLoadingC(false); setLoadingFilters(false); });
     }, []);
 
     useEffect(() => () => {
@@ -777,7 +784,7 @@ const PremiumDownloadLeads = () => {
                                         <option key={v.vendor_id} value={v.vendor_id}>
                                             {v.name}
                                             {v.available_leads != null
-                                                ? ` — ${vendorDownloadPool(v).toLocaleString()} ${form.include_downloaded ? 're-downloadable' : 'available'}`
+                                                ? ` - ${vendorDownloadPool(v).toLocaleString()} ${form.include_downloaded ? 're-downloadable' : 'available'}`
                                                 : ''}
                                         </option>
                                     ))}
@@ -849,7 +856,7 @@ const PremiumDownloadLeads = () => {
                                         </option>
                                         {vendorFiles.map(file => (
                                             <option key={file.id} value={file.id}>
-                                                {file.file_name} ({new Date(file.created_at).toLocaleDateString()} — {file.total_rows?.toLocaleString() || 0} rows)
+                                                {file.file_name} ({new Date(file.created_at).toLocaleDateString()} - {file.total_rows?.toLocaleString() || 0} rows)
                                             </option>
                                         ))}
                                     </SelectInput>
@@ -863,6 +870,27 @@ const PremiumDownloadLeads = () => {
                             )}
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                {/* Data Filter Preset */}
+                                <Field label="Data Filter Preset" hint="Auto-selects states for you">
+                                    <SelectInput
+                                        value={selectedFilterId}
+                                        onChange={e => {
+                                            const filterId = e.target.value;
+                                            setSelectedFilterId(filterId);
+                                            const selectedFilter = filters.find(f => String(f.id) === String(filterId));
+                                            if (selectedFilter && selectedFilter.states) {
+                                                setForm(prev => ({ ...prev, states: selectedFilter.states }));
+                                            }
+                                        }}
+                                        disabled={loadingFilters}
+                                    >
+                                        <option value="" disabled>{loadingFilters ? 'Loading filters...' : 'Choose a preset...'}</option>
+                                        {filters.map(f => (
+                                            <option key={f.id} value={f.id}>{f.name} ({f.states?.length || 0} states)</option>
+                                        ))}
+                                    </SelectInput>
+                                </Field>
+
                                 {/* State Filter */}
                                 <Field label="State Filter" hint="Leave empty for all states">
                                     <div className="relative" ref={stateRef}>

@@ -418,6 +418,9 @@ const RefineDownloadLeads = () => {
     const { user } = useContext(AuthContext);
     const isSuperAdmin = user?.role === 'super_admin';
     const isAdmin      = user?.role === 'admin';
+    const [filters, setFilters]         = useState([]);
+    const [loadingFilters, setLoadingFilters] = useState(true);
+    const [selectedFilterId, setSelectedFilterId] = useState("");
 
     const [vendors, setVendors]         = useState([]);
     const [campaigns, setCampaigns]     = useState([]);
@@ -431,10 +434,8 @@ const RefineDownloadLeads = () => {
         quantity: 1000,
         min_age: '',
         max_age: '',
-        min_duration: '',
-        max_duration: '',
+        quality: 'Good',
         include_downloaded: false,
-        quality: 'All',
     });
     const [submitting, setSubmitting]   = useState(false);
     const [error, setError]             = useState('');
@@ -460,10 +461,14 @@ const RefineDownloadLeads = () => {
     const [fileStats, setFileStats] = useState(null);
 
     useEffect(() => {
-        Promise.all([api.get('/refine-vendors?counts=true'), api.get('/refine-campaigns')])
-            .then(([v, c]) => { setVendors(v.data); setCampaigns(c.data.filter(x => x.status === 'Active')); })
+        Promise.all([api.get('/refine-vendors?counts=true'), api.get('/refine-campaigns'), api.get('/filters')])
+            .then(([v, c, f]) => { 
+                setVendors(v.data); 
+                setCampaigns(c.data.filter(x => x.status === 'Active')); 
+                setFilters(f?.data || []);
+            })
             .catch(() => {})
-            .finally(() => { setLoadingV(false); setLoadingC(false); });
+            .finally(() => { setLoadingV(false); setLoadingC(false); setLoadingFilters(false); });
     }, []);
 
     useEffect(() => () => {
@@ -777,43 +782,32 @@ const RefineDownloadLeads = () => {
                                         <option key={v.vendor_id} value={v.vendor_id}>
                                             {v.name}
                                             {v.available_leads != null
-                                                ? ` — ${vendorDownloadPool(v).toLocaleString()} ${form.include_downloaded ? 're-downloadable' : 'available'}`
+                                                ? ` - ${vendorDownloadPool(v).toLocaleString()} ${form.include_downloaded ? 're-downloadable' : 'available'}`
                                                 : ''}
                                         </option>
                                     ))}
                                 </SelectInput>
                                 {/* Vendor preview pill */}
                                 {selectedVendor && (
-                                    <div className="flex items-center gap-2 mt-2 px-3 py-2 bg-brand-500/8 border border-brand-500/15 rounded-lg w-fit">
-                                        <Building2 className="h-3.5 w-3.5 text-brand-400" />
-                                        <span className="text-xs font-semibold text-brand-300">{selectedVendor.name}</span>
+                                    <div className="flex items-center gap-2 mt-2 px-3 py-2 bg-violet-500/8 border border-violet-500/15 rounded-lg w-fit">
+                                        <Building2 className="h-3.5 w-3.5 text-violet-400" />
+                                        <span className="text-xs font-semibold text-violet-300">{selectedVendor.name}</span>
                                     </div>
                                 )}
-
+                                {/* Allow re-downloading if requested */}
                                 {form.vendor_id && form.vendor_id !== 'all' && (
-                                    <label className="flex items-start gap-3 mt-4 p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 cursor-pointer hover:bg-amber-500/10 transition-colors">
+                                    <label className="mt-4 flex items-start gap-3 cursor-pointer group bg-black/20 p-3 rounded-xl border border-white/5 hover:border-amber-500/30 transition-colors">
                                         <input
                                             type="checkbox"
                                             checked={form.include_downloaded}
-                                            onChange={e => {
-                                                const checked = e.target.checked;
-                                                const v = vendors.find(x => String(x.vendor_id) === String(form.vendor_id));
-                                                const pool = v
-                                                    ? parseInt(v.total_leads || 0, 10)
-                                                    : form.quantity;
-                                                setForm(p => ({
-                                                    ...p,
-                                                    include_downloaded: checked,
-                                                    quantity: checked && v ? pool : p.quantity,
-                                                }));
-                                            }}
+                                            onChange={e => setForm(prev => ({ ...prev, include_downloaded: e.target.checked }))}
                                             className="mt-1 h-4 w-4 rounded border-amber-500/40 text-amber-500 focus:ring-amber-500/30"
                                         />
                                         <span className="text-[13px] text-slate-300 leading-relaxed">
                                             <span className="font-bold text-amber-300 block mb-0.5">
                                                 Export all vendor leads again
                                             </span>
-                                            When available shows 0, enable this to re-export that vendor&apos;s full dataset (available, downloaded, and DNC)
+                                            When available shows 0, enable this to re-export that vendor's full dataset (available, downloaded, and DNC)
                                             {selectedVendorPool != null && (
                                                 <span className="text-amber-400/90 font-semibold">
                                                     {' '}({selectedVendorPool.toLocaleString()} leads in pool)
@@ -829,10 +823,10 @@ const RefineDownloadLeads = () => {
                                 <div className="p-4 rounded-2xl border border-white/[0.05] bg-white/[0.01] backdrop-blur-md space-y-2">
                                     <div className="flex items-center justify-between">
                                         <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                                            <FileDown className="h-4 w-4 text-brand-400" />
+                                            <FileDown className="h-4 w-4 text-violet-400" />
                                             Uploaded Files
                                         </span>
-                                        {loadingFiles && <span className="text-xs text-brand-400 animate-pulse font-bold">Loading...</span>}
+                                        {loadingFiles && <span className="text-xs text-violet-400 animate-pulse font-bold">Loading...</span>}
                                     </div>
                                     
                                     <SelectInput
@@ -849,7 +843,7 @@ const RefineDownloadLeads = () => {
                                         </option>
                                         {vendorFiles.map(file => (
                                             <option key={file.id} value={file.id}>
-                                                {file.file_name} ({new Date(file.created_at).toLocaleDateString()} — {file.total_rows?.toLocaleString() || 0} rows)
+                                                {file.file_name} ({new Date(file.created_at).toLocaleDateString()} - {file.total_rows?.toLocaleString() || 0} rows)
                                             </option>
                                         ))}
                                     </SelectInput>
@@ -863,6 +857,27 @@ const RefineDownloadLeads = () => {
                             )}
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                {/* Data Filter Preset */}
+                                <Field label="Data Filter Preset" hint="Auto-selects states for you">
+                                    <SelectInput
+                                        value={selectedFilterId}
+                                        onChange={e => {
+                                            const filterId = e.target.value;
+                                            setSelectedFilterId(filterId);
+                                            const selectedFilter = filters.find(f => String(f.id) === String(filterId));
+                                            if (selectedFilter && selectedFilter.states) {
+                                                setForm(prev => ({ ...prev, states: selectedFilter.states }));
+                                            }
+                                        }}
+                                        disabled={loadingFilters}
+                                    >
+                                        <option value="" disabled>{loadingFilters ? 'Loading filters...' : 'Choose a preset...'}</option>
+                                        {filters.map(f => (
+                                            <option key={f.id} value={f.id}>{f.name} ({f.states?.length || 0} states)</option>
+                                        ))}
+                                    </SelectInput>
+                                </Field>
+
                                 {/* State Filter */}
                                 <Field label="State Filter" hint="Leave empty for all states">
                                     <div className="relative" ref={stateRef}>
