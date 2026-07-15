@@ -99,9 +99,6 @@ const upsertDncNumbersBatched = async ({
       `
         INSERT INTO premium_dnc_numbers (phone, dnc_type, campaign_id)
         VALUES ${valueStrings.join(",")}
-        ON CONFLICT (phone) DO UPDATE
-        SET dnc_type = EXCLUDED.dnc_type,
-            campaign_id = COALESCE(EXCLUDED.campaign_id, premium_dnc_numbers.campaign_id)
       `,
       insertValues,
     );
