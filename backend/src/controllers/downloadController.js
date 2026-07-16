@@ -376,11 +376,9 @@ async function executeDownload(
     include_downloaded === true || include_downloaded === "true";
 
   const whereParts = [...filters];
-  if (!includeAllVendorLeads) {
-    whereParts.push(
-      `NOT EXISTS (SELECT 1 FROM dnc_numbers d WHERE d.phone = leads.phone)`,
-    );
-  }
+  whereParts.push(
+    `NOT EXISTS (SELECT 1 FROM dnc_numbers d WHERE d.phone = leads.phone)`,
+  );
   const whereClause =
     whereParts.length > 0 ? whereParts.join(" AND ") : "1=1";
 

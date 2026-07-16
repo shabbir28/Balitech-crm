@@ -51,8 +51,10 @@ const upsertDeadNumbersBatched = async ({ queryFn, badItems }) => {
 // Build WHERE filters for download queries
 function buildFilters({ vendor_id, states, min_age, max_age, include_downloaded, job_id }) {
   const filters = include_downloaded 
-    ? ["status IN ('available', 'downloaded', 'DNC')"] 
+    ? ["status IN ('available', 'downloaded')"] 
     : ["status = 'available'"];
+  
+  filters.push(`NOT EXISTS (SELECT 1 FROM dnc_numbers d WHERE d.phone = van_data.phone)`);
   const params = [];
   let idx = 1;
 
