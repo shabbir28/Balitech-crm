@@ -368,7 +368,7 @@ const DownloadRequests = () => {
                         </div>
                     ) : (
                         displayed.map((req) => {
-                            const adminName = [req.admin_first_name, req.admin_last_name].filter(Boolean).join(' ') || req.admin_username;
+                            const adminName = [req.admin_first_name, req.admin_last_name].filter(Boolean).join(' ') || req.admin_username || 'Unknown Admin';
                             const isProcessing = processing === `${req.moduleType}-${req.id}`;
                             const isExpanded = expandedRow === `${req.moduleType}-${req.id}`;
 
