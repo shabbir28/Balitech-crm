@@ -227,7 +227,7 @@ const downloadVanData = async (req, res) => {
         req.user.id,
         vendor_id && vendor_id !== "all" ? vendor_id : null,
         rowsWithState.length,
-        states && states.length > 0 ? states : null,
+        states && states.length > 0 ? JSON.stringify(states) : null,
         min_age || null,
         max_age || null,
       ]
@@ -418,7 +418,7 @@ const createDownloadRequest = async (req, res) => {
         vendor_id && vendor_id !== "all" ? vendor_id : null,
         campaign_id && campaign_id !== "all" ? campaign_id : null,
         quantity,
-        states && states.length ? states : null,
+        states && states.length ? JSON.stringify(states) : null,
         min_age || null,
         max_age || null,
         min_duration || null,
