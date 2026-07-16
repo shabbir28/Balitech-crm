@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     ShieldBan, Search, RefreshCw, ChevronLeft, ChevronRight,
-    Phone, User, CalendarDays, Database, FileText, X
+    Phone, User, CalendarDays, Database, FileText, X, Download
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -42,6 +42,7 @@ const AllDeadNumbers = () => {
     const [search, setSearch] = useState('');
     const [searchInput, setSearchInput] = useState('');
     const [loading, setLoading] = useState(false);
+    const [downloadQty, setDownloadQty] = useState(100000);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -64,6 +65,34 @@ const AllDeadNumbers = () => {
         setPage(1);
     };
     const clearSearch = () => { setSearchInput(''); setSearch(''); setPage(1); };
+
+    const handleDownload = async () => {
+        if (!downloadQty || downloadQty <= 0) {
+            alert('Please enter a valid quantity.');
+            return;
+        }
+        if (downloadQty > 100000) {
+            alert('Maximum 100,000 records allowed per download.');
+            return;
+        }
+
+        try {
+            const res = await api.get('/dead-numbers/download', { 
+                params: { qty: downloadQty },
+                responseType: 'blob' 
+            });
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `dead_numbers_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (err) {
+            console.error('Download failed', err);
+            alert('Failed to download dead numbers.');
+        }
+    };
 
     const totalPages = Math.ceil(total / limit);
     const startRow = total === 0 ? 0 : (page - 1) * limit + 1;
@@ -142,6 +171,55 @@ const AllDeadNumbers = () => {
                     >
                         <RefreshCw size={15} style={loading ? { animation: 'spin 0.8s linear infinite', color: '#f87171' } : {}} />
                     </button>
+                    <div 
+                        style={{ 
+                            display: 'flex', alignItems: 'center', background: '#0f1220', 
+                            border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '4px',
+                            transition: 'all 0.3s ease',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                        }}
+                        onFocus={e => e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)'} 
+                        onBlur={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
+                    >
+                        <span style={{ padding: '0 8px 0 12px', color: '#64748b', fontSize: 12, fontWeight: 600, letterSpacing: '0.02em' }}>QTY</span>
+                        <input
+                            type="number"
+                            min="1"
+                            max="100000"
+                            value={downloadQty}
+                            onChange={(e) => setDownloadQty(e.target.value)}
+                            style={{
+                                width: 75, padding: '6px 0', border: 'none', background: 'transparent',
+                                color: '#f8fafc', fontSize: 13, fontWeight: 500, outline: 'none', textAlign: 'center',
+                            }}
+                            title="Download Quantity (Max 100k)"
+                        />
+                        <button
+                            type="button"
+                            onClick={handleDownload}
+                            title="Download Selected Quantity"
+                            style={{
+                                padding: '8px 16px', borderRadius: 9, marginLeft: 4,
+                                background: 'linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(79,70,229,0.25) 100%)',
+                                border: '1px solid rgba(99,102,241,0.2)',
+                                color: '#a5b4fc', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                                display: 'flex', alignItems: 'center', gap: 6,
+                                transition: 'all 0.25s ease',
+                            }}
+                            onMouseEnter={e => {
+                                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(99,102,241,0.25) 0%, rgba(79,70,229,0.35) 100%)';
+                                e.currentTarget.style.color = '#fff';
+                                e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)';
+                            }}
+                            onMouseLeave={e => {
+                                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(79,70,229,0.25) 100%)';
+                                e.currentTarget.style.color = '#a5b4fc';
+                                e.currentTarget.style.borderColor = 'rgba(99,102,241,0.2)';
+                            }}
+                        >
+                            <Download size={14} /> Download
+                        </button>
+                    </div>
                 </form>
             </div>
 

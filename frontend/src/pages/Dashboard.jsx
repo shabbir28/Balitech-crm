@@ -151,7 +151,7 @@ const Dashboard = () => {
                 <KpiCard index={5} icon={ShieldBan} label="DNC Numbers"        value={+totals.dnc_count}       color="#f43f5e" sub="Blocked lines" />
                 <KpiCard index={6} icon={FolderUp}  label="Upload Sessions"    value={+totals.total_sessions}  color="#f59e0b" sub="All sessions" />
                 <KpiCard index={7} icon={Layers}    label="SALE Numbers"       value={+totals.sale_count}      color="#8b5cf6" sub="Converted lines" />
-                <KpiCard index={8} icon={ShieldBan} label="Dead Numbers"       value={+totals.total_dead_numbers || 0} color="#dc2626" sub="Permanently deleted" />
+                <KpiCard index={8} icon={ShieldBan} label="Dead Numbers"       value={+totals.total_dead_numbers || 0} color="#dc2626" sub={`Downloaded: ${+(totals.total_dead_numbers_downloaded || 0)}`} />
             </div>
 
             {/* ── Campaign Cards Row ── */}

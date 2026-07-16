@@ -138,7 +138,62 @@ const listDeadNumbers = async (req, res) => {
     }
 };
 
+const { Parser } = require("json2csv");
+
+// GET /api/dead-numbers/download
+const downloadDeadNumbers = async (req, res) => {
+    try {
+        const { qty } = req.query;
+        let limitNum = parseInt(qty, 10);
+        
+        if (isNaN(limitNum) || limitNum <= 0) {
+            limitNum = 100000;
+        }
+        if (limitNum > 100000) {
+            limitNum = 100000;
+        }
+
+        const query = `
+            SELECT d.phone, d.source, u.username AS created_by, d.created_at
+            FROM dead_numbers d
+            LEFT JOIN users u ON d.created_by = u.id
+            ORDER BY d.created_at DESC
+            LIMIT $1
+        `;
+        const result = await db.query(query, [limitNum]);
+
+        const rows = result.rows.map((r) => ({
+            Phone: r.phone,
+            Source: r.source || "",
+            "Created By": r.created_by || "System",
+            "Created At": r.created_at ? new Date(r.created_at).toLocaleString() : ""
+        }));
+
+        if (rows.length === 0) {
+            return res.status(404).send("No records found.");
+        }
+
+        const parser = new Parser({ fields: ["Phone", "Source", "Created By", "Created At"] });
+        const csv = parser.parse(rows);
+
+        // Track download count in global stats
+        await db.query(`
+            UPDATE dead_numbers_stats 
+            SET total_downloaded = total_downloaded + $1 
+            WHERE id = 1
+        `, [rows.length]);
+
+        res.setHeader("Content-Type", "text/csv");
+        res.setHeader("Content-Disposition", `attachment; filename=dead_numbers_${Date.now()}.csv`);
+        res.send(csv);
+    } catch (err) {
+        console.error("Download Dead Numbers Error:", err);
+        res.status(500).json({ message: "Server error downloading dead numbers" });
+    }
+};
+
 module.exports = {
     uploadDeadNumbers,
-    listDeadNumbers
+    listDeadNumbers,
+    downloadDeadNumbers
 };

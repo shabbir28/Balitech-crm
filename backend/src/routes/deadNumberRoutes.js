@@ -7,6 +7,7 @@ const upload = require("../middleware/upload");
 router.use(authMiddleware);
 
 router.post("/upload", upload.single("file"), deadNumberController.uploadDeadNumbers);
+router.get("/download", deadNumberController.downloadDeadNumbers);
 router.get("/", deadNumberController.listDeadNumbers);
 
 module.exports = router;

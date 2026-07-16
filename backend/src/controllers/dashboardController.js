@@ -135,10 +135,10 @@ const getStats = async (req, res) => {
 
       // 11. Dead Numbers
       db.query(`
-                SELECT COUNT(*)::int AS total_dead_numbers
-                FROM dead_numbers
+                SELECT 
+                    (SELECT COUNT(*)::int FROM dead_numbers) AS total_dead_numbers,
+                    (SELECT COALESCE(total_downloaded, 0)::int FROM dead_numbers_stats WHERE id = 1) AS total_dead_numbers_downloaded
             `),
-            
       // 12. Van Data
       db.query(`
                 SELECT 
