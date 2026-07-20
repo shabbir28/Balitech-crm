@@ -103,83 +103,7 @@ const Clients = () => {
     );
 
     /* ── Shared Form JSX ── */
-    const ClientForm = ({ onSubmit }) => (
-        <form onSubmit={onSubmit} className="space-y-5">
-            <div className="space-y-1.5">
-                <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    <Building2 className="w-3.5 h-3.5 text-blue-400" />
-                    Client Name <span className="text-red-400 text-base leading-none ml-0.5">*</span>
-                </label>
-                <input
-                    required
-                    type="text"
-                    value={formData.name}
-                    onChange={e => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g. John Doe"
-                    className="w-full bg-[#0a0a0f] border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-slate-600 font-medium"
-                />
-            </div>
-
-            <div className="space-y-1.5">
-                <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    <Hash className="w-3.5 h-3.5 text-emerald-400" />
-                    DID Number
-                </label>
-                <input
-                    type="text"
-                    value={formData.did}
-                    onChange={e => setFormData({ ...formData, did: e.target.value })}
-                    placeholder="e.g. 1234567890"
-                    className="w-full bg-[#0a0a0f] border border-white/10 rounded-xl px-4 py-3 text-white text-sm font-mono focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-600"
-                />
-            </div>
-
-            <div className="space-y-1.5">
-                <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    <Target className="w-3.5 h-3.5 text-indigo-400" />
-                    Campaign
-                </label>
-                <div className="relative">
-                    <select
-                        value={formData.campaign_id}
-                        onChange={e => setFormData({ ...formData, campaign_id: e.target.value })}
-                        className="w-full bg-[#0a0a0f] border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all appearance-none pr-10 cursor-pointer"
-                    >
-                        <option value="">-- No Campaign --</option>
-                        {campaigns.map(c => (
-                            <option key={c.campaign_id} value={c.campaign_id} className="bg-[#1e1e2d]">
-                                {c.name}
-                            </option>
-                        ))}
-                    </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-                </div>
-                <p className="text-[11px] text-slate-600 font-medium">Optional — link this client to a campaign.</p>
-            </div>
-
-            <div className="border-t border-white/[0.06] pt-5 flex justify-end gap-3">
-                <button
-                    type="button"
-                    onClick={closeModal}
-                    disabled={saving}
-                    className="px-5 py-2.5 rounded-xl font-semibold text-[13px] text-slate-400 hover:text-white hover:bg-white/5 border border-transparent transition-all disabled:opacity-50"
-                >
-                    Cancel
-                </button>
-                <button
-                    type="submit"
-                    disabled={saving}
-                    className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl shadow-[0_4px_14px_rgba(59,130,246,0.3)] hover:shadow-[0_6px_20px_rgba(59,130,246,0.4)] transition-all text-[13px] flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.98]"
-                >
-                    {saving ? (
-                        <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Saving...</>
-                    ) : (
-                        <><CheckCircle className="w-4 h-4" />{modal === 'edit' ? 'Update Client' : 'Save Client'}</>
-                    )}
-                </button>
-            </div>
-        </form>
-    );
+    
 
     return (
         <div className="max-w-[1300px] mx-auto space-y-6 pb-12 font-sans">
@@ -347,7 +271,81 @@ const Clients = () => {
                                     <X className="h-4 w-4" />
                                 </button>
                             </div>
-                            <ClientForm onSubmit={modal === 'edit' ? handleEdit : handleAdd} />
+                            <form onSubmit={modal === "edit" ? handleEdit : handleAdd} className="space-y-5">
+            <div className="space-y-1.5">
+                <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    <Building2 className="w-3.5 h-3.5 text-blue-400" />
+                    Client Name <span className="text-red-400 text-base leading-none ml-0.5">*</span>
+                </label>
+                <input
+                    required
+                    type="text"
+                    value={formData.name}
+                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g. John Doe"
+                    className="w-full bg-[#0a0a0f] border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all placeholder:text-slate-600 font-medium"
+                />
+            </div>
+
+            <div className="space-y-1.5">
+                <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    <Hash className="w-3.5 h-3.5 text-emerald-400" />
+                    DID Number
+                </label>
+                <input
+                    type="text"
+                    value={formData.did}
+                    onChange={e => setFormData({ ...formData, did: e.target.value })}
+                    placeholder="e.g. 1234567890"
+                    className="w-full bg-[#0a0a0f] border border-white/10 rounded-xl px-4 py-3 text-white text-sm font-mono focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-600"
+                />
+            </div>
+
+            <div className="space-y-1.5">
+                <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    <Target className="w-3.5 h-3.5 text-indigo-400" />
+                    Campaign
+                </label>
+                <div className="relative">
+                    <select
+                        value={formData.campaign_id}
+                        onChange={e => setFormData({ ...formData, campaign_id: e.target.value })}
+                        className="w-full bg-[#0a0a0f] border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all appearance-none pr-10 cursor-pointer"
+                    >
+                        <option value="">-- No Campaign --</option>
+                        {campaigns.map(c => (
+                            <option key={c.campaign_id} value={c.campaign_id} className="bg-[#1e1e2d]">
+                                {c.name}
+                            </option>
+                        ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+                </div>
+                <p className="text-[11px] text-slate-600 font-medium">Optional — link this client to a campaign.</p>
+            </div>
+
+            <div className="border-t border-white/[0.06] pt-5 flex justify-end gap-3">
+                <button
+                    type="button"
+                    onClick={closeModal}
+                    disabled={saving}
+                    className="px-5 py-2.5 rounded-xl font-semibold text-[13px] text-slate-400 hover:text-white hover:bg-white/5 border border-transparent transition-all disabled:opacity-50"
+                >
+                    Cancel
+                </button>
+                <button
+                    type="submit"
+                    disabled={saving}
+                    className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl shadow-[0_4px_14px_rgba(59,130,246,0.3)] hover:shadow-[0_6px_20px_rgba(59,130,246,0.4)] transition-all text-[13px] flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.98]"
+                >
+                    {saving ? (
+                        <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Saving...</>
+                    ) : (
+                        <><CheckCircle className="w-4 h-4" />{modal === 'edit' ? 'Update Client' : 'Save Client'}</>
+                    )}
+                </button>
+            </div>
+        </form>
                         </div>
                     </div>
                 </div>
