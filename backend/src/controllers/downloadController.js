@@ -265,38 +265,53 @@ async function buildFilters(
   const params = [];
   let paramIdx = 1;
 
-  if (job_id && job_id !== "") {
-    // Check if there are any leads with this job_id
-    const jobCheck = await client.query(
-      `SELECT 1 FROM leads WHERE job_id = $1 LIMIT 1`,
-      [job_id]
-    );
-    if (jobCheck.rows.length > 0) {
-      filters.push(`job_id = $${paramIdx++}`);
-      params.push(job_id);
-    } else {
-      // Fallback: get job created_at and vendor_id
+  if (job_id && (Array.isArray(job_id) ? job_id.length > 0 : job_id !== "")) {
+    const jobIds = Array.isArray(job_id) ? job_id : [job_id];
+    
+    const validJobIds = [];
+    const missingJobIds = [];
+    
+    // Check which jobIds exist in leads
+    for (const jid of jobIds) {
+      const check = await client.query(`SELECT 1 FROM leads WHERE job_id = $1 LIMIT 1`, [jid]);
+      if (check.rows.length > 0) validJobIds.push(jid);
+      else missingJobIds.push(jid);
+    }
+    
+    const jobConditions = [];
+    
+    if (validJobIds.length > 0) {
+      const placeholders = validJobIds.map((_, i) => `$${paramIdx + i}`).join(',');
+      jobConditions.push(`job_id IN (${placeholders})`);
+      params.push(...validJobIds);
+      paramIdx += validJobIds.length;
+    }
+    
+    if (missingJobIds.length > 0) {
       const jobRes = await client.query(
-        `SELECT j.created_at, s.vendor_id 
+        `SELECT j.id, j.created_at, s.vendor_id 
          FROM upload_jobs j
          JOIN upload_sessions s ON j.session_id = s.id
-         WHERE j.id = $1`,
-        [job_id]
+         WHERE j.id = ANY($1)`,
+        [missingJobIds]
       );
-      if (jobRes.rows.length > 0) {
-        const job = jobRes.rows[0];
-        filters.push(`vendor_id = $${paramIdx++}`);
-        params.push(job.vendor_id);
-
-        filters.push(`uploaded_at >= $${paramIdx++}::timestamp with time zone - INTERVAL '5 minutes'`);
-        params.push(job.created_at);
-
-        filters.push(`uploaded_at <= $${paramIdx++}::timestamp with time zone + INTERVAL '5 minutes'`);
-        params.push(job.created_at);
-      } else {
-        filters.push(`job_id = $${paramIdx++}`);
-        params.push(job_id);
+      
+      for (const job of jobRes.rows) {
+        jobConditions.push(`(vendor_id = $${paramIdx++} AND uploaded_at >= $${paramIdx++}::timestamp with time zone - INTERVAL '5 minutes' AND uploaded_at <= $${paramIdx++}::timestamp with time zone + INTERVAL '5 minutes')`);
+        params.push(job.vendor_id, job.created_at, job.created_at);
       }
+      
+      const unfoundJobIds = missingJobIds.filter(id => !jobRes.rows.some(r => String(r.id) === String(id)));
+      if (unfoundJobIds.length > 0) {
+        const placeholders = unfoundJobIds.map((_, i) => `$${paramIdx + i}`).join(',');
+        jobConditions.push(`job_id IN (${placeholders})`);
+        params.push(...unfoundJobIds);
+        paramIdx += unfoundJobIds.length;
+      }
+    }
+    
+    if (jobConditions.length > 0) {
+      filters.push(`(${jobConditions.join(' OR ')})`);
     }
   } else if (vendor_id && vendor_id !== "all") {
     filters.push(`vendor_id = $${paramIdx++}`);
@@ -375,10 +390,17 @@ async function executeDownload(
   const includeAllVendorLeads =
     include_downloaded === true || include_downloaded === "true";
 
+  let currentParamIdx = paramIdx;
   const whereParts = [...filters];
   whereParts.push(
     `NOT EXISTS (SELECT 1 FROM dnc_numbers d WHERE d.phone = leads.phone)`,
   );
+  if (campaign_id && campaign_id !== "all") {
+    whereParts.push(
+      `NOT EXISTS (SELECT 1 FROM separation_data sd WHERE sd.phone = leads.phone AND sd.campaign_id = $${currentParamIdx++})`
+    );
+    params.push(campaign_id);
+  }
   const whereClause =
     whereParts.length > 0 ? whereParts.join(" AND ") : "1=1";
 
@@ -391,7 +413,7 @@ async function executeDownload(
             WHERE ${whereClause}
             ORDER BY uploaded_at ASC
             FOR UPDATE SKIP LOCKED
-            LIMIT $${paramIdx}
+            LIMIT $${currentParamIdx}
         )
         UPDATE leads l
         SET status = 'downloaded', downloaded_at = CURRENT_TIMESTAMP

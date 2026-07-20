@@ -30,12 +30,15 @@ const VanLeadsTable = () => {
         finally { setLoading(false); }
     }, [search, vendorFilter]);
 
-    useEffect(() => { fetchData(1); }, [vendorFilter]);
+    useEffect(() => { fetchData(1); }, [fetchData]);
 
     const handleSearch = (e) => {
         e.preventDefault();
-        setSearch(searchInput);
-        fetchData(1, searchInput, vendorFilter);
+        if (search === searchInput) {
+            fetchData(1, searchInput, vendorFilter);
+        } else {
+            setSearch(searchInput);
+        }
     };
 
     const totalPages = Math.ceil(total / LIMIT) || 1;

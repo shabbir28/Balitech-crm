@@ -56,6 +56,9 @@ const vanJobRoutes = require("./routes/van_jobs");
 const vanDataRoutes = require("./routes/van_data");
 const vanDownloadRoutes = require("./routes/van_download");
 
+const clientRoutes = require("./routes/clientRoutes");
+const separationRoutes = require("./routes/separationRoutes");
+
 const enforceIPWhitelist = require("./middleware/ipWhitelist");
  
 if (!process.env.JWT_SECRET) {
@@ -212,6 +215,10 @@ app.use("/api/van-sessions", vanSessionRoutes);
 app.use("/api/van-jobs", vanJobRoutes);
 app.use("/api/van-data", vanDataRoutes);
 app.use("/api/van-download", vanDownloadRoutes);
+
+// Clients and Separation
+app.use("/api/clients", clientRoutes);
+app.use("/api/separation", separationRoutes);
  
 // =========================
 

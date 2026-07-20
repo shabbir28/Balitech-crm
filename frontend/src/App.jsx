@@ -66,6 +66,9 @@ import VanLeadsTable from './pages/VanLeadsTable';
 import VanDownloadLeads from './pages/VanDownloadLeads';
 import VanAlreadyDownloaded from './pages/VanAlreadyDownloaded';
 
+import Clients from './pages/Clients';
+import SeparationUpload from './pages/SeparationUpload';
+
 
 const ProtectedRoute = ({ children, roles, module }) => {
     const { user, loading } = useContext(AuthContext);
@@ -212,6 +215,10 @@ const AppRoutes = () => {
             <Route path="/van-data" element={<ProtectedRoute roles={['super_admin', 'admin']} module="van_desk"><VanLeadsTable /></ProtectedRoute>} />
             <Route path="/van-download" element={<ProtectedRoute roles={['super_admin', 'admin']} module="van_desk"><VanDownloadLeads /></ProtectedRoute>} />
             <Route path="/van-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin']} module="van_desk"><VanAlreadyDownloaded /></ProtectedRoute>} />
+
+            {/* Clients & Separation */}
+            <Route path="/clients" element={<ProtectedRoute roles={['super_admin', 'admin']} module="core"><Clients /></ProtectedRoute>} />
+            <Route path="/separation-upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']} module="core"><SeparationUpload /></ProtectedRoute>} />
 
             {/* Catch all */}
             <Route path="*" element={<Navigate to="/" replace />} />

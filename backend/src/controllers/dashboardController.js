@@ -1,6 +1,5 @@
 const db = require("../config/db");
 
-// GET /api/dashboard/stats
 const getStats = async (req, res) => {
   try {
     const [
@@ -17,6 +16,8 @@ const getStats = async (req, res) => {
       deadNumbersStatsResult,
       vanStatsResult,
       vanCampaignStatsResult,
+      separationStatsResult,
+      separationCampaignStatsResult,
     ] = await Promise.all([
       // 1. Leads Overall Stats (Single Scan)
       db.query(`
@@ -164,6 +165,28 @@ const getStats = async (req, res) => {
                 GROUP BY COALESCE(c.name, s.campaign_type, 'Untagged')
                 ORDER BY count DESC
             `),
+            
+      // 14. Separation Data Total Stats
+      db.query(`
+                SELECT 
+                    COUNT(*)::int AS total_separation_data,
+                    COUNT(CASE WHEN status = 'available' THEN 1 END)::int AS total_separation_available,
+                    COUNT(CASE WHEN status = 'downloaded' THEN 1 END)::int AS total_separation_downloaded
+                FROM separation_data
+            `),
+
+      // 15. Separation Data per campaign
+      db.query(`
+                SELECT
+                    COALESCE(c.name, 'Untagged') AS name,
+                    COUNT(*)::int AS count,
+                    COUNT(CASE WHEN d.status = 'available' THEN 1 END)::int AS available_count,
+                    COUNT(CASE WHEN d.status = 'downloaded' THEN 1 END)::int AS downloaded_count
+                FROM separation_data d
+                LEFT JOIN campaigns c ON d.campaign_id = c.campaign_id
+                GROUP BY COALESCE(c.name, 'Untagged')
+                ORDER BY count DESC
+            `),
     ]);
 
     // Construct totals object
@@ -173,6 +196,7 @@ const getStats = async (req, res) => {
     const premiumStats = premiumStatsResult.rows[0];
     const deadNumbersStats = deadNumbersStatsResult.rows[0] || { total_dead_numbers: 0 };
     const vanStats = vanStatsResult.rows[0] || { total_van_data: 0 };
+    const separationStats = separationStatsResult.rows[0] || { total_separation_data: 0 };
     
     const totals = {
       ...leadsStats,
@@ -180,7 +204,8 @@ const getStats = async (req, res) => {
       ...refineStats,
       ...premiumStats,
       ...deadNumbersStats,
-      ...vanStats
+      ...vanStats,
+      ...separationStats
     };
 
     // Construct lead status breakdown from leadsStats
@@ -199,6 +224,7 @@ const getStats = async (req, res) => {
       refineCampaignStats: refineCampaignStatsResult.rows,
       premiumCampaignStats: premiumCampaignStatsResult.rows,
       vanCampaignStats: vanCampaignStatsResult.rows,
+      separationCampaignStats: separationCampaignStatsResult.rows,
     });
   } catch (err) {
     console.error("Dashboard Stats Error:", err);

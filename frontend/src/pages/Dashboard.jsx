@@ -121,7 +121,7 @@ const Dashboard = () => {
 
     if (!data) return <div style={{ color:'#f87171', padding:32 }}>Failed to load stats.</div>;
 
-    const { totals, vendorDistribution, campaignStats, dncStats, leadStatusBreakdown, recentSessions, refineCampaignStats, premiumCampaignStats, vanCampaignStats } = data;
+    const { totals, vendorDistribution, campaignStats, dncStats, leadStatusBreakdown, recentSessions, refineCampaignStats, premiumCampaignStats, vanCampaignStats, separationCampaignStats } = data;
 
     // enrich lead status for pie
     const STATUS_COLORS = { available:'#10b981', downloaded:'#3b82f6', dnc:'#f97316', sold:'#a855f7', duplicate:'#6b7280' };
@@ -265,6 +265,37 @@ const Dashboard = () => {
                                 value={+camp.count}
                                 color={COLORS[(idx + 5) % COLORS.length]}
                                 sub="Total uploaded"
+                            />
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* ── Separation Data Cards ── */}
+            <div style={{ marginBottom: 32 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
+                    <Database size={16} color="#06b6d4" />
+                    <h2 style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', letterSpacing: '0.02em' }}>Separation Data</h2>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
+                    <div style={{ maxWidth: '300px' }}>
+                        <KpiCard index={0} icon={Database} label="Total separation data" value={+(totals.total_separation_data || 0)} color="#06b6d4" sub="Separation leads" />
+                    </div>
+                    <div style={{ maxWidth: '300px' }}>
+                        <KpiCard index={1} icon={CheckCircle2} label="Total separation available" value={+(totals.total_separation_available || 0)} color="#10b981" sub="Ready to download" />
+                    </div>
+                    <div style={{ maxWidth: '300px' }}>
+                        <KpiCard index={2} icon={Download} label="Total separation downloaded" value={+(totals.total_separation_downloaded || 0)} color="#f97316" sub="Already downloaded" />
+                    </div>
+                    {separationCampaignStats && separationCampaignStats.length > 0 && separationCampaignStats.map((camp, idx) => (
+                        <div key={camp.name} style={{ maxWidth: '300px' }}>
+                            <KpiCard
+                                index={idx + 3}
+                                icon={Target}
+                                label={camp.name ? camp.name.charAt(0).toUpperCase() + camp.name.slice(1).toLowerCase() : 'Untagged'}
+                                value={+camp.count}
+                                color={COLORS[(idx + 6) % COLORS.length]}
+                                sub={`Avail: ${(+camp.available_count || 0).toLocaleString()} · DL: ${(+camp.downloaded_count || 0).toLocaleString()}`}
                             />
                         </div>
                     ))}

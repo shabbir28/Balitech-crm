@@ -70,6 +70,71 @@ const SelectInput = ({ value, onChange, disabled, required, children }) => (
     </div>
 );
 
+const FileMultiSelect = ({ options, value, onChange, disabled, placeholder }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const containerRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (containerRef.current && !containerRef.current.contains(e.target)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const toggleOption = (optValue) => {
+        if (value.includes(optValue)) {
+            onChange(value.filter(v => v !== optValue));
+        } else {
+            onChange([...value, optValue]);
+        }
+    };
+
+    return (
+        <div className="relative" ref={containerRef}>
+            <button
+                type="button"
+                onClick={() => !disabled && setIsOpen(!isOpen)}
+                disabled={disabled}
+                className={`w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 text-left rounded-xl py-3.5 px-4 flex justify-between items-center transition-all text-sm group shadow-inner ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#0a0c14]/80 hover:border-brand-500/30'}`}
+            >
+                <span className={value.length === 0 ? 'text-slate-500' : 'text-white font-medium truncate pr-4'}>
+                    {value.length === 0 ? placeholder : `${value.length} file${value.length > 1 ? 's' : ''} selected`}
+                </span>
+                <ChevronDown className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${isOpen ? 'rotate-180 text-brand-400' : 'group-hover:text-brand-400'}`} />
+            </button>
+            {isOpen && (
+                <div className="absolute z-50 w-full mt-1.5 bg-[#16192a] border border-white/10 rounded-xl shadow-2xl max-h-60 overflow-auto">
+                    <div className="p-1.5 space-y-0.5">
+                        {options.length === 0 ? (
+                            <div className="p-3 text-center text-slate-500 text-xs">No files available</div>
+                        ) : (
+                            options.map(opt => (
+                                <label key={opt.value} className="flex items-center gap-3 p-2.5 hover:bg-brand-500/10 rounded-lg cursor-pointer transition-colors group">
+                                    <input
+                                        type="checkbox"
+                                        checked={value.includes(opt.value)}
+                                        onChange={() => toggleOption(opt.value)}
+                                        className="h-4 w-4 rounded border-white/20 bg-black/20 text-brand-500 focus:ring-brand-500/30 focus:ring-offset-0 checked:border-brand-500"
+                                    />
+                                    <div className="flex flex-col min-w-0">
+                                        <span className={`text-sm truncate ${value.includes(opt.value) ? 'text-white font-medium' : 'text-slate-300 group-hover:text-white'}`}>
+                                            {opt.label}
+                                        </span>
+                                        {opt.sublabel && <span className="text-[10px] text-slate-500 truncate">{opt.sublabel}</span>}
+                                    </div>
+                                </label>
+                            ))
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 // Helper function to trigger browser download of plain text content as a CSV file
 const downloadBlob = (content, filename) => {
     const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
@@ -414,7 +479,7 @@ const DownloadLeads = () => {
 
     const [vendorFiles, setVendorFiles] = useState([]);
     const [loadingFiles, setLoadingFiles] = useState(false);
-    const [selectedFileId, setSelectedFileId] = useState('');
+    const [selectedFileIds, setSelectedFileIds] = useState([]);
     
     const [fileStats, setFileStats] = useState(null);
 
@@ -482,7 +547,7 @@ const DownloadLeads = () => {
                     states: form.states,
                     min_age: form.min_age,
                     max_age: form.max_age,
-                    job_id: selectedFileId || undefined,
+                    job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined,
                     include_downloaded: form.include_downloaded,
                 })
                 .then(res => setStateCounts(res.data))
@@ -494,14 +559,14 @@ const DownloadLeads = () => {
             const timeoutId = setTimeout(() => setStateCounts({}), 0);
             return () => clearTimeout(timeoutId);
         }
-    }, [form.vendor_id, form.campaign_id, form.states, form.min_age, form.max_age, selectedFileId, form.include_downloaded]);
+    }, [form.vendor_id, form.campaign_id, form.states, form.min_age, form.max_age, selectedFileIds, form.include_downloaded]);
 
     // Fetch vendor uploaded files whenever vendor changes
     useEffect(() => {
         if (form.vendor_id && form.vendor_id !== 'all') {
             const fetchFiles = () => {
                 setLoadingFiles(true);
-                setSelectedFileId('');
+                setSelectedFileIds([]);
                 setVendorFiles([]);
                 api.get(`/vendors/${form.vendor_id}/files`)
                     .then(res => {
@@ -517,7 +582,7 @@ const DownloadLeads = () => {
         } else {
             const timeoutId = setTimeout(() => {
                 setVendorFiles([]);
-                setSelectedFileId('');
+                setSelectedFileIds([]);
             }, 0);
             return () => clearTimeout(timeoutId);
         }
@@ -525,10 +590,10 @@ const DownloadLeads = () => {
 
     // Fetch file statistics whenever the selected file changes
     useEffect(() => {
-        if (selectedFileId) {
+        if (selectedFileIds.length === 1) {
             const fetchStats = () => {
                 setFileStats(null);
-                api.get(`/download/job/${selectedFileId}/stats`)
+                api.get(`/download/job/${selectedFileIds[0]}/stats`)
                     .then(res => {
                         setFileStats(res.data);
                     })
@@ -544,7 +609,7 @@ const DownloadLeads = () => {
             }, 0);
             return () => clearTimeout(timeoutId);
         }
-    }, [selectedFileId]);
+    }, [selectedFileIds]);
 
     const fetchMyReqs = async () => {
         if (!isRequester) return;
@@ -574,7 +639,7 @@ const DownloadLeads = () => {
         try {
             if (isSuperAdmin) {
                 const useAsyncScrub = Number(form.quantity) >= 50000;
-                const body = { ...form, async_scrub: useAsyncScrub, job_id: selectedFileId || undefined };
+                const body = { ...form, async_scrub: useAsyncScrub, job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined };
                 const timeoutMs = useAsyncScrub ? 8 * 60 * 1000 : 30 * 60 * 1000;
                 const res = await api.post('/download', body, { timeout: timeoutMs });
                 setScrubSummaryData(res.data);
@@ -592,7 +657,7 @@ const DownloadLeads = () => {
 
                 api.get('/vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
             } else {
-                const body = { ...form, job_id: selectedFileId || undefined };
+                const body = { ...form, job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined };
                 await api.post('/download/request', body);
                 setSuccessMsg('Request submitted! SuperAdmin will review it shortly.');
                 setForm({
@@ -604,7 +669,7 @@ const DownloadLeads = () => {
                     max_age: '',
                     include_downloaded: false,
                 });
-                setSelectedFileId('');
+                setSelectedFileIds([]);
                 fetchMyReqs();
                 
                 // Refetch vendors to update stats (though usually won't change until approved)
@@ -785,7 +850,7 @@ const DownloadLeads = () => {
 
                             {/* Vendor Uploaded Files */}
                             {form.vendor_id && form.vendor_id !== 'all' && (
-                                <div className="p-4 rounded-2xl border border-white/[0.05] bg-white/[0.01] backdrop-blur-md space-y-2">
+                                <div className="relative z-20 p-4 rounded-2xl border border-white/[0.05] bg-white/[0.01] backdrop-blur-md space-y-2">
                                     <div className="flex items-center justify-between">
                                         <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-2">
                                             <FileDown className="h-4 w-4 text-brand-400" />
@@ -794,28 +859,21 @@ const DownloadLeads = () => {
                                         {loadingFiles && <span className="text-xs text-brand-400 animate-pulse font-bold">Loading...</span>}
                                     </div>
                                     
-                                    <SelectInput
-                                        value={selectedFileId}
-                                        onChange={e => setSelectedFileId(e.target.value)}
+                                    <FileMultiSelect
+                                        value={selectedFileIds}
+                                        onChange={setSelectedFileIds}
                                         disabled={loadingFiles || vendorFiles.length === 0}
-                                    >
-                                        <option value="">
-                                            {loadingFiles 
-                                                ? 'Fetching files...' 
-                                                : vendorFiles.length === 0 
-                                                    ? 'No uploaded files found' 
-                                                    : 'All files (no file filter)'}
-                                        </option>
-                                        {vendorFiles.map(file => (
-                                            <option key={file.id} value={file.id}>
-                                                {file.file_name} ({new Date(file.created_at).toLocaleDateString()} — {file.total_rows?.toLocaleString() || 0} rows)
-                                            </option>
-                                        ))}
-                                    </SelectInput>
-                                    
-                                    {vendorFiles.length > 0 && !selectedFileId && (
+                                        placeholder={loadingFiles ? 'Fetching files...' : vendorFiles.length === 0 ? 'No uploaded files found' : 'Select files...'}
+                                        options={vendorFiles.map(file => ({
+                                            value: file.id,
+                                            label: file.file_name,
+                                            sublabel: `${new Date(file.created_at).toLocaleDateString()} — ${file.total_rows?.toLocaleString() || 0} rows`
+                                        }))}
+                                    />
+                                      
+                                    {vendorFiles.length > 0 && selectedFileIds.length === 0 && (
                                         <p className="text-[11px] text-slate-500 font-medium">
-                                            Select one of the {vendorFiles.length} files uploaded for this vendor to filter and download leads from that file specifically.
+                                            Select one or more of the {vendorFiles.length} files uploaded for this vendor to filter and download leads from those files specifically.
                                         </p>
                                     )}
                                 </div>
@@ -1026,7 +1084,7 @@ const DownloadLeads = () => {
                         </h3>
                         
                         <div className="space-y-3 text-[13px]">
-                            {selectedFileId && fileStats ? (
+                            {selectedFileIds.length === 1 && fileStats ? (
                                 <>
                                     <div className="flex justify-between items-center p-3 rounded-xl bg-white/5 border border-white/5">
                                         <span className="text-slate-400 font-medium">Selected File</span>

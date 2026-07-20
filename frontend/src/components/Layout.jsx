@@ -7,7 +7,7 @@ import {
     LayoutTemplate, Building2, Target, FolderUp, Scale, Layers,
     FileStack, ShieldBan, FolderDown, TerminalSquare, UserCheck,
     GitCompareArrows, ClipboardList, Bell, CheckCheck,
-    Download, CheckCircle2, XCircle, Users, History, ShieldCheck, FileCheck2, Filter, Truck
+    Download, CheckCircle2, XCircle, Users, History, ShieldCheck, FileCheck2, Filter, Truck, Pickaxe, Users2
 } from 'lucide-react';
 
 // ─── Notification Bell Component ─────────────────────────────
@@ -361,6 +361,8 @@ const Layout = ({ children }) => {
         { label: 'Users',             path: '/users',             roles: ['super_admin'],               icon: <UserCheck className="h-4 w-4" /> },
         { label: 'Download Requests', path: '/download-requests', roles: ['super_admin'],               icon: <ClipboardList className="h-4 w-4" /> },
         { label: 'Filters',           path: '/filters',           roles: ['super_admin','admin'],        icon: <Filter className="h-4 w-4" /> },
+        { label: 'Clients',           path: '/clients',           roles: ['super_admin','admin'],        icon: <Users2 className="h-4 w-4" /> },
+        { label: 'Separation',        path: '/separation-upload', roles: ['super_admin','admin','data_entry'], icon: <Pickaxe className="h-4 w-4" /> },
         { label: 'Refine DNC',          path: '/refine-dnc',               roles: ['super_admin','admin'],        icon: <ShieldBan className="h-4 w-4" /> },
         { label: 'Refine Vendors',      path: '/refine-vendors',           roles: ['super_admin','admin'],        icon: <Building2 className="h-4 w-4" /> },
         { label: 'Refine Campaigns',    path: '/refine-campaigns',         roles: ['super_admin','admin'],        icon: <Target className="h-4 w-4" /> },
@@ -578,6 +580,12 @@ const Layout = ({ children }) => {
                             {hasModule('core') && (
                                 <div>
                                     <p className="px-3 text-[10px] font-bold text-slate-600 uppercase tracking-[0.15em] mb-2">Operations</p>
+                                    <NavLink to="/clients" className={getClassName}>
+                                        <Users2 className="h-[15px] w-[15px] shrink-0" /><span>Clients</span>
+                                    </NavLink>
+                                    <NavLink to="/separation-upload" className={getClassName}>
+                                        <Pickaxe className="h-[15px] w-[15px] shrink-0" /><span>Separation</span>
+                                    </NavLink>
                                     <NavLink to="/leads" className={getClassName}>
                                         <FileStack className="h-[15px] w-[15px] shrink-0" /><span>All Data</span>
                                     </NavLink>

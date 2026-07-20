@@ -49,7 +49,7 @@ const upsertDeadNumbersBatched = async ({ queryFn, badItems }) => {
 };
 
 // Build WHERE filters for download queries
-function buildFilters({ vendor_id, states, min_age, max_age, include_downloaded, job_id }) {
+function buildFilters({ vendor_id, campaign_id, states, min_age, max_age, include_downloaded, job_id }) {
   const filters = include_downloaded 
     ? ["status IN ('available', 'downloaded')"] 
     : ["status = 'available'"];
@@ -58,14 +58,22 @@ function buildFilters({ vendor_id, states, min_age, max_age, include_downloaded,
   const params = [];
   let idx = 1;
 
+  if (campaign_id && campaign_id !== "all") {
+    filters.push(`NOT EXISTS (SELECT 1 FROM separation_data sd WHERE sd.phone = van_data.phone AND sd.campaign_id = $${idx++})`);
+    params.push(campaign_id);
+  }
+
   if (vendor_id && vendor_id !== "all") {
     filters.push(`vendor_id = $${idx++}`);
     params.push(vendor_id);
   }
 
-  if (job_id) {
-    filters.push(`job_id = $${idx++}`);
-    params.push(job_id);
+  if (job_id && (Array.isArray(job_id) ? job_id.length > 0 : job_id !== "")) {
+    const jobIds = Array.isArray(job_id) ? job_id : [job_id];
+    const placeholders = jobIds.map((_, i) => `$${idx + i}`).join(',');
+    filters.push(`job_id IN (${placeholders})`);
+    params.push(...jobIds);
+    idx += jobIds.length;
   }
 
   if (states && Array.isArray(states) && states.length > 0) {
@@ -99,10 +107,10 @@ function buildFilters({ vendor_id, states, min_age, max_age, include_downloaded,
 const downloadVanData = async (req, res) => {
   const client = await db.getClient();
   try {
-    const { vendor_id, quantity, states, min_age, max_age, include_downloaded, job_id } = req.body;
+    const { vendor_id, quantity, states, min_age, max_age, include_downloaded, job_id, campaign_id } = req.body;
     if (!quantity || quantity <= 0) return res.status(400).json({ message: "Valid quantity is required" });
 
-    const { filters, params, paramIdx } = buildFilters({ vendor_id, states, min_age, max_age, include_downloaded, job_id });
+    const { filters, params, paramIdx } = buildFilters({ vendor_id, campaign_id, states, min_age, max_age, include_downloaded, job_id });
     const whereClause = filters.join(" AND ");
 
     await client.query("BEGIN");
@@ -281,8 +289,8 @@ const downloadVanData = async (req, res) => {
 // POST /api/van-download/state-counts
 const getStateCounts = async (req, res) => {
   try {
-    const { vendor_id, states, min_age, max_age, include_downloaded, job_id } = req.body;
-    const { filters, params } = buildFilters({ vendor_id, states, min_age, max_age, include_downloaded, job_id });
+    const { vendor_id, campaign_id, states, min_age, max_age, include_downloaded, job_id } = req.body;
+    const { filters, params } = buildFilters({ vendor_id, campaign_id, states, min_age, max_age, include_downloaded, job_id });
     const whereClause = filters.join(" AND ");
 
     const result = await db.query(
@@ -578,7 +586,8 @@ const reviewDownloadRequest = async (req, res) => {
         min_age: dlReq.min_age, 
         max_age: dlReq.max_age, 
         include_downloaded: dlReq.include_downloaded, 
-        job_id: dlReq.job_id 
+        job_id: dlReq.job_id,
+        campaign_id: dlReq.campaign_id 
     });
     const whereClause = filters.join(" AND ");
 
