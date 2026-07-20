@@ -48,6 +48,11 @@ const upsertDeadNumbersBatched = async ({ queryFn, badItems }) => {
   }
 };
 
+function isUuid(value) {
+  return typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 // Build WHERE filters for download queries
 function buildFilters({ vendor_id, campaign_id, states, min_age, max_age, include_downloaded, job_id }) {
   const filters = include_downloaded 
@@ -58,9 +63,9 @@ function buildFilters({ vendor_id, campaign_id, states, min_age, max_age, includ
   const params = [];
   let idx = 1;
 
-  if (campaign_id && campaign_id !== "all") {
+  if (campaign_id && campaign_id !== "all" && isUuid(String(campaign_id))) {
     filters.push(`NOT EXISTS (SELECT 1 FROM separation_data sd WHERE sd.phone = van_data.phone AND sd.campaign_id = $${idx++})`);
-    params.push(campaign_id);
+    params.push(String(campaign_id));
   }
 
   if (vendor_id && vendor_id !== "all") {
@@ -426,7 +431,7 @@ const createDownloadRequest = async (req, res) => {
         vendor_id && vendor_id !== "all" ? vendor_id : null,
         campaign_id && campaign_id !== "all" ? campaign_id : null,
         quantity,
-        states && states.length ? JSON.stringify(states) : null,
+        states && states.length ? states : null,
         min_age || null,
         max_age || null,
         min_duration || null,
