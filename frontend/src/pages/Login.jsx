@@ -16,12 +16,11 @@ const Login = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        // const token = recaptchaRef.current?.getValue();
-        // if (!token) {
-        //     setError('Please complete the reCAPTCHA to continue');
-        //     return;
-        // }
-        const token = "bypassed";
+        const token = recaptchaRef.current?.getValue();
+        if (!token) {
+            setError('Please complete the reCAPTCHA to continue');
+            return;
+        }
 
         setLoading(true);
         setError('');

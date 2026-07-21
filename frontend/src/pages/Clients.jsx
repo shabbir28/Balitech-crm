@@ -154,14 +154,14 @@ const Clients = () => {
                     { icon: Users2, label: 'Total Clients', value: clients.length, color: 'blue' },
                     { icon: Target, label: 'With Campaign', value: clients.filter(c => c.campaign_id).length, color: 'indigo' },
                     { icon: Hash, label: 'With DID', value: clients.filter(c => c.did).length, color: 'emerald' },
-                ].map(({ icon: Icon, label, value, color }) => (
-                    <div key={label} className={`bg-[#1e1e2d] border border-white/5 rounded-2xl px-5 py-4 flex items-center gap-4 shadow-lg col-span-${label === 'With DID' ? '2 sm:col-span-1' : '1'}`}>
-                        <div className={`w-10 h-10 rounded-xl bg-${color}-500/10 border border-${color}-500/20 flex items-center justify-center shrink-0`}>
-                            <Icon className={`w-5 h-5 text-${color}-400`} />
+                ].map((stat) => (
+                    <div key={stat.label} className={`bg-[#1e1e2d] border border-white/5 rounded-2xl px-5 py-4 flex items-center gap-4 shadow-lg col-span-${stat.label === 'With DID' ? '2 sm:col-span-1' : '1'}`}>
+                        <div className={`w-10 h-10 rounded-xl bg-${stat.color}-500/10 border border-${stat.color}-500/20 flex items-center justify-center shrink-0`}>
+                            <stat.icon className={`w-5 h-5 text-${stat.color}-400`} />
                         </div>
                         <div>
-                            <div className="text-2xl font-extrabold text-white">{value}</div>
-                            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{label}</div>
+                            <div className="text-2xl font-extrabold text-white">{stat.value}</div>
+                            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{stat.label}</div>
                         </div>
                     </div>
                 ))}

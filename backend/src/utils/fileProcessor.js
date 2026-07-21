@@ -662,7 +662,7 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
       if (i === 0 && jsonData[i].length > 0) {
         const rowLower = jsonData[i].map((v) => String(v).trim().toLowerCase());
         const hasHeader = rowLower.some((v) =>
-          ["phone", "number", "name", "email", "disp", "status"].some((k) =>
+          ["phone", "number", "name", "email", "disp", "status", "caller", "duration", "zip", "jornaya", "dob", "age"].some((k) =>
             v.includes(k),
           ),
         );
@@ -724,10 +724,10 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
       if (isFirstRow) {
         isFirstRow = false;
         // Stricter header check: must have multiple columns to be a valid header for CSV/TXT
-        if (values.length > 1) {
+        if (values.length > 0) {
           const rowLower = values.map((v) => v.toLowerCase());
           const hasHeader = rowLower.some((v) =>
-            ["phone", "number", "name", "email", "disp", "status"].some((k) =>
+            ["phone", "number", "name", "email", "disp", "status", "caller", "duration", "zip", "jornaya", "dob", "age"].some((k) =>
               v.includes(k),
             ),
           );

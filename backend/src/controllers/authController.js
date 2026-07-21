@@ -5,25 +5,25 @@ const db = require("../config/db");
 const login = async (req, res) => {
   const { username, password, captchaToken } = req.body;
   try {
-    // if (!captchaToken) {
-    //   return res.status(400).json({ message: "reCAPTCHA token is missing" });
-    // }
+    if (!captchaToken) {
+      return res.status(400).json({ message: "reCAPTCHA token is missing" });
+    }
 
-    // const verifyUrl = `https://www.google.com/recaptcha/api/siteverify`;
-    // const verifyResponse = await fetch(verifyUrl, {
-    //   method: "POST",
-    //   headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    //   body: `secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${captchaToken}`,
-    // });
-    // const verifyData = await verifyResponse.json();
+    const verifyUrl = `https://www.google.com/recaptcha/api/siteverify`;
+    const verifyResponse = await fetch(verifyUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${captchaToken}`,
+    });
+    const verifyData = await verifyResponse.json();
 
-    // if (!verifyData.success) {
-    //   console.error("reCAPTCHA Verification Failed:", verifyData);
-    //   return res.status(400).json({
-    //     message: "reCAPTCHA verification failed",
-    //     errors: verifyData["error-codes"],
-    //   });
-    // }
+    if (!verifyData.success) {
+      console.error("reCAPTCHA Verification Failed:", verifyData);
+      return res.status(400).json({
+        message: "reCAPTCHA verification failed",
+        errors: verifyData["error-codes"],
+      });
+    }
 
 
     const { rows } = await db.query(

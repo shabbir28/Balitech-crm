@@ -67,7 +67,7 @@ const uploadLeads = async (req, res) => {
 
         deduped.forEach((record) => {
           valueStrings.push(
-            `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7})`,
+            `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10}, $${paramIndex + 11}, $${paramIndex + 12}, $${paramIndex + 13})`,
           );
           values.push(
             record.name || null,
@@ -78,15 +78,21 @@ const uploadLeads = async (req, res) => {
             vendor_id,
             record.disposition || null,
             record.age || null,
+            record.dob || null,
+            record.zipcode || null,
+            record.jornaya_lead_id || null,
+            record.state || null,
+            record.caller_id || null,
+            record.duration || null,
           );
-          paramIndex += 8;
+          paramIndex += 14;
         });
 
         if (values.length > 0) {
           const query = `
-                        INSERT INTO premium_data (name, phone, email, country_code, area_code, vendor_id, disposition, age)
+                        INSERT INTO premium_data (name, phone, email, country_code, area_code, vendor_id, disposition, age, dob, zipcode, jornaya_lead_id, state, caller_id, duration)
                         VALUES ${valueStrings.join(",")}
-                        ON CONFLICT (phone, workspace) DO UPDATE
+                        ON CONFLICT (phone) DO UPDATE
                         SET disposition = CASE
                           WHEN EXCLUDED.disposition IS NOT NULL AND EXCLUDED.disposition <> '' THEN EXCLUDED.disposition
                           ELSE premium_data.disposition
