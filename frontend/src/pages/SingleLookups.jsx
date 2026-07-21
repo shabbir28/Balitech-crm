@@ -164,6 +164,7 @@ const SingleLookups = () => {
     const [startDate, setStartDate] = useState('');
     const [endDate,   setEndDate]   = useState('');
     const [page,      setPage]      = useState(1);
+    const [presenceFilter, setPresenceFilter] = useState('');
 
     // Debounce search
     useEffect(() => {
@@ -181,7 +182,7 @@ const SingleLookups = () => {
         setLoading(true);
         setError(null);
         try {
-            const res = await fetchSingleLookups({ page, limit: 20, search: debouncedSearch, startDate, endDate });
+            const res = await fetchSingleLookups({ page, limit: 20, search: debouncedSearch, startDate, endDate, presenceFilter });
             const { data: rows, pagination: pag } = res.data;
             setData(rows);
             setPagination(pag);
@@ -194,7 +195,7 @@ const SingleLookups = () => {
         } finally {
             setLoading(false);
         }
-    }, [page, debouncedSearch, startDate, endDate]);
+    }, [page, debouncedSearch, startDate, endDate, presenceFilter]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -223,9 +224,9 @@ const SingleLookups = () => {
     };
 
     const summaryCards = [
-        { label: 'Total Lookups', value: fmtNum(summary.files), icon: Search, cls: 'text-blue-400', bg: 'from-blue-500/10 to-blue-500/5', border: 'border-blue-500/20' },
-        { label: 'Already Present', value: fmtNum(pagination.alreadyPresent || 0), icon: InboxIcon, cls: 'text-amber-400', bg: 'from-amber-500/10 to-amber-500/5', border: 'border-amber-500/20' },
-        { label: 'Fresh Lookups', value: fmtNum(pagination.fresh || 0), icon: Search, cls: 'text-emerald-400', bg: 'from-emerald-500/10 to-emerald-500/5', border: 'border-emerald-500/20' },
+        { id: '', label: 'Total Lookups', value: fmtNum(summary.files), icon: Search, cls: 'text-blue-400', bg: 'from-blue-500/10 to-blue-500/5', border: 'border-blue-500/20' },
+        { id: 'already_present', label: 'Already Present', value: fmtNum(pagination.alreadyPresent || 0), icon: InboxIcon, cls: 'text-amber-400', bg: 'from-amber-500/10 to-amber-500/5', border: 'border-amber-500/20' },
+        { id: 'fresh', label: 'Fresh Lookups', value: fmtNum(pagination.fresh || 0), icon: Search, cls: 'text-emerald-400', bg: 'from-emerald-500/10 to-emerald-500/5', border: 'border-emerald-500/20' },
     ];
 
     return (
@@ -251,8 +252,16 @@ const SingleLookups = () => {
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
                 {summaryCards.map(c => {
                     const Icon = c.icon;
+                    const isActive = presenceFilter === c.id;
                     return (
-                        <div key={c.label} className={`rounded-2xl border ${c.border} bg-gradient-to-br ${c.bg} p-4 flex items-center gap-3`}>
+                        <div 
+                            key={c.label} 
+                            onClick={() => {
+                                setPresenceFilter(c.id);
+                                setPage(1);
+                            }}
+                            className={`rounded-2xl border ${isActive ? 'ring-2 ring-brand-500/50' : ''} ${c.border} bg-gradient-to-br ${c.bg} p-4 flex items-center gap-3 cursor-pointer hover:scale-[1.02] transition-transform`}
+                        >
                             <div className={`h-9 w-9 rounded-xl bg-white/5 border border-white/8 flex items-center justify-center shrink-0 ${c.cls}`}>
                                 <Icon className="h-4 w-4" />
                             </div>
@@ -337,7 +346,7 @@ const SingleLookups = () => {
                         <table className="w-full min-w-[900px]">
                             <thead>
                                 <tr className="border-b border-white/[0.05]">
-                                    {['Phone Number', 'DNC Status', 'Line Type', 'Source', 'IP Address', 'Checked At'].map(h => (
+                                    {['Phone Number', 'DNC Status', 'Line Type', 'Source', 'IP Address', 'CRM Status', 'Checked At'].map(h => (
                                         <th key={h} className="px-4 py-3 text-left text-[10px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">{h}</th>
                                     ))}
                                 </tr>
@@ -364,6 +373,17 @@ const SingleLookups = () => {
                                         </td>
                                         <td className="px-4 py-3 whitespace-nowrap text-[12px] text-slate-400 font-mono">
                                             {row.ip_address || '—'}
+                                        </td>
+                                        <td className="px-4 py-3 whitespace-nowrap">
+                                            {row.is_already_present ? (
+                                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-500/10 text-amber-400 text-[11px] font-semibold border border-amber-500/20">
+                                                    Already Present
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-400 text-[11px] font-semibold border border-emerald-500/20">
+                                                    Fresh
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="px-4 py-3 whitespace-nowrap text-[12px] text-slate-400">{fmtDate(row.checked_at)}</td>
                                     </tr>

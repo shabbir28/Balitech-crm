@@ -253,6 +253,7 @@ const getSingleChecks = async (req, res) => {
             status = '',
             startDate = '',
             endDate = '',
+            presenceFilter = '',
         } = req.query;
 
         const pageNum  = Math.max(1, parseInt(page, 10) || 1);
@@ -284,6 +285,11 @@ const getSingleChecks = async (req, res) => {
             conditions.push(`checked_at <= $${p}`);
             params.push(end);
             p++;
+        }
+        if (presenceFilter === 'already_present') {
+            conditions.push(`is_already_present = true`);
+        } else if (presenceFilter === 'fresh') {
+            conditions.push(`is_already_present = false`);
         }
 
         const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
