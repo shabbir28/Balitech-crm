@@ -55,6 +55,7 @@ const vanSessionRoutes = require("./routes/van_sessions");
 const vanJobRoutes = require("./routes/van_jobs");
 const vanDataRoutes = require("./routes/van_data");
 const vanDownloadRoutes = require("./routes/van_download");
+const mixedDownloadRoutes = require("./routes/mixed_download");
 
 const clientRoutes = require("./routes/clientRoutes");
 const separationRoutes = require("./routes/separationRoutes");
@@ -215,6 +216,7 @@ app.use("/api/van-sessions", vanSessionRoutes);
 app.use("/api/van-jobs", vanJobRoutes);
 app.use("/api/van-data", vanDataRoutes);
 app.use("/api/van-download", vanDownloadRoutes);
+app.use("/api/mixed-download", mixedDownloadRoutes);
 
 // Clients and Separation
 app.use("/api/clients", clientRoutes);

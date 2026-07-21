@@ -7,7 +7,7 @@ import {
     LayoutTemplate, Building2, Target, FolderUp, Scale, Layers,
     FileStack, ShieldBan, FolderDown, TerminalSquare, UserCheck,
     GitCompareArrows, ClipboardList, Bell, CheckCheck,
-    Download, CheckCircle2, XCircle, Users, History, ShieldCheck, FileCheck2, Filter, Truck, Pickaxe, Users2
+    Download, CheckCircle2, XCircle, Users, History, ShieldCheck, FileCheck2, Filter, Truck, Pickaxe, Users2, Database
 } from 'lucide-react';
 
 // ─── Notification Bell Component ─────────────────────────────
@@ -291,6 +291,11 @@ const Layout = ({ children }) => {
         { to: '/van-already-downloaded', icon: History, label: 'Already Downloaded' },
     ];
 
+    const MIXED_NAV_ITEMS = [
+        { to: '/mixed-download', icon: FolderDown, label: 'Mixed Download' },
+        { to: '/mixed-already-downloaded', icon: History, label: 'Already Downloaded' },
+    ];
+
     const isRefinePath = location.pathname.startsWith('/refine');
     const [refineMenuOpen, setRefineMenuOpen] = useState(isRefinePath);
 
@@ -327,6 +332,15 @@ const Layout = ({ children }) => {
         }
     }, [location.pathname]);
 
+    const isMixedPath = location.pathname.startsWith('/mixed');
+    const [mixedMenuOpen, setMixedMenuOpen] = useState(isMixedPath);
+
+    useEffect(() => {
+        if (location.pathname.startsWith('/mixed')) {
+            setMixedMenuOpen(true);
+        }
+    }, [location.pathname]);
+
     const isDncCheckerPath = location.pathname.startsWith('/dnc-checker');
     const [dncCheckerMenuOpen, setDncCheckerMenuOpen] = useState(isDncCheckerPath);
 
@@ -354,6 +368,11 @@ const Layout = ({ children }) => {
         { label: 'Compare',           path: '/compare',           roles: ['super_admin','admin'],        icon: <Scale className="h-4 w-4" /> },
         { label: 'Compare File',      path: '/compare-file',      roles: ['super_admin','admin'],        icon: <GitCompareArrows className="h-4 w-4" /> },
         { label: 'Sessions',          path: '/sessions',          roles: ['super_admin','admin'],        icon: <Layers className="h-4 w-4" /> },
+        { label: 'Van Desk Data',     path: '/van-data',          roles: ['super_admin','admin'],        icon: <Database className="h-4 w-4" /> },
+        { label: 'Van Desk Download', path: '/van-download',      roles: ['super_admin','admin'],        icon: <FolderDown className="h-4 w-4" /> },
+        { label: 'Van Already Down.', path: '/van-already-downloaded', roles: ['super_admin','admin'],   icon: <History className="h-4 w-4" /> },
+        { label: 'Mixed Download',    path: '/mixed-download',    roles: ['super_admin','admin'],        icon: <FolderDown className="h-4 w-4" /> },
+        { label: 'Mixed Already Down.', path: '/mixed-already-downloaded', roles: ['super_admin','admin'], icon: <History className="h-4 w-4" /> },
         { label: 'All Data',          path: '/leads',             roles: ['super_admin','admin'],        icon: <FileStack className="h-4 w-4" /> },
         { label: 'DNC',               path: '/dnc',               roles: ['super_admin','admin'],        icon: <ShieldBan className="h-4 w-4" /> },
         { label: 'Download Data',     path: '/download',          roles: ['super_admin','admin'],        icon: <FolderDown className="h-4 w-4" /> },
@@ -704,6 +723,43 @@ const Layout = ({ children }) => {
                                     }`}
                                 >
                                     {VAN_NAV_ITEMS.map((item) => {
+                                        const ItemIcon = item.icon;
+                                        return (
+                                            <NavLink key={item.to} to={item.to} className={getSubClassName}>
+                                                <ItemIcon className="h-[14px] w-[14px] shrink-0" />
+                                                <span>{item.label}</span>
+                                            </NavLink>
+                                        );
+                                    })}
+                                </div>
+                                </div>
+                            )}
+
+                            {/* MIXED DOWNLOAD Collapsible (Always available to super_admin/admin, no specific module needed, or maybe tie it to van_desk/premium/refine?) */}
+                            {(isSuperAdmin || isAdmin) && (
+                                <div className="mt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setMixedMenuOpen((open) => !open)}
+                                    className={`w-full flex items-center px-3.5 py-2.5 text-[13px] font-medium rounded-xl transition-all duration-200 gap-3 mb-0.5 border ${
+                                        isMixedPath
+                                            ? 'bg-gradient-to-r from-blue-500/15 to-transparent text-white border-blue-500/25'
+                                            : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border-transparent'
+                                    }`}
+                                >
+                                    <FolderDown className="h-[15px] w-[15px] shrink-0 text-blue-400" />
+                                    <span className="flex-1 text-left">Download Data</span>
+                                    <ChevronDown
+                                        className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${mixedMenuOpen ? 'rotate-180' : ''}`}
+                                    />
+                                </button>
+
+                                <div
+                                    className={`overflow-hidden transition-all duration-300 ease-out ${
+                                        mixedMenuOpen ? 'max-h-[520px] opacity-100 mt-1' : 'max-h-0 opacity-0'
+                                    }`}
+                                >
+                                    {MIXED_NAV_ITEMS.map((item) => {
                                         const ItemIcon = item.icon;
                                         return (
                                             <NavLink key={item.to} to={item.to} className={getSubClassName}>

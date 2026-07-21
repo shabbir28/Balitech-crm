@@ -66,6 +66,10 @@ import VanLeadsTable from './pages/VanLeadsTable';
 import VanDownloadLeads from './pages/VanDownloadLeads';
 import VanAlreadyDownloaded from './pages/VanAlreadyDownloaded';
 
+// Mixed Data Download
+import MixedDownloadLeads from './pages/MixedDownloadLeads';
+import MixedAlreadyDownloaded from './pages/MixedAlreadyDownloaded';
+
 import Clients from './pages/Clients';
 import SeparationUpload from './pages/SeparationUpload';
 
@@ -215,6 +219,10 @@ const AppRoutes = () => {
             <Route path="/van-data" element={<ProtectedRoute roles={['super_admin', 'admin']} module="van_desk"><VanLeadsTable /></ProtectedRoute>} />
             <Route path="/van-download" element={<ProtectedRoute roles={['super_admin', 'admin']} module="van_desk"><VanDownloadLeads /></ProtectedRoute>} />
             <Route path="/van-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin']} module="van_desk"><VanAlreadyDownloaded /></ProtectedRoute>} />
+
+            {/* MIXED DOWNLOAD MODULE */}
+            <Route path="/mixed-download" element={<ProtectedRoute roles={['super_admin', 'admin']}><MixedDownloadLeads /></ProtectedRoute>} />
+            <Route path="/mixed-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin']}><MixedAlreadyDownloaded /></ProtectedRoute>} />
 
             {/* Clients & Separation */}
             <Route path="/clients" element={<ProtectedRoute roles={['super_admin', 'admin']} module="core"><Clients /></ProtectedRoute>} />
