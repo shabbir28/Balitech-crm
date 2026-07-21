@@ -224,6 +224,8 @@ const SingleLookups = () => {
 
     const summaryCards = [
         { label: 'Total Lookups', value: fmtNum(summary.files), icon: Search, cls: 'text-blue-400', bg: 'from-blue-500/10 to-blue-500/5', border: 'border-blue-500/20' },
+        { label: 'Already Present', value: fmtNum(pagination.alreadyPresent || 0), icon: InboxIcon, cls: 'text-amber-400', bg: 'from-amber-500/10 to-amber-500/5', border: 'border-amber-500/20' },
+        { label: 'Fresh Lookups', value: fmtNum(pagination.fresh || 0), icon: Search, cls: 'text-emerald-400', bg: 'from-emerald-500/10 to-emerald-500/5', border: 'border-emerald-500/20' },
     ];
 
     return (
@@ -335,7 +337,7 @@ const SingleLookups = () => {
                         <table className="w-full min-w-[900px]">
                             <thead>
                                 <tr className="border-b border-white/[0.05]">
-                                    {['Phone Number', 'DNC Status', 'Line Type', 'Source', 'Checked At'].map(h => (
+                                    {['Phone Number', 'DNC Status', 'Line Type', 'Source', 'IP Address', 'Checked At'].map(h => (
                                         <th key={h} className="px-4 py-3 text-left text-[10px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">{h}</th>
                                     ))}
                                 </tr>
@@ -359,6 +361,9 @@ const SingleLookups = () => {
                                         </td>
                                         <td className="px-4 py-3 whitespace-nowrap text-[13px] text-slate-300 font-medium">
                                             {row.source}
+                                        </td>
+                                        <td className="px-4 py-3 whitespace-nowrap text-[12px] text-slate-400 font-mono">
+                                            {row.ip_address || '—'}
                                         </td>
                                         <td className="px-4 py-3 whitespace-nowrap text-[12px] text-slate-400">{fmtDate(row.checked_at)}</td>
                                     </tr>

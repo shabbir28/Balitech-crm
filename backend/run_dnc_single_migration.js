@@ -24,8 +24,10 @@ CREATE TABLE IF NOT EXISTS dnc_single_checks (
     created_at         TIMESTAMPTZ   DEFAULT CURRENT_TIMESTAMP
 );
 
--- In case table already exists without line_type, we can safely attempt to add it
+-- In case table already exists without line_type, ip_address, is_already_present, we can safely attempt to add them
 ALTER TABLE dnc_single_checks ADD COLUMN IF NOT EXISTS line_type VARCHAR(50);
+ALTER TABLE dnc_single_checks ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45);
+ALTER TABLE dnc_single_checks ADD COLUMN IF NOT EXISTS is_already_present BOOLEAN DEFAULT false;
 
 CREATE INDEX IF NOT EXISTS idx_dnc_single_checks_phone_number ON dnc_single_checks (phone_number);
 CREATE INDEX IF NOT EXISTS idx_dnc_single_checks_checked_at ON dnc_single_checks (checked_at DESC);

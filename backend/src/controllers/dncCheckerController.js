@@ -105,6 +105,7 @@ const createSingleDncResult = async (req, res) => {
             source,
             checkedAt,
             lineType,
+            ipAddress,
         } = req.body;
 
         if (!phoneNumber || typeof phoneNumber !== 'string' || !phoneNumber.trim()) {
@@ -114,18 +115,36 @@ const createSingleDncResult = async (req, res) => {
             return res.status(400).json({ success: false, message: 'dncStatus is required.' });
         }
 
+        const cleanPhone = phoneNumber.trim();
+
+        // Check if phone exists in any of the CRM data tables
+        const existingCheck = await db.query(`
+            SELECT 1 FROM leads WHERE phone = $1
+            UNION ALL
+            SELECT 1 FROM van_data WHERE phone = $1
+            UNION ALL
+            SELECT 1 FROM refine_data WHERE phone = $1
+            UNION ALL
+            SELECT 1 FROM premium_data WHERE phone = $1
+            LIMIT 1
+        `, [cleanPhone]);
+
+        const isAlreadyPresent = existingCheck.rows.length > 0;
+
         const params = [
-            phoneNumber.trim(),                              // $1
+            cleanPhone,                                      // $1
             dncStatus.trim(),                                // $2
             source ? String(source).trim() : 'checkdncnumber.com', // $3
             checkedAt ? new Date(checkedAt) : new Date(),   // $4
             lineType ? String(lineType).trim() : null,       // $5
+            ipAddress ? String(ipAddress).trim() : null,     // $6
+            isAlreadyPresent,                                // $7
         ];
 
         const sql = `
             INSERT INTO dnc_single_checks
-                (phone_number, dnc_status, source, checked_at, line_type)
-            VALUES ($1, $2, $3, $4, $5)
+                (phone_number, dnc_status, source, checked_at, line_type, ip_address, is_already_present)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING *
         `;
 
@@ -270,10 +289,16 @@ const getSingleChecks = async (req, res) => {
         const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
         const countResult = await db.query(
-            `SELECT COUNT(*) AS total FROM dnc_single_checks ${where}`,
+            `SELECT 
+                COUNT(*) AS total,
+                COALESCE(SUM(CASE WHEN is_already_present = true THEN 1 ELSE 0 END), 0) AS already_present_count,
+                COALESCE(SUM(CASE WHEN is_already_present = false THEN 1 ELSE 0 END), 0) AS fresh_count
+             FROM dnc_single_checks ${where}`,
             params
         );
         const total      = parseInt(countResult.rows[0].total, 10);
+        const alreadyPresent = parseInt(countResult.rows[0].already_present_count, 10);
+        const fresh = parseInt(countResult.rows[0].fresh_count, 10);
         const totalPages = Math.ceil(total / limitNum);
 
         const dataResult = await db.query(
@@ -284,7 +309,7 @@ const getSingleChecks = async (req, res) => {
         return res.json({
             success: true,
             data: dataResult.rows,
-            pagination: { page: pageNum, limit: limitNum, total, totalPages },
+            pagination: { page: pageNum, limit: limitNum, total, totalPages, alreadyPresent, fresh },
         });
     } catch (err) {
         console.error('getSingleChecks error:', err);
