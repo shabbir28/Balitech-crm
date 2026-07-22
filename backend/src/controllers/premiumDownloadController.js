@@ -424,7 +424,7 @@ async function executeDownload(
         SET status = 'downloaded', downloaded_at = CURRENT_TIMESTAMP
         FROM selected_leads sl
         WHERE l.id = sl.id
-        RETURNING l.name, l.phone, l.email, l.country_code, l.area_code, l.disposition, l.age, l.dob, l.zipcode, l.jornaya_lead_id, l.state, l.caller_id, l.duration
+        RETURNING l.name, l.phone, l.email, l.country_code, l.area_code, l.disposition, l.age, l.dob, l.zipcode, l.jornaya_lead_id, l.state, COALESCE(NULLIF(TRIM(l.caller_id), ''), l.phone, '') AS caller_id, l.duration
     `;
   params.push(quantity);
 

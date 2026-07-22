@@ -63,6 +63,25 @@ const SelectInput = ({ value, onChange, disabled, required, children }) => (
     </div>
 );
 
+const downloadFromApiUrl = async (url, filename) => {
+    if (!url) return;
+
+    const apiPath = String(url).startsWith('/api/')
+        ? String(url).replace(/^\/api/, '')
+        : String(url);
+
+    const res = await api.get(apiPath, { responseType: 'blob' });
+
+    const blobUrl = URL.createObjectURL(new Blob([res.data], { type: 'text/csv;charset=utf-8;' }));
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = filename || 'mixed_download.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+};
+
 const downloadBlob = (content, filename) => {
     const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -81,18 +100,32 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
     const { summary, badCsv } = data;
     const isPending = summary.scrubPending === true || scrubPolling;
 
-    const handleDownloadBad = () => {
+    const handleDownloadBad = async () => {
+        const badFileName = data.badFileName || (summary.fileName || `mixed_leads_${Date.now()}.csv`).replace('.csv', '_bad_dnc.csv');
+
+        if (data.badDownloadUrl) {
+            return downloadFromApiUrl(data.badDownloadUrl, badFileName);
+        }
+
         if (!badCsv) return;
-        const badFileName = (summary.fileName || `mixed_leads_${Date.now()}.csv`).replace('.csv', '_bad_leads.csv');
         downloadBlob(badCsv, badFileName);
     };
 
-    const handleDownloadGood = () => {
+    const handleDownloadGood = async () => {
+        const goodFileName = data.fileName || summary.fileName || `mixed_leads_${Date.now()}.csv`;
+
+        if (data.downloadUrl) {
+            return downloadFromApiUrl(data.downloadUrl, goodFileName);
+        }
+
         if (!data.csv) return;
-        downloadBlob(data.csv, summary.fileName || `mixed_leads_${Date.now()}.csv`);
+        downloadBlob(data.csv, goodFileName);
     };
 
-    const hasBadLeads = ((summary.blacklist || 0) + (summary.stateDnc || 0) + (summary.federalDnc || 0) + (summary.badPhone || 0)) > 0;
+        const badTotal = Number(summary.blacklist || 0) + Number(summary.stateDnc || 0) + Number(summary.federalDnc || 0) + Number(summary.badPhone || 0);
+    const goodTotal = Number(summary.good || data.count || 0);
+    const displayTotal = goodTotal + badTotal;
+    const hasBadLeads = badTotal > 0;
 
     if (summary.scrubFailed) {
         return (
@@ -150,7 +183,7 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
             <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5 ${isPending ? 'opacity-60' : ''}`}>
                 <div className="bg-slate-500/5 border border-white/5 rounded-xl p-2.5 text-center">
                     <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Total</p>
-                    <p className="text-base font-mono font-black text-white">{summary.total?.toLocaleString()}</p>
+                    <p className="text-base font-mono font-black text-white">{displayTotal.toLocaleString()}</p>
                 </div>
                 <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-2.5 text-center">
                     <p className="text-[9px] text-emerald-400 font-bold uppercase tracking-wider mb-0.5">Good Leads</p>
@@ -182,7 +215,7 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
                 <div className="flex flex-col gap-3">
                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Choose Download</p>
                     <div className="grid grid-cols-1 gap-2">
-                        {data.csv && (
+                        {(data.csv || data.downloadUrl) && (
                             <button
                                 type="button"
                                 onClick={handleDownloadGood}
@@ -192,38 +225,17 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
                                 Download Good Leads Only&nbsp;&nbsp;<span className="bg-emerald-500/20 px-2 py-0.5 rounded-full font-mono">{summary.good?.toLocaleString()}</span>
                             </button>
                         )}
-                        {hasBadLeads && badCsv && (
+                        {hasBadLeads && (badCsv || data.badDownloadUrl) && (
                             <button
                                 type="button"
                                 onClick={handleDownloadBad}
                                 className="w-full flex items-center justify-center gap-2 py-3 bg-red-500/10 hover:bg-red-500/15 border border-red-500/20 hover:border-red-400/40 text-red-400 font-bold text-xs rounded-xl transition-all"
                             >
                                 <FileDown className="h-4 w-4 shrink-0" />
-                                Download Bad/DNC Leads Only&nbsp;&nbsp;<span className="bg-red-500/20 px-2 py-0.5 rounded-full font-mono">{((summary.blacklist || 0) + (summary.stateDnc || 0) + (summary.federalDnc || 0) + (summary.badPhone || 0)).toLocaleString()}</span>
+                                Download Bad/DNC Leads Only&nbsp;&nbsp;<span className="bg-red-500/20 px-2 py-0.5 rounded-full font-mono">{badTotal.toLocaleString()}</span>
                             </button>
                         )}
-                        {(data.csv || badCsv) && (
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    const base = summary.fileName || `mixed_leads_${Date.now()}.csv`;
-                                    const allName = base.replace(/\.csv$/i, '_all.csv');
-                                    let merged = '';
-                                    if (data.csv && badCsv && String(badCsv).trim()) {
-                                        const goodLines = String(data.csv).trim().split('\n');
-                                        const badLines = String(badCsv).trim().split('\n').slice(1);
-                                        merged = [...goodLines, ...badLines].join('\n');
-                                    } else {
-                                        merged = data.csv || badCsv || '';
-                                    }
-                                    downloadBlob(merged, allName);
-                                }}
-                                className="w-full flex items-center justify-center gap-2 py-3 bg-violet-500/10 hover:bg-violet-500/15 border border-violet-500/20 hover:border-violet-400/40 text-violet-400 font-bold text-xs rounded-xl transition-all"
-                            >
-                                <FileDown className="h-4 w-4 shrink-0" />
-                                Download Full File (Good + Bad)&nbsp;&nbsp;<span className="bg-violet-500/20 px-2 py-0.5 rounded-full font-mono">{summary.total?.toLocaleString()}</span>
-                            </button>
-                        )}
+
                     </div>
                 </div>
             )}

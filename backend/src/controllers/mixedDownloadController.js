@@ -1,4 +1,6 @@
 const db = require("../config/db");
+const fs = require("fs");
+const path = require("path");
 const { Parser } = require("json2csv");
 const { areaCodesMap } = require("../utils/areaCodes");
 const { scrubPhones, normalizePhone } = require("../utils/blacklistAlliance");
@@ -21,6 +23,20 @@ const CSV_BAD_FIELDS = [
 ];
 
 const DNC_UPSERT_BATCH_SIZE = 3000;
+
+const MIXED_EXPORT_DIR = path.join(__dirname, "../../exports/mixed-downloads");
+
+function ensureMixedExportDir() {
+  fs.mkdirSync(MIXED_EXPORT_DIR, { recursive: true });
+}
+
+function safeFileName(name) {
+  return String(name || "").replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+function mixedDownloadUrl(fileName) {
+  return `/api/mixed-download/files/${encodeURIComponent(fileName)}`;
+}
 
 const upsertDeadNumbersBatched = async ({ queryFn, badItems }) => {
   if (!Array.isArray(badItems) || badItems.length === 0) return;
@@ -104,8 +120,8 @@ function buildFilters(tableName, { data_campaign, states, min_age, max_age, incl
 
   if (data_campaign && data_campaign !== "all") {
     if (tableName === "van_data") {
-      filters.push(`EXISTS (SELECT 1 FROM van_sessions s WHERE s.id = van_data.session_id AND s.campaign_type = $${idx++})`);
-      params.push(String(data_campaign));
+      // Van campaign_type is numeric/inconsistent in van_sessions, so skip Van campaign filter.
+      // Vendor filter is already applied for Van data.
     } else {
       filters.push(`campaign_type = $${idx++}`);
       params.push(String(data_campaign));
@@ -202,27 +218,48 @@ const downloadMixedData = async (req, res) => {
         const isBadPhone = (rowPhone) => badPhoneSet.has(normalizePhone(rowPhone));
         const scrubInfoByPhone = new Map(scrubResult.bad.map((b) => [b.phone, b]));
 
-        await client.query("BEGIN");
-        try {
-          // Revert bad rows in each table
+          // Do not block the download response while marking DNC rows.
+          // Large mixed exports can have 10k+ bad numbers; update them in background.
           const badVan = vanRows.filter(r => isBadPhone(r.phone)).map(r => r.phone);
-          if (badVan.length > 0) await client.query(`UPDATE van_data SET status='DNC', downloaded_at=null WHERE phone = ANY($1::text[])`, [badVan]);
-
           const badRefine = refineRows.filter(r => isBadPhone(r.phone)).map(r => r.phone);
-          if (badRefine.length > 0) await client.query(`UPDATE refine_data SET status='DNC', downloaded_at=null WHERE phone = ANY($1::text[])`, [badRefine]);
-
           const badPremium = premiumRows.filter(r => isBadPhone(r.phone)).map(r => r.phone);
-          if (badPremium.length > 0) await client.query(`UPDATE premium_data SET status='DNC', downloaded_at=null WHERE phone = ANY($1::text[])`, [badPremium]);
 
-          await upsertDeadNumbersBatched({
-            queryFn: client.query.bind(client),
-            badItems: scrubResult.bad
+          console.log(`[Mixed Download] Queuing background DNC updates: van=${badVan.length}, refine=${badRefine.length}, premium=${badPremium.length}, dead=${scrubResult.bad.length}`);
+
+          setImmediate(() => {
+            (async () => {
+              let bgClient;
+              try {
+                bgClient = await db.getClient();
+                await bgClient.query("BEGIN");
+
+                if (badVan.length > 0) {
+                  await bgClient.query(`UPDATE van_data SET status='DNC', downloaded_at=null WHERE phone = ANY($1::varchar[])`, [badVan]);
+                }
+
+                if (badRefine.length > 0) {
+                  await bgClient.query(`UPDATE refine_data SET status='DNC', downloaded_at=null WHERE phone = ANY($1::varchar[])`, [badRefine]);
+                }
+
+                if (badPremium.length > 0) {
+                  await bgClient.query(`UPDATE premium_data SET status='DNC', downloaded_at=null WHERE phone = ANY($1::varchar[])`, [badPremium]);
+                }
+
+                await upsertDeadNumbersBatched({
+                  queryFn: bgClient.query.bind(bgClient),
+                  badItems: scrubResult.bad
+                });
+
+                await bgClient.query("COMMIT");
+                console.log(`[Mixed Download] Background DNC updates completed: totalBad=${scrubResult.bad.length}`);
+              } catch (bgErr) {
+                if (bgClient) await bgClient.query("ROLLBACK").catch(() => {});
+                console.error("[Mixed Download] Background DNC update failed:", bgErr.message);
+              } finally {
+                if (bgClient) bgClient.release();
+              }
+            })();
           });
-          await client.query("COMMIT");
-        } catch (badErr) {
-          await client.query("ROLLBACK").catch(() => {});
-          throw badErr;
-        }
 
         const badLeads = allLeads.filter((r) => isBadPhone(r.phone));
         badRowsWithState = badLeads.map((r) => {
@@ -285,7 +322,8 @@ const downloadMixedData = async (req, res) => {
     const logId = logRes.rows[0]?.id;
 
     const summaryData = {
-      total: allLeads.length,
+        total: rowsWithState.length + badRowsWithState.length,
+        requested: Number(quantity),
       fileName,
       blacklist: blacklistCount,
       suppress: 0,
@@ -301,23 +339,44 @@ const downloadMixedData = async (req, res) => {
       scrubFailed: scrubErrors > 0 && finalRows.length === allLeads.length
     };
 
-    const responseBody = {
-      fileName,
-      logId,
-      count: rowsWithState.length,
-      csv,
-      badCsv,
-      summary: summaryData,
-    };
+      ensureMixedExportDir();
 
-    if (logId) {
-      db.query("UPDATE mixed_download_logs SET csv_payload=$1 WHERE id=$2", [
-        JSON.stringify(responseBody),
+      const safeGoodFile = safeFileName(fileName);
+      const badFileName = safeGoodFile.replace(/\.csv$/i, "_bad_dnc.csv");
+
+      const goodPath = path.join(MIXED_EXPORT_DIR, safeGoodFile);
+      const badPath = path.join(MIXED_EXPORT_DIR, badFileName);
+
+      const hasGoodCsv = csv && String(csv).trim();
+      const hasBadCsv = badCsv && String(badCsv).trim();
+
+      if (hasGoodCsv) {
+        fs.writeFileSync(goodPath, csv, "utf8");
+      }
+
+      if (hasBadCsv) {
+        fs.writeFileSync(badPath, badCsv, "utf8");
+      }
+
+      const responseBody = {
+        fileName: safeGoodFile,
         logId,
-      ]).catch(() => {});
-    }
+        count: rowsWithState.length,
+        downloadUrl: hasGoodCsv ? mixedDownloadUrl(safeGoodFile) : null,
+        badFileName: hasBadCsv ? badFileName : null,
+        badDownloadUrl: hasBadCsv ? mixedDownloadUrl(badFileName) : null,
+        summary: summaryData,
+      };
 
-    return res.status(200).json(responseBody);
+      if (logId) {
+        db.query("UPDATE mixed_download_logs SET csv_payload=$1 WHERE id=$2", [
+          JSON.stringify(responseBody),
+          logId,
+        ]).catch((e) => console.error("[Mixed Download] log payload update failed:", e.message));
+      }
+
+      console.log(`[Mixed Download] Sending response: count=${responseBody.count}, downloadUrl=${responseBody.downloadUrl}, badDownloadUrl=${responseBody.badDownloadUrl}`);
+      return res.status(200).json(responseBody);
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
     console.error("Mixed Download Error:", err);
@@ -353,8 +412,10 @@ const getAlreadyDownloaded = async (req, res) => {
       let fileName = `mixed_download_${row.id}.csv`;
       if (row.csv_payload) {
         try {
-          const payload = JSON.parse(row.csv_payload);
-          canRedownload = Boolean(payload.csv);
+          const payload = typeof row.csv_payload === "string"
+            ? JSON.parse(row.csv_payload)
+            : row.csv_payload;
+          canRedownload = Boolean(payload.csv || payload.downloadUrl || payload.badDownloadUrl);
           fileName = payload.fileName || fileName;
         } catch (_) {}
       }
@@ -382,19 +443,79 @@ const getAlreadyDownloaded = async (req, res) => {
 
 const getDownloadFile = async (req, res) => {
   const { id } = req.params;
+
   try {
     const result = await db.query("SELECT csv_payload FROM mixed_download_logs WHERE id=$1", [id]);
-    if (result.rows.length === 0) return res.status(404).json({ message: "Record not found" });
-    if (!result.rows[0].csv_payload) return res.status(404).json({ message: "No stored file" });
-    res.json(JSON.parse(result.rows[0].csv_payload));
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Record not found" });
+    }
+
+    if (!result.rows[0].csv_payload) {
+      return res.status(404).json({ message: "No stored file" });
+    }
+
+    const payload = typeof result.rows[0].csv_payload === "string"
+      ? JSON.parse(result.rows[0].csv_payload)
+      : result.rows[0].csv_payload;
+
+    const fileNameFromUrl = (url) => {
+      if (!url) return "";
+      const clean = String(url).split("?")[0];
+      return decodeURIComponent(clean.substring(clean.lastIndexOf("/") + 1));
+    };
+
+    const readExportFile = (url, fallbackFileName) => {
+      const name = safeFileName(fileNameFromUrl(url) || fallbackFileName || "");
+      if (!name) return "";
+
+      const filePath = path.join(MIXED_EXPORT_DIR, name);
+
+      if (!fs.existsSync(filePath)) {
+        console.error("[Mixed Download] stored export file missing:", filePath);
+        return "";
+      }
+
+      return fs.readFileSync(filePath, "utf8");
+    };
+
+    const csv = payload.csv || readExportFile(payload.downloadUrl, payload.fileName);
+    const badCsv = payload.badCsv || readExportFile(payload.badDownloadUrl, payload.badFileName);
+
+    if (!csv && !badCsv) {
+      return res.status(404).json({ message: "File data not found or expired." });
+    }
+
+    return res.json({
+      ...payload,
+      csv,
+      badCsv
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+    console.error("Mixed getDownloadFile error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+const downloadMixedExportFile = async (req, res) => {
+  try {
+    const requested = safeFileName(req.params.fileName);
+    const filePath = path.join(MIXED_EXPORT_DIR, requested);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: "File not found" });
+    }
+
+    return res.download(filePath, requested);
+  } catch (err) {
+    console.error("Mixed export file download error:", err);
+    return res.status(500).json({ message: "Server error downloading file" });
   }
 };
 
 module.exports = {
   downloadMixedData,
+  downloadMixedExportFile,
   getAlreadyDownloaded,
   getDownloadFile
 };
