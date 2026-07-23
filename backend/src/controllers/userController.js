@@ -37,7 +37,7 @@ const getUsers = async (req, res) => {
     const countQuery = `SELECT COUNT(*) FROM users ${whereClause}`;
     const dataQuery = `
             SELECT id, username, first_name, last_name, email, phone, date_of_birth, 
-                   profile_picture, role, status, created_at, accessible_modules
+                   profile_picture, role, status, created_at, accessible_modules, accessible_campaigns
             FROM users 
             ${whereClause}
             ORDER BY created_at DESC
@@ -64,7 +64,7 @@ const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
     const { rows } = await db.query(
-      `SELECT id, username, first_name, last_name, email, phone, date_of_birth, profile_picture, role, status, created_at, accessible_modules FROM users WHERE id = $1`,
+      `SELECT id, username, first_name, last_name, email, phone, date_of_birth, profile_picture, role, status, created_at, accessible_modules, accessible_campaigns FROM users WHERE id = $1`,
       [id],
     );
     if (rows.length === 0)
@@ -88,6 +88,7 @@ const createUser = async (req, res) => {
     role,
     username,
     accessible_modules,
+    accessible_campaigns,
   } = req.body;
 
   if (!first_name || !last_name || !email || !password || !role) {
@@ -99,10 +100,10 @@ const createUser = async (req, res) => {
       });
   }
 
-  if (!["super_admin", "admin", "data_entry"].includes(role)) {
+  if (!["super_admin", "admin", "data_entry", "dialer_agent"].includes(role)) {
     return res
       .status(400)
-      .json({ message: "Role must be super_admin, admin, or data_entry" });
+      .json({ message: "Role must be super_admin, admin, data_entry, or dialer_agent" });
   }
 
   try {
@@ -133,9 +134,9 @@ const createUser = async (req, res) => {
     }
 
     const { rows } = await db.query(
-      `INSERT INTO users (username, first_name, last_name, email, phone, date_of_birth, password_hash, role, status, profile_picture, created_by, accessible_modules)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', $9, $10, $11)
-             RETURNING id, username, first_name, last_name, email, phone, role, status, profile_picture, created_at, accessible_modules`,
+      `INSERT INTO users (username, first_name, last_name, email, phone, date_of_birth, password_hash, role, status, profile_picture, created_by, accessible_modules, accessible_campaigns)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', $9, $10, $11, $12)
+             RETURNING id, username, first_name, last_name, email, phone, role, status, profile_picture, created_at, accessible_modules, accessible_campaigns`,
       [
         finalUsername,
         first_name,
@@ -148,6 +149,7 @@ const createUser = async (req, res) => {
         profile_picture,
         req.user.id,
         accessible_modules ? (typeof accessible_modules === 'string' ? accessible_modules : JSON.stringify(accessible_modules)) : JSON.stringify([]),
+        accessible_campaigns ? (typeof accessible_campaigns === 'string' ? accessible_campaigns : JSON.stringify(accessible_campaigns)) : JSON.stringify([]),
       ],
     );
 
@@ -156,7 +158,7 @@ const createUser = async (req, res) => {
       .json({ message: "User created successfully", user: rows[0] });
   } catch (err) {
     console.error("createUser error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error", error: err.message, stack: err.stack });
   }
 };
 
@@ -173,6 +175,7 @@ const updateUser = async (req, res) => {
     status,
     password,
     accessible_modules,
+    accessible_campaigns,
   } = req.body;
 
   try {
@@ -211,9 +214,10 @@ const updateUser = async (req, res) => {
                 status = COALESCE($7, status),
                 profile_picture = $8,
                 password_hash = $9,
-                accessible_modules = COALESCE($11, accessible_modules)
+                accessible_modules = COALESCE($11, accessible_modules),
+                accessible_campaigns = COALESCE($12, accessible_campaigns)
              WHERE id = $10
-             RETURNING id, username, first_name, last_name, email, phone, role, status, profile_picture, created_at, accessible_modules`,
+             RETURNING id, username, first_name, last_name, email, phone, role, status, profile_picture, created_at, accessible_modules, accessible_campaigns`,
       [
         first_name,
         last_name,
@@ -226,6 +230,7 @@ const updateUser = async (req, res) => {
         password_hash,
         id,
         accessible_modules ? (typeof accessible_modules === 'string' ? accessible_modules : JSON.stringify(accessible_modules)) : null,
+        accessible_campaigns ? (typeof accessible_campaigns === 'string' ? accessible_campaigns : JSON.stringify(accessible_campaigns)) : null,
       ],
     );
 

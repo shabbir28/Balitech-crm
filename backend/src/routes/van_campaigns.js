@@ -5,8 +5,8 @@ const auth = require('../middleware/auth');
 const authorizeRole = require('../middleware/role');
 
 router.use(auth);
-router.get('/', authorizeRole(['super_admin', 'admin', 'data_entry']), getCampaigns);
-router.get('/:id', authorizeRole(['super_admin', 'admin', 'data_entry']), getCampaign);
+router.get('/', authorizeRole(['super_admin', 'admin', 'data_entry', 'dialer_agent']), getCampaigns);
+router.get('/:id', authorizeRole(['super_admin', 'admin', 'data_entry', 'dialer_agent']), getCampaign);
 router.post('/', authorizeRole(['super_admin', 'admin']), createCampaign);
 router.put('/:id', authorizeRole(['super_admin', 'admin']), updateCampaign);
 router.delete('/:id', authorizeRole(['super_admin', 'admin']), deleteCampaign);

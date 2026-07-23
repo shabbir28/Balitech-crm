@@ -1,42 +1,26 @@
 const db = require("../config/db");
-const fs = require("fs");
-const path = require("path");
 const { Parser } = require("json2csv");
 const { areaCodesMap } = require("../utils/areaCodes");
 const { scrubPhones, normalizePhone } = require("../utils/blacklistAlliance");
 
 const CSV_GOOD_FIELDS = [
-  { label: 'First Name', value: 'first_name' },
-  { label: 'Last Name', value: 'last_name' },
-  { label: 'Phone No', value: 'phone' },
-  { label: 'Email', value: 'email' },
-  { label: 'Area Code', value: 'area_code' },
-  { label: 'State', value: 'state' },
-  { label: 'Age', value: 'age' },
-  { label: 'Source', value: 'source_module' } // added source to identify where it came from
+  { label: "First Name", value: "first_name" },
+  { label: "Last Name", value: "last_name" },
+  { label: "Phone No", value: "phone" },
+  { label: "Email", value: "email" },
+  { label: "Area Code", value: "area_code" },
+  { label: "State", value: "state" },
+  { label: "Age", value: "age" },
+  { label: "Source", value: "source_module" }, // added source to identify where it came from
 ];
 
 const CSV_BAD_FIELDS = [
   ...CSV_GOOD_FIELDS,
-  { label: 'DNC Type', value: 'dnc_type' },
-  { label: 'Reason', value: 'reason' }
+  { label: "DNC Type", value: "dnc_type" },
+  { label: "Reason", value: "reason" },
 ];
 
 const DNC_UPSERT_BATCH_SIZE = 3000;
-
-const MIXED_EXPORT_DIR = path.join(__dirname, "../../exports/mixed-downloads");
-
-function ensureMixedExportDir() {
-  fs.mkdirSync(MIXED_EXPORT_DIR, { recursive: true });
-}
-
-function safeFileName(name) {
-  return String(name || "").replace(/[^a-zA-Z0-9._-]/g, "_");
-}
-
-function mixedDownloadUrl(fileName) {
-  return `/api/mixed-download/files/${encodeURIComponent(fileName)}`;
-}
 
 const upsertDeadNumbersBatched = async ({ queryFn, badItems }) => {
   if (!Array.isArray(badItems) || badItems.length === 0) return;
@@ -49,7 +33,7 @@ const upsertDeadNumbersBatched = async ({ queryFn, badItems }) => {
 
     for (const badItem of chunk) {
       valueStrings.push(`($${idx}, $${idx + 1})`);
-      insertValues.push(badItem.phone, 'Mixed Download BLA Scrub');
+      insertValues.push(badItem.phone, "Mixed Download BLA Scrub");
       idx += 2;
     }
 
@@ -59,30 +43,53 @@ const upsertDeadNumbersBatched = async ({ queryFn, badItems }) => {
         VALUES ${valueStrings.join(",")}
         ON CONFLICT (phone) DO NOTHING
       `,
-      insertValues
+      insertValues,
     );
   }
 };
 
 function isUuid(value) {
-  return typeof value === "string" &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  return (
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    )
+  );
 }
 
-function buildFilters(tableName, { data_campaign, states, min_age, max_age, include_downloaded, vendor_id, quality }) {
-  const filters = include_downloaded 
-    ? ["status IN ('available', 'downloaded')"] 
+function buildFilters(
+  tableName,
+  {
+    data_campaign,
+    states,
+    min_age,
+    max_age,
+    include_downloaded,
+    vendor_id,
+    quality,
+  },
+) {
+  const filters = include_downloaded
+    ? ["status IN ('available', 'downloaded')"]
     : ["status = 'available'"];
-  
-  filters.push(`NOT EXISTS (SELECT 1 FROM dnc_numbers d WHERE d.phone = ${tableName}.phone)`);
-  filters.push(`NOT EXISTS (SELECT 1 FROM refine_dnc_numbers d WHERE d.phone = ${tableName}.phone)`);
-  filters.push(`NOT EXISTS (SELECT 1 FROM premium_dnc_numbers d WHERE d.phone = ${tableName}.phone)`);
-  filters.push(`NOT EXISTS (SELECT 1 FROM dead_numbers dn WHERE dn.phone = ${tableName}.phone)`);
-  filters.push(`NOT EXISTS (SELECT 1 FROM separation_data sd WHERE sd.phone = ${tableName}.phone)`);
+
+  filters.push(
+    `NOT EXISTS (SELECT 1 FROM dnc_numbers d WHERE d.phone = ${tableName}.phone)`,
+  );
+  filters.push(
+    `NOT EXISTS (SELECT 1 FROM refine_dnc_numbers d WHERE d.phone = ${tableName}.phone)`,
+  );
+  filters.push(
+    `NOT EXISTS (SELECT 1 FROM premium_dnc_numbers d WHERE d.phone = ${tableName}.phone)`,
+  );
+  filters.push(
+    `NOT EXISTS (SELECT 1 FROM dead_numbers dn WHERE dn.phone = ${tableName}.phone)`,
+  );
+  filters.push(
+    `NOT EXISTS (SELECT 1 FROM separation_data sd WHERE sd.phone = ${tableName}.phone)`,
+  );
   const params = [];
   let idx = 1;
-
-
 
   if (states && Array.isArray(states) && states.length > 0) {
     const matchingCodes = [];
@@ -113,15 +120,21 @@ function buildFilters(tableName, { data_campaign, states, min_age, max_age, incl
     params.push(vendor_id);
   }
 
-  if (quality && quality !== "All" && (tableName === "refine_data" || tableName === "premium_data")) {
+  if (
+    quality &&
+    quality !== "All" &&
+    (tableName === "refine_data" || tableName === "premium_data")
+  ) {
     filters.push(`quality = $${idx++}`);
     params.push(quality);
   }
 
   if (data_campaign && data_campaign !== "all") {
     if (tableName === "van_data") {
-      // Van campaign_type is numeric/inconsistent in van_sessions, so skip Van campaign filter.
-      // Vendor filter is already applied for Van data.
+      filters.push(
+        `EXISTS (SELECT 1 FROM van_sessions s WHERE s.id = van_data.session_id AND s.campaign_type = $${idx++})`,
+      );
+      params.push(String(data_campaign));
     } else {
       filters.push(`campaign_type = $${idx++}`);
       params.push(String(data_campaign));
@@ -135,7 +148,7 @@ async function fetchFromTable(client, tableName, qty, filtersConfig) {
   if (qty <= 0) return [];
   const { filters, params, paramIdx } = filtersConfig;
   const whereClause = filters.join(" AND ");
-  
+
   let nameCols = "d.first_name, d.last_name";
   if (tableName === "refine_data" || tableName === "premium_data") {
     nameCols = "d.name as first_name, '' as last_name";
@@ -151,22 +164,39 @@ async function fetchFromTable(client, tableName, qty, filtersConfig) {
     RETURNING d.id, ${nameCols}, d.phone, d.email, d.area_code, d.age, '${tableName}' as source_table
   `;
   const result = await client.query(updateQuery, [...params, qty]);
-  return result.rows.map(r => ({ ...r, source_module: tableName.replace('_data', '') }));
+  return result.rows.map((r) => ({
+    ...r,
+    source_module: tableName.replace("_data", ""),
+  }));
 }
 
 const downloadMixedData = async (req, res) => {
   const client = await db.getClient();
   try {
-    const { 
-      quantity, van_percentage = 50, refine_percentage = 30, premium_percentage = 20, 
-      states, min_age, max_age, include_downloaded,
-      van_vendor, refine_vendor, premium_vendor, quality,
-      van_campaign, refine_campaign, premium_campaign
+    const {
+      quantity,
+      van_percentage = 50,
+      refine_percentage = 30,
+      premium_percentage = 20,
+      states,
+      min_age,
+      max_age,
+      include_downloaded,
+      van_vendor,
+      refine_vendor,
+      premium_vendor,
+      quality,
+      van_campaign,
+      refine_campaign,
+      premium_campaign,
     } = req.body;
-    
-    if (!quantity || quantity <= 0) return res.status(400).json({ message: "Valid quantity is required" });
+
+    if (!quantity || quantity <= 0)
+      return res.status(400).json({ message: "Valid quantity is required" });
     if (van_percentage + refine_percentage + premium_percentage !== 100) {
-      return res.status(400).json({ message: "Percentages must sum up to 100." });
+      return res
+        .status(400)
+        .json({ message: "Percentages must sum up to 100." });
     }
 
     const van_qty = Math.floor(quantity * (van_percentage / 100));
@@ -175,20 +205,61 @@ const downloadMixedData = async (req, res) => {
 
     await client.query("BEGIN");
 
-    const vanFilters = buildFilters("van_data", { data_campaign: van_campaign, states, min_age, max_age, include_downloaded, vendor_id: van_vendor, quality });
-    const refineFilters = buildFilters("refine_data", { data_campaign: refine_campaign, states, min_age, max_age, include_downloaded, vendor_id: refine_vendor, quality });
-    const premiumFilters = buildFilters("premium_data", { data_campaign: premium_campaign, states, min_age, max_age, include_downloaded, vendor_id: premium_vendor, quality });
+    const vanFilters = buildFilters("van_data", {
+      data_campaign: van_campaign,
+      states,
+      min_age,
+      max_age,
+      include_downloaded,
+      vendor_id: van_vendor,
+      quality,
+    });
+    const refineFilters = buildFilters("refine_data", {
+      data_campaign: refine_campaign,
+      states,
+      min_age,
+      max_age,
+      include_downloaded,
+      vendor_id: refine_vendor,
+      quality,
+    });
+    const premiumFilters = buildFilters("premium_data", {
+      data_campaign: premium_campaign,
+      states,
+      min_age,
+      max_age,
+      include_downloaded,
+      vendor_id: premium_vendor,
+      quality,
+    });
 
-    const vanRows = await fetchFromTable(client, "van_data", van_qty, vanFilters);
-    const refineRows = await fetchFromTable(client, "refine_data", refine_qty, refineFilters);
-    const premiumRows = await fetchFromTable(client, "premium_data", premium_qty, premiumFilters);
+    const vanRows = await fetchFromTable(
+      client,
+      "van_data",
+      van_qty,
+      vanFilters,
+    );
+    const refineRows = await fetchFromTable(
+      client,
+      "refine_data",
+      refine_qty,
+      refineFilters,
+    );
+    const premiumRows = await fetchFromTable(
+      client,
+      "premium_data",
+      premium_qty,
+      premiumFilters,
+    );
 
     await client.query("COMMIT");
 
     const allLeads = [...vanRows, ...refineRows, ...premiumRows];
 
     if (allLeads.length === 0) {
-      return res.status(404).json({ message: "No available mixed data found matching criteria" });
+      return res
+        .status(404)
+        .json({ message: "No available mixed data found matching criteria" });
     }
 
     let finalRows = [];
@@ -208,58 +279,59 @@ const downloadMixedData = async (req, res) => {
         const typeLower = String(item.type || "").toLowerCase();
         if (typeLower.includes("federal")) federalDncCount++;
         else if (typeLower.includes("state")) stateDncCount++;
-        else if (typeLower.includes("invalid") || typeLower.includes("bad")) badPhoneCount++;
+        else if (typeLower.includes("invalid") || typeLower.includes("bad"))
+          badPhoneCount++;
         else blacklistCount++;
       }
 
       if (scrubResult.bad.length > 0) {
         const badPhones = scrubResult.bad.map((b) => b.phone);
         const badPhoneSet = new Set(badPhones);
-        const isBadPhone = (rowPhone) => badPhoneSet.has(normalizePhone(rowPhone));
-        const scrubInfoByPhone = new Map(scrubResult.bad.map((b) => [b.phone, b]));
+        const isBadPhone = (rowPhone) =>
+          badPhoneSet.has(normalizePhone(rowPhone));
+        const scrubInfoByPhone = new Map(
+          scrubResult.bad.map((b) => [b.phone, b]),
+        );
 
-          // Do not block the download response while marking DNC rows.
-          // Large mixed exports can have 10k+ bad numbers; update them in background.
-          const badVan = vanRows.filter(r => isBadPhone(r.phone)).map(r => r.phone);
-          const badRefine = refineRows.filter(r => isBadPhone(r.phone)).map(r => r.phone);
-          const badPremium = premiumRows.filter(r => isBadPhone(r.phone)).map(r => r.phone);
+        await client.query("BEGIN");
+        try {
+          // Revert bad rows in each table
+          const badVan = vanRows
+            .filter((r) => isBadPhone(r.phone))
+            .map((r) => r.phone);
+          if (badVan.length > 0)
+            await client.query(
+              `UPDATE van_data SET status='DNC', downloaded_at=null WHERE phone = ANY($1::text[])`,
+              [badVan],
+            );
 
-          console.log(`[Mixed Download] Queuing background DNC updates: van=${badVan.length}, refine=${badRefine.length}, premium=${badPremium.length}, dead=${scrubResult.bad.length}`);
+          const badRefine = refineRows
+            .filter((r) => isBadPhone(r.phone))
+            .map((r) => r.phone);
+          if (badRefine.length > 0)
+            await client.query(
+              `UPDATE refine_data SET status='DNC', downloaded_at=null WHERE phone = ANY($1::text[])`,
+              [badRefine],
+            );
 
-          setImmediate(() => {
-            (async () => {
-              let bgClient;
-              try {
-                bgClient = await db.getClient();
-                await bgClient.query("BEGIN");
+          const badPremium = premiumRows
+            .filter((r) => isBadPhone(r.phone))
+            .map((r) => r.phone);
+          if (badPremium.length > 0)
+            await client.query(
+              `UPDATE premium_data SET status='DNC', downloaded_at=null WHERE phone = ANY($1::text[])`,
+              [badPremium],
+            );
 
-                if (badVan.length > 0) {
-                  await bgClient.query(`UPDATE van_data SET status='DNC', downloaded_at=null WHERE phone = ANY($1::varchar[])`, [badVan]);
-                }
-
-                if (badRefine.length > 0) {
-                  await bgClient.query(`UPDATE refine_data SET status='DNC', downloaded_at=null WHERE phone = ANY($1::varchar[])`, [badRefine]);
-                }
-
-                if (badPremium.length > 0) {
-                  await bgClient.query(`UPDATE premium_data SET status='DNC', downloaded_at=null WHERE phone = ANY($1::varchar[])`, [badPremium]);
-                }
-
-                await upsertDeadNumbersBatched({
-                  queryFn: bgClient.query.bind(bgClient),
-                  badItems: scrubResult.bad
-                });
-
-                await bgClient.query("COMMIT");
-                console.log(`[Mixed Download] Background DNC updates completed: totalBad=${scrubResult.bad.length}`);
-              } catch (bgErr) {
-                if (bgClient) await bgClient.query("ROLLBACK").catch(() => {});
-                console.error("[Mixed Download] Background DNC update failed:", bgErr.message);
-              } finally {
-                if (bgClient) bgClient.release();
-              }
-            })();
+          await upsertDeadNumbersBatched({
+            queryFn: client.query.bind(client),
+            badItems: scrubResult.bad,
           });
+          await client.query("COMMIT");
+        } catch (badErr) {
+          await client.query("ROLLBACK").catch(() => {});
+          throw badErr;
+        }
 
         const badLeads = allLeads.filter((r) => isBadPhone(r.phone));
         badRowsWithState = badLeads.map((r) => {
@@ -267,7 +339,8 @@ const downloadMixedData = async (req, res) => {
           let code = r.area_code;
           if (!code || code === "Unknown") {
             const clean = r.phone ? String(r.phone).replace(/\D/g, "") : "";
-            if (clean.length === 11 && clean.startsWith("1")) code = clean.substring(1, 4);
+            if (clean.length === 11 && clean.startsWith("1"))
+              code = clean.substring(1, 4);
             else if (clean.length === 10) code = clean.substring(0, 3);
           }
           return {
@@ -283,7 +356,10 @@ const downloadMixedData = async (req, res) => {
         finalRows = allLeads;
       }
     } catch (scrubErr) {
-      console.error("[Blacklist Alliance] Scrubbing failed. Proceeding without BLA scrub.", scrubErr.message);
+      console.error(
+        "[Blacklist Alliance] Scrubbing failed. Proceeding without BLA scrub.",
+        scrubErr.message,
+      );
       scrubErrors = allLeads.length;
       finalRows = allLeads;
     }
@@ -292,7 +368,8 @@ const downloadMixedData = async (req, res) => {
       let code = r.area_code;
       if (!code || code === "Unknown") {
         const clean = r.phone ? String(r.phone).replace(/\D/g, "") : "";
-        if (clean.length === 11 && clean.startsWith("1")) code = clean.substring(1, 4);
+        if (clean.length === 11 && clean.startsWith("1"))
+          code = clean.substring(1, 4);
         else if (clean.length === 10) code = clean.substring(0, 3);
       }
       return {
@@ -301,8 +378,14 @@ const downloadMixedData = async (req, res) => {
       };
     });
 
-    const csv = rowsWithState.length > 0 ? new Parser({ fields: CSV_GOOD_FIELDS }).parse(rowsWithState) : "";
-    const badCsv = badRowsWithState.length > 0 ? new Parser({ fields: CSV_BAD_FIELDS }).parse(badRowsWithState) : "";
+    const csv =
+      rowsWithState.length > 0
+        ? new Parser({ fields: CSV_GOOD_FIELDS }).parse(rowsWithState)
+        : "";
+    const badCsv =
+      badRowsWithState.length > 0
+        ? new Parser({ fields: CSV_BAD_FIELDS }).parse(badRowsWithState)
+        : "";
     const fileName = `mixed_download_${Date.now()}.csv`;
 
     const logRes = await db.query(
@@ -317,13 +400,12 @@ const downloadMixedData = async (req, res) => {
         states && states.length > 0 ? JSON.stringify(states) : null,
         min_age || null,
         max_age || null,
-      ]
+      ],
     );
     const logId = logRes.rows[0]?.id;
 
     const summaryData = {
-        total: rowsWithState.length + badRowsWithState.length,
-        requested: Number(quantity),
+      total: allLeads.length,
       fileName,
       blacklist: blacklistCount,
       suppress: 0,
@@ -336,47 +418,26 @@ const downloadMixedData = async (req, res) => {
       badPhone: badPhoneCount,
       scrubPending: false,
       scrubCompleted: true,
-      scrubFailed: scrubErrors > 0 && finalRows.length === allLeads.length
+      scrubFailed: scrubErrors > 0 && finalRows.length === allLeads.length,
     };
 
-      ensureMixedExportDir();
+    const responseBody = {
+      fileName,
+      logId,
+      count: rowsWithState.length,
+      csv,
+      badCsv,
+      summary: summaryData,
+    };
 
-      const safeGoodFile = safeFileName(fileName);
-      const badFileName = safeGoodFile.replace(/\.csv$/i, "_bad_dnc.csv");
-
-      const goodPath = path.join(MIXED_EXPORT_DIR, safeGoodFile);
-      const badPath = path.join(MIXED_EXPORT_DIR, badFileName);
-
-      const hasGoodCsv = csv && String(csv).trim();
-      const hasBadCsv = badCsv && String(badCsv).trim();
-
-      if (hasGoodCsv) {
-        fs.writeFileSync(goodPath, csv, "utf8");
-      }
-
-      if (hasBadCsv) {
-        fs.writeFileSync(badPath, badCsv, "utf8");
-      }
-
-      const responseBody = {
-        fileName: safeGoodFile,
+    if (logId) {
+      db.query("UPDATE mixed_download_logs SET csv_payload=$1 WHERE id=$2", [
+        JSON.stringify(responseBody),
         logId,
-        count: rowsWithState.length,
-        downloadUrl: hasGoodCsv ? mixedDownloadUrl(safeGoodFile) : null,
-        badFileName: hasBadCsv ? badFileName : null,
-        badDownloadUrl: hasBadCsv ? mixedDownloadUrl(badFileName) : null,
-        summary: summaryData,
-      };
+      ]).catch(() => {});
+    }
 
-      if (logId) {
-        db.query("UPDATE mixed_download_logs SET csv_payload=$1 WHERE id=$2", [
-          JSON.stringify(responseBody),
-          logId,
-        ]).catch((e) => console.error("[Mixed Download] log payload update failed:", e.message));
-      }
-
-      console.log(`[Mixed Download] Sending response: count=${responseBody.count}, downloadUrl=${responseBody.downloadUrl}, badDownloadUrl=${responseBody.badDownloadUrl}`);
-      return res.status(200).json(responseBody);
+    return res.status(200).json(responseBody);
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
     console.error("Mixed Download Error:", err);
@@ -412,14 +473,15 @@ const getAlreadyDownloaded = async (req, res) => {
       let fileName = `mixed_download_${row.id}.csv`;
       if (row.csv_payload) {
         try {
-          const payload = typeof row.csv_payload === "string"
-            ? JSON.parse(row.csv_payload)
-            : row.csv_payload;
-          canRedownload = Boolean(payload.csv || payload.downloadUrl || payload.badDownloadUrl);
-          fileName = payload.fileName || fileName;
+          const payload = JSON.parse(row.csv_payload);
+          canRedownload = Boolean(payload.csv || payload.goodCsv);
+          fileName = payload.summary?.fileName || payload.fileName || fileName;
         } catch (_) {}
       }
-      const name = [row.user_first_name, row.user_last_name].filter(Boolean).join(" ") || row.username || "—";
+      const name =
+        [row.user_first_name, row.user_last_name].filter(Boolean).join(" ") ||
+        row.username ||
+        "—";
       return {
         id: row.id,
         download_date: row.download_date,
@@ -434,7 +496,12 @@ const getAlreadyDownloaded = async (req, res) => {
       };
     });
 
-    res.json({ data, total: countResult.rows[0]?.count || 0, page: pageNum, limit: limitNum });
+    res.json({
+      data,
+      total: countResult.rows[0]?.count || 0,
+      page: pageNum,
+      limit: limitNum,
+    });
   } catch (err) {
     console.error("Mixed Already Downloaded Error:", err);
     res.status(500).json({ message: "Server error" });
@@ -443,79 +510,298 @@ const getAlreadyDownloaded = async (req, res) => {
 
 const getDownloadFile = async (req, res) => {
   const { id } = req.params;
-
   try {
-    const result = await db.query("SELECT csv_payload FROM mixed_download_logs WHERE id=$1", [id]);
-
-    if (result.rows.length === 0) {
+    const result = await db.query(
+      "SELECT csv_payload FROM mixed_download_logs WHERE id=$1",
+      [id],
+    );
+    if (result.rows.length === 0)
       return res.status(404).json({ message: "Record not found" });
-    }
-
-    if (!result.rows[0].csv_payload) {
+    if (!result.rows[0].csv_payload)
       return res.status(404).json({ message: "No stored file" });
-    }
-
-    const payload = typeof result.rows[0].csv_payload === "string"
-      ? JSON.parse(result.rows[0].csv_payload)
-      : result.rows[0].csv_payload;
-
-    const fileNameFromUrl = (url) => {
-      if (!url) return "";
-      const clean = String(url).split("?")[0];
-      return decodeURIComponent(clean.substring(clean.lastIndexOf("/") + 1));
-    };
-
-    const readExportFile = (url, fallbackFileName) => {
-      const name = safeFileName(fileNameFromUrl(url) || fallbackFileName || "");
-      if (!name) return "";
-
-      const filePath = path.join(MIXED_EXPORT_DIR, name);
-
-      if (!fs.existsSync(filePath)) {
-        console.error("[Mixed Download] stored export file missing:", filePath);
-        return "";
-      }
-
-      return fs.readFileSync(filePath, "utf8");
-    };
-
-    const csv = payload.csv || readExportFile(payload.downloadUrl, payload.fileName);
-    const badCsv = payload.badCsv || readExportFile(payload.badDownloadUrl, payload.badFileName);
-
-    if (!csv && !badCsv) {
-      return res.status(404).json({ message: "File data not found or expired." });
-    }
-
-    return res.json({
-      ...payload,
-      csv,
-      badCsv
-    });
+    res.json(JSON.parse(result.rows[0].csv_payload));
   } catch (err) {
-    console.error("Mixed getDownloadFile error:", err);
-    return res.status(500).json({ message: "Server error" });
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
-const downloadMixedExportFile = async (req, res) => {
-  try {
-    const requested = safeFileName(req.params.fileName);
-    const filePath = path.join(MIXED_EXPORT_DIR, requested);
 
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ message: "File not found" });
+
+const { createNotification } = require('./notificationController');
+
+// Added for request handling
+const createMixedDownloadRequest = async (req, res) => {
+  try {
+    const { quantity, states, min_age, max_age, min_duration, max_duration, include_downloaded, van_percentage, refine_percentage, premium_percentage } = req.body;
+
+    if (!quantity || quantity <= 0) {
+      return res.status(400).json({ message: "Valid quantity is required." });
     }
 
-    return res.download(filePath, requested);
+    const result = await db.query(
+      `INSERT INTO mixed_download_requests
+               (admin_id, quantity, van_percentage, refine_percentage, premium_percentage, states, min_age, max_age, min_duration, max_duration, include_downloaded)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             RETURNING *`,
+      [
+        req.user.id,
+        quantity,
+        van_percentage || 0,
+        refine_percentage || 0,
+        premium_percentage || 0,
+        states && states.length ? JSON.stringify(states) : null,
+        min_age || null,
+        max_age || null,
+        min_duration || null,
+        max_duration || null,
+        include_downloaded === true || include_downloaded === "true",
+      ],
+    );
+
+    const newRequest = result.rows[0];
+
+    // Notify all super_admins
+    const superAdmins = await db.query(`SELECT id FROM users WHERE role='super_admin'`);
+    const adminDisplayName = req.user.first_name
+      ? `${req.user.first_name} ${req.user.last_name || ""}`.trim()
+      : req.user.username;
+
+    for (const sa of superAdmins.rows) {
+      await createNotification(
+        sa.id,
+        "download_request_new",
+        "📥 New Mixed Download Request",
+        `${adminDisplayName} has requested to download ${quantity.toLocaleString()} mixed leads.`,
+        newRequest.id,
+      );
+    }
+
+    return res.status(201).json({
+      message: "Download request submitted successfully. Awaiting SuperAdmin approval.",
+      request: newRequest,
+    });
   } catch (err) {
-    console.error("Mixed export file download error:", err);
-    return res.status(500).json({ message: "Server error downloading file" });
+    console.error("Create Mixed Download Request Error:", err);
+    return res.status(500).json({ message: "Server error creating request" });
+  }
+};
+
+const getDownloadRequests = async (req, res) => {
+  try {
+    const result = await db.query(`
+            SELECT
+                dr.*,
+                u.username as admin_username,
+                u.first_name as admin_first_name,
+                u.last_name as admin_last_name
+            FROM mixed_download_requests dr
+            LEFT JOIN users u ON dr.admin_id = u.id
+            ORDER BY dr.requested_at DESC
+        `);
+    return res.status(200).json(result.rows);
+  } catch (err) {
+    console.error("Get Mixed Download Requests Error:", err);
+    return res.status(500).json({ message: "Server error fetching requests" });
+  }
+};
+
+const getMyDownloadRequests = async (req, res) => {
+  try {
+    const result = await db.query(
+      `
+            SELECT dr.*
+            FROM mixed_download_requests dr
+            WHERE dr.admin_id = $1
+            ORDER BY dr.requested_at DESC
+        `,
+      [req.user.id]
+    );
+    return res.status(200).json(result.rows);
+  } catch (err) {
+    console.error("Get My Mixed Requests Error:", err);
+    return res.status(500).json({ message: "Server error fetching requests" });
+  }
+};
+
+const reviewDownloadRequest = async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const { id } = req.params;
+    const { action, rejection_reason } = req.body;
+
+    if (!["accept", "reject"].includes(action)) {
+      client.release();
+      return res.status(400).json({ message: "Invalid action" });
+    }
+
+    const reqRes = await client.query(`SELECT * FROM mixed_download_requests WHERE id = $1`, [id]);
+    if (reqRes.rows.length === 0) {
+      client.release();
+      return res.status(404).json({ message: "Request not found" });
+    }
+    const dlReq = reqRes.rows[0];
+    if (dlReq.status !== "pending") {
+      client.release();
+      return res.status(400).json({ message: "Request already processed" });
+    }
+
+    if (action === "reject") {
+      await client.query(
+        `UPDATE mixed_download_requests SET status = 'rejected', rejection_reason = $1, reviewed_at = NOW(), reviewed_by = $2 WHERE id = $3`,
+        [rejection_reason || null, req.user.id, id]
+      );
+      await createNotification(dlReq.admin_id, "download_request_rejected", "❌ Download Request Declined", `Your mixed download request for ${dlReq.quantity} leads was declined.`, id);
+      client.release();
+      return res.status(200).json({ message: "Request rejected" });
+    }
+
+    // Accept: fetch data and generate CSV
+    await client.query("BEGIN");
+    
+    let states = [];
+    if (dlReq.states) {
+        try { states = typeof dlReq.states === 'string' ? JSON.parse(dlReq.states) : dlReq.states; } catch(e){}
+    }
+
+    const van_qty = Math.floor(dlReq.quantity * ((dlReq.van_percentage || 0) / 100));
+    const refine_qty = Math.floor(dlReq.quantity * ((dlReq.refine_percentage || 0) / 100));
+    const premium_qty = dlReq.quantity - van_qty - refine_qty;
+
+    const vanFilters = buildFilters("van_data", { states, min_age: dlReq.min_age, max_age: dlReq.max_age, include_downloaded: dlReq.include_downloaded });
+    const refineFilters = buildFilters("refine_data", { states, min_age: dlReq.min_age, max_age: dlReq.max_age, include_downloaded: dlReq.include_downloaded });
+    const premiumFilters = buildFilters("premium_data", { states, min_age: dlReq.min_age, max_age: dlReq.max_age, include_downloaded: dlReq.include_downloaded });
+
+    const vanRows = await fetchFromTable(client, "van_data", van_qty, vanFilters);
+    const refineRows = await fetchFromTable(client, "refine_data", refine_qty, refineFilters);
+    const premiumRows = await fetchFromTable(client, "premium_data", premium_qty, premiumFilters);
+
+    const allRows = [...vanRows, ...refineRows, ...premiumRows];
+    if (allRows.length === 0) {
+      await client.query("ROLLBACK");
+      client.release();
+      return res.status(404).json({ message: "No matching leads found for this request criteria." });
+    }
+
+    const phones = allRows.map((r) => r.phone);
+    let badPhoneSet = new Set();
+    let finalGoodRows = allRows;
+    let finalBadRows = [];
+    
+    // We skip async scrub for this mixed request to keep it simple, or run standard scrub
+    const scrubResult = await scrubPhones(phones);
+    
+    let blacklist = 0, stateDnc = 0, federalDnc = 0, badPhone = 0;
+    if (scrubResult.bad.length > 0) {
+      const badPhones = scrubResult.bad.map((b) => b.phone);
+      badPhoneSet = new Set(badPhones);
+      const scrubInfoByPhone = new Map(scrubResult.bad.map((b) => [b.phone, b]));
+
+      // Update dead numbers
+      await upsertDeadNumbersBatched({ queryFn: client.query.bind(client), badItems: scrubResult.bad });
+
+      finalBadRows = allRows.filter((r) => badPhoneSet.has(normalizePhone(r.phone))).map(r => {
+        const info = scrubInfoByPhone.get(normalizePhone(r.phone)) || {};
+        const typeLower = String(info.type || "").toLowerCase();
+        if (typeLower.includes("federal")) federalDnc++;
+        else if (typeLower.includes("state")) stateDnc++;
+        else if (typeLower.includes("invalid") || typeLower.includes("bad")) badPhone++;
+        else blacklist++;
+        return {
+          ...r,
+          dnc_type: info.type || "DNC",
+          reason: info.reason || "Blacklist Alliance Match"
+        };
+      });
+      finalGoodRows = allRows.filter((r) => !badPhoneSet.has(normalizePhone(r.phone)));
+    }
+
+    const parserGood = new Parser({ fields: CSV_GOOD_FIELDS });
+    const parserBad = new Parser({ fields: CSV_BAD_FIELDS });
+
+    const goodCsv = finalGoodRows.length > 0 ? parserGood.parse(finalGoodRows) : "";
+    const badCsv = finalBadRows.length > 0 ? parserBad.parse(finalBadRows) : "";
+    
+    const summary = {
+      fileName: `approved_mixed_${id}.csv`,
+      scrubDate: new Date().toLocaleString(),
+      total: allRows.length,
+      blacklist, suppress: 0, stateDnc, federalDnc, wireless: 0, landline: 0,
+      good: finalGoodRows.length, errors: 0, badPhone
+    };
+
+    const payloadObj = {
+      isScrubbed: true,
+      goodCsv,
+      badCsv,
+      summary
+    };
+
+    const csvDataString = JSON.stringify(payloadObj);
+
+    await client.query(
+      `UPDATE mixed_download_requests SET status = 'accepted', reviewed_at = NOW(), reviewed_by = $1, csv_data = $2 WHERE id = $3`,
+      [req.user.id, csvDataString, id]
+    );
+
+    // Save download log
+    await client.query(
+      `INSERT INTO mixed_download_logs (user_id, quantity, states, min_age, max_age, csv_payload) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        dlReq.admin_id,
+        finalGoodRows.length,
+        dlReq.states ? (typeof dlReq.states === 'string' ? dlReq.states : JSON.stringify(dlReq.states)) : null,
+        dlReq.min_age || null,
+        dlReq.max_age || null,
+        csvDataString,
+        
+      ]
+    );
+
+    await client.query("COMMIT");
+    client.release();
+
+    await createNotification(dlReq.admin_id, "download_request_accepted", "✅ Download Request Approved", `Your mixed download request has been approved.`, id);
+
+    return res.status(200).json({ message: `Request approved. ${finalGoodRows.length} leads are ready for the admin to download.`, lead_count: finalGoodRows.length });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    client.release();
+    console.error("Review Mixed Request Error:", err);
+    return res.status(500).json({ message: "Server error reviewing request" });
+  }
+};
+
+const executeApprovedDownload = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await db.query(`SELECT * FROM mixed_download_requests WHERE id=$1 AND admin_id=$2`, [id, req.user.id]);
+    if (result.rows.length === 0) return res.status(404).json({ message: "Request not found." });
+    
+    const dlReq = result.rows[0];
+    if (dlReq.status !== "accepted") return res.status(400).json({ message: `Request is ${dlReq.status}` });
+    if (!dlReq.csv_data) return res.status(400).json({ message: "CSV data not available." });
+
+    if (typeof dlReq.csv_data === 'string' && dlReq.csv_data.trim().startsWith("{")) {
+        return res.status(200).json(JSON.parse(dlReq.csv_data));
+    } else if (typeof dlReq.csv_data === 'object') {
+        return res.status(200).json(dlReq.csv_data);
+    }
+    
+    return res.status(400).json({ message: "Invalid CSV payload." });
+  } catch (err) {
+    console.error("Execute Approved Download Error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
 module.exports = {
   downloadMixedData,
-  downloadMixedExportFile,
   getAlreadyDownloaded,
-  getDownloadFile
+  getDownloadFile,
+  createMixedDownloadRequest,
+  getDownloadRequests,
+  getMyDownloadRequests,
+  reviewDownloadRequest,
+  executeApprovedDownload
 };

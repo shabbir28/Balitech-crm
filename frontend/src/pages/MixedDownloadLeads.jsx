@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import api from '../services/api';
 import {
     Send, Download, AlertCircle, ChevronDown, Check,
     Clock, CheckCircle2, XCircle, RefreshCw, FileDown,
     Building2, Hash, Calendar, Info, Sparkles, ArrowRight, BarChart3, MapPin, Layers
 } from 'lucide-react';
+import { AuthContext } from '../context/AuthContext';
 
 const SCRUB_POLL_INTERVAL_MS = 5000;
 const SCRUB_POLL_MAX_MS = 60 * 60 * 1000;
@@ -243,7 +244,12 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
     );
 };
 
+const fmtDate = (d) => d ? new Date(d).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
 const MixedDownloadLeads = () => {
+    const { user } = useContext(AuthContext);
+    const isSuperAdmin = user?.role === 'super_admin';
+    const isAdmin = user?.role === 'admin';
+    const canDownloadDirectly = isSuperAdmin || isAdmin;
 
     const [vanVendors, setVanVendors]         = useState([]);
     const [refineVendors, setRefineVendors]   = useState([]);
@@ -287,6 +293,19 @@ const MixedDownloadLeads = () => {
     const [scrubPolling] = useState(false);
     const scrubPollCancelRef = useRef(false);
 
+    const [dlId, setDlId] = useState(null);
+    const [myRequests, setMyRequests] = useState([]);
+    const [loadingReq, setLoadingReq] = useState(false);
+
+    const fetchMyReqs = async () => {
+        if (canDownloadDirectly) return;
+        setLoadingReq(true);
+        try { const r = await api.get('/mixed-download/requests/mine'); setMyRequests(r.data); }
+        catch (err) { console.error(err); } finally { setLoadingReq(false); }
+    };
+    useEffect(() => { fetchMyReqs(); }, []);
+
+
     useEffect(() => {
         Promise.all([
             api.get('/van-campaigns').catch(() => ({ data: [] })),
@@ -326,6 +345,26 @@ const MixedDownloadLeads = () => {
         return () => document.removeEventListener('mousedown', h);
     }, []);
 
+    
+    const handleDownloadCSV = async (req) => {
+        setDlId(req.id);
+        try {
+            const res = await api.get(`/mixed-download/requests/${req.id}/file`);
+            setScrubSummaryData(res.data);
+            if (res.data?.goodCsv) {
+                const blob = new Blob([res.data.goodCsv], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', res.data.summary?.fileName || `mixed_leads_${req.id}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        } catch { alert('Download failed. Try again.'); }
+        finally { setDlId(null); }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         
@@ -342,9 +381,15 @@ const MixedDownloadLeads = () => {
         setSubmitting(true); setError(''); setSuccessMsg('');
         try {
             const timeoutMs = 30 * 60 * 1000;
-            const res = await api.post('/mixed-download', form, { timeout: timeoutMs });
-            setScrubSummaryData(res.data);
-            setSuccessMsg('Export complete! Choose what to download from the summary below.');
+            if (canDownloadDirectly) {
+                const res = await api.post('/mixed-download', form, { timeout: timeoutMs });
+                setScrubSummaryData(res.data);
+                setSuccessMsg('Export complete! Choose what to download from the summary below.');
+            } else {
+                const res = await api.post('/mixed-download/request', form);
+                setSuccessMsg(res.data.message || 'Request submitted successfully to Super Admin.');
+                fetchMyReqs();
+            }
         } catch (err) {
             const status = err.response?.status;
             if (status === 502 || status === 504) {
@@ -685,7 +730,7 @@ const MixedDownloadLeads = () => {
                                         </>
                                     ) : (
                                         <>
-                                            <span>Export Mixed Data</span>
+                                            <span>{canDownloadDirectly ? 'Export Mixed Data' : 'Submit Download Request'}</span>
                                             <Send className="h-4 w-4" />
                                         </>
                                     )}

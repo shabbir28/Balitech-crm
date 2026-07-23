@@ -6,11 +6,10 @@ const authorize = require("../middleware/role");
 
 // All filter routes require authentication and admin/super_admin privileges
 router.use(authenticate);
-router.use(authorize(["super_admin", "admin"]));
-
-router.get("/", filterController.getFilters);
-router.post("/", filterController.createFilter);
-router.put("/:id", filterController.updateFilter);
-router.delete("/:id", filterController.deleteFilter);
+// We will not apply authorize at the router level anymore, but rather on each route
+router.get("/", authorize(["super_admin", "admin", "data_entry", "dialer_agent"]), filterController.getFilters);
+router.post("/", authorize(["super_admin", "admin"]), filterController.createFilter);
+router.put("/:id", authorize(["super_admin", "admin"]), filterController.updateFilter);
+router.delete("/:id", authorize(["super_admin", "admin"]), filterController.deleteFilter);
 
 module.exports = router;

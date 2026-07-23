@@ -630,7 +630,7 @@ const VanDownloadLeads = () => {
         if (selectedFileIds.length === 1) {
             const fetchStats = () => {
                 setFileStats(null);
-                api.get(`/Van-download/job//stats`)
+                api.get(`/van-download/job/${selectedFileIds[0]}/stats`)
                     .then(res => {
                         setFileStats(res.data);
                     })

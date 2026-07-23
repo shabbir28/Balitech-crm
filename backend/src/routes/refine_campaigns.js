@@ -48,8 +48,8 @@ const upload = multer({
 router.use(auth);
 
 // super_admin, admin, data_entry can view campaigns (needed for data entry when uploading leads)
-router.get('/', authorizeRole(['super_admin', 'admin', 'data_entry']), getCampaigns);
-router.get('/:id', authorizeRole(['super_admin', 'admin', 'data_entry']), getCampaignById);
+router.get('/', authorizeRole(['super_admin', 'admin', 'data_entry', 'dialer_agent']), getCampaigns);
+router.get('/:id', authorizeRole(['super_admin', 'admin', 'data_entry', 'dialer_agent']), getCampaignById);
 
 // Only super_admin and admin can create/update/delete campaigns
 router.post('/', authorizeRole(['super_admin', 'admin']), upload.single('attachment'), createCampaign);

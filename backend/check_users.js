@@ -5,7 +5,7 @@ const db = require("./src/config/db");
     const res = await db.query(`
       SELECT column_name, data_type 
       FROM information_schema.columns 
-      WHERE table_name = 'campaigns';
+      WHERE table_name = 'users';
     `);
     console.log(res.rows);
   } catch (err) {

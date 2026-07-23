@@ -17,11 +17,25 @@ const createCampaign = async (req, res) => {
 
 const getCampaigns = async (req, res) => {
   try {
-    const result = await db.query("SELECT * FROM van_campaigns ORDER BY created_at DESC");
+    let result;
+    if (req.user && req.user.role === 'dialer_agent') {
+        const accessible = req.user.accessible_campaigns || [];
+        if (accessible.length === 0) {
+            return res.json([]);
+        }
+        result = await db.query(
+            `SELECT * FROM van_campaigns WHERE campaign_id = ANY($1::uuid[]) ORDER BY created_at DESC`,
+            [accessible]
+        );
+    } else {
+        result = await db.query(
+            `SELECT * FROM van_campaigns ORDER BY created_at DESC`
+        );
+    }
     res.json(result.rows);
   } catch (err) {
     console.error("Error fetching van_campaigns:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error fetching van_campaigns" });
   }
 };
 

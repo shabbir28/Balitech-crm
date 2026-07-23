@@ -212,7 +212,7 @@ const Layout = ({ children }) => {
     const role = user?.role;
     const isSuperAdmin = role === 'super_admin';
     const isAdmin      = role === 'admin';
-    const isDataEntry  = role === 'data_entry';
+    const isDataEntry  = role === 'data_entry' || role === 'dialer_agent';
     const isFullAccess = isSuperAdmin || isAdmin;
 
     const hasModule = (mod) => {
@@ -362,20 +362,20 @@ const Layout = ({ children }) => {
     // ── Global Search ─────────────────────────────────────────
     const ALL_PAGES = [
         { label: 'Dashboard',         path: '/',                  roles: ['super_admin','admin'],        icon: <LayoutTemplate className="h-4 w-4" /> },
-        { label: 'Vendors',           path: '/vendors',           roles: ['super_admin','admin','data_entry'], icon: <Building2 className="h-4 w-4" /> },
+        { label: 'Vendors',           path: '/vendors',           roles: ['super_admin','admin','data_entry','dialer_agent'], icon: <Building2 className="h-4 w-4" /> },
         { label: 'Campaigns',         path: '/campaigns',         roles: ['super_admin','admin'],        icon: <Target className="h-4 w-4" /> },
-        { label: 'Upload Data',       path: '/upload',            roles: ['super_admin','admin','data_entry'], icon: <FolderUp className="h-4 w-4" /> },
+        { label: 'Upload Data',       path: '/upload',            roles: ['super_admin','admin','data_entry','dialer_agent'], icon: <FolderUp className="h-4 w-4" /> },
         { label: 'Compare',           path: '/compare',           roles: ['super_admin','admin'],        icon: <Scale className="h-4 w-4" /> },
         { label: 'Compare File',      path: '/compare-file',      roles: ['super_admin','admin'],        icon: <GitCompareArrows className="h-4 w-4" /> },
         { label: 'Sessions',          path: '/sessions',          roles: ['super_admin','admin'],        icon: <Layers className="h-4 w-4" /> },
         { label: 'Van Desk Data',     path: '/van-data',          roles: ['super_admin','admin'],        icon: <Database className="h-4 w-4" /> },
         { label: 'Van Desk Download', path: '/van-download',      roles: ['super_admin','admin'],        icon: <FolderDown className="h-4 w-4" /> },
         { label: 'Van Already Down.', path: '/van-already-downloaded', roles: ['super_admin','admin'],   icon: <History className="h-4 w-4" /> },
-        { label: 'Mixed Download',    path: '/mixed-download',    roles: ['super_admin','admin'],        icon: <FolderDown className="h-4 w-4" /> },
-        { label: 'Mixed Already Down.', path: '/mixed-already-downloaded', roles: ['super_admin','admin'], icon: <History className="h-4 w-4" /> },
+        { label: 'Mixed Download',    path: '/mixed-download',    roles: ['super_admin','admin','dialer_agent'],        icon: <FolderDown className="h-4 w-4" /> },
+        { label: 'Mixed Already Down.', path: '/mixed-already-downloaded', roles: ['super_admin','admin','dialer_agent'], icon: <History className="h-4 w-4" /> },
         { label: 'All Data',          path: '/leads',             roles: ['super_admin','admin'],        icon: <FileStack className="h-4 w-4" /> },
         { label: 'DNC',               path: '/dnc',               roles: ['super_admin','admin'],        icon: <ShieldBan className="h-4 w-4" /> },
-        { label: 'Download Data',     path: '/download',          roles: ['super_admin','admin'],        icon: <FolderDown className="h-4 w-4" /> },
+        { label: 'Download Data',     path: '/download',          roles: ['super_admin','admin','dialer_agent'],        icon: <FolderDown className="h-4 w-4" /> },
         { label: 'Logs',              path: '/logs',              roles: ['super_admin','admin'],        icon: <TerminalSquare className="h-4 w-4" /> },
         { label: 'Users',             path: '/users',             roles: ['super_admin'],               icon: <UserCheck className="h-4 w-4" /> },
         { label: 'Download Requests', path: '/download-requests', roles: ['super_admin'],               icon: <ClipboardList className="h-4 w-4" /> },
@@ -748,7 +748,7 @@ const Layout = ({ children }) => {
                                     }`}
                                 >
                                     <FolderDown className="h-[15px] w-[15px] shrink-0 text-blue-400" />
-                                    <span className="flex-1 text-left">Download Data</span>
+                                    <span className="flex-1 text-left">Mixed Data</span>
                                     <ChevronDown
                                         className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${mixedMenuOpen ? 'rotate-180' : ''}`}
                                     />
@@ -843,6 +843,49 @@ const Layout = ({ children }) => {
                                     <NavLink to="/upload" className={getClassName}>
                                         <FolderUp className="h-[15px] w-[15px] shrink-0" /><span>Upload Data</span>
                                     </NavLink>
+                                    {hasModule('download_data') && (
+                                        <>
+                                            <NavLink to="/download" className={getClassName}>
+                                                <FolderDown className="h-[15px] w-[15px] shrink-0" /><span>Download Data</span>
+                                            </NavLink>
+                                            <NavLink to="/already-downloaded" className={getClassName}>
+                                                <History className="h-[15px] w-[15px] shrink-0" /><span>Already Downloaded</span>
+                                            </NavLink>
+                                            <div className="mt-4">
+                                            <button
+                                                type="button"
+                                                onClick={() => setMixedMenuOpen((open) => !open)}
+                                                className={`w-full flex items-center px-3.5 py-2.5 text-[13px] font-medium rounded-xl transition-all duration-200 gap-3 mb-0.5 border ${
+                                                    isMixedPath
+                                                        ? 'bg-gradient-to-r from-blue-500/15 to-transparent text-white border-blue-500/25'
+                                                        : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border-transparent'
+                                                }`}
+                                            >
+                                                <FolderDown className="h-[15px] w-[15px] shrink-0 text-blue-400" />
+                                                <span className="flex-1 text-left">Mixed Data</span>
+                                    <ChevronDown
+                                        className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${mixedMenuOpen ? 'rotate-180' : ''}`}
+                                    />
+                                </button>
+
+                                <div
+                                    className={`overflow-hidden transition-all duration-300 ease-out ${
+                                        mixedMenuOpen ? 'max-h-[520px] opacity-100 mt-1' : 'max-h-0 opacity-0'
+                                    }`}
+                                >
+                                    {MIXED_NAV_ITEMS.map((item) => {
+                                        const ItemIcon = item.icon;
+                                        return (
+                                            <NavLink key={item.to} to={item.to} className={getSubClassName}>
+                                                <ItemIcon className="h-[14px] w-[14px] shrink-0" />
+                                                <span>{item.label}</span>
+                                            </NavLink>
+                                        );
+                                    })}
+                                </div>
+                                </div>
+                                        </>
+                                    )}
                                 </div>
                             )}
 
@@ -870,6 +913,16 @@ const Layout = ({ children }) => {
                                         <NavLink to="/refine-upload" className={getSubClassName}>
                                             <FolderUp className="h-[14px] w-[14px] shrink-0" /><span>Upload Refine Data</span>
                                         </NavLink>
+                                        {hasModule('download_data') && (
+                                            <>
+                                                <NavLink to="/refine-download" className={getSubClassName}>
+                                                    <FolderDown className="h-[14px] w-[14px] shrink-0" /><span>Download Refined</span>
+                                                </NavLink>
+                                                <NavLink to="/refine-already-downloaded" className={getSubClassName}>
+                                                    <History className="h-[14px] w-[14px] shrink-0" /><span>Already Downloaded</span>
+                                                </NavLink>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -898,6 +951,16 @@ const Layout = ({ children }) => {
                                         <NavLink to="/premium-upload" className={getSubClassName}>
                                             <FolderUp className="h-[14px] w-[14px] shrink-0" /><span>Upload Premium Data</span>
                                         </NavLink>
+                                        {hasModule('download_data') && (
+                                            <>
+                                                <NavLink to="/premium-download" className={getSubClassName}>
+                                                    <FolderDown className="h-[14px] w-[14px] shrink-0" /><span>Download Premium Data</span>
+                                                </NavLink>
+                                                <NavLink to="/premium-already-downloaded" className={getSubClassName}>
+                                                    <History className="h-[14px] w-[14px] shrink-0" /><span>Already Downloaded</span>
+                                                </NavLink>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -926,6 +989,16 @@ const Layout = ({ children }) => {
                                         <NavLink to="/van-upload" className={getSubClassName}>
                                             <FolderUp className="h-[14px] w-[14px] shrink-0" /><span>Upload Van Data</span>
                                         </NavLink>
+                                        {hasModule('download_data') && (
+                                            <>
+                                                <NavLink to="/van-download" className={getSubClassName}>
+                                                    <FolderDown className="h-[14px] w-[14px] shrink-0" /><span>Download Van Data</span>
+                                                </NavLink>
+                                                <NavLink to="/van-already-downloaded" className={getSubClassName}>
+                                                    <History className="h-[14px] w-[14px] shrink-0" /><span>Already Downloaded</span>
+                                                </NavLink>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                             )}

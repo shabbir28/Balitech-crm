@@ -25,7 +25,6 @@ const login = async (req, res) => {
       });
     }
 
-
     const { rows } = await db.query(
       "SELECT * FROM users WHERE (username = $1 OR email = $1) AND status != $2",
       [username, "inactive"],
@@ -48,6 +47,7 @@ const login = async (req, res) => {
         role: user.role,
         first_name: user.first_name,
         last_name: user.last_name,
+        accessible_campaigns: user.accessible_campaigns || [],
       },
       process.env.JWT_SECRET,
       { expiresIn: "1d" },
@@ -66,6 +66,7 @@ const login = async (req, res) => {
         role: user.role,
         status: user.status,
         accessible_modules: user.accessible_modules || [],
+        accessible_campaigns: user.accessible_campaigns || [],
       },
     });
   } catch (err) {

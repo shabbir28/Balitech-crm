@@ -638,7 +638,7 @@ const RefineDownloadLeads = () => {
         if (selectedFileIds.length === 1) {
             const fetchStats = () => {
                 setFileStats(null);
-                api.get(`/refine-download/job//stats`)
+                api.get(`/refine-download/job/${selectedFileIds[0]}/stats`)
                     .then(res => {
                         setFileStats(res.data);
                     })

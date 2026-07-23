@@ -6,7 +6,7 @@ const authorizeRole = require('../middleware/role');
 
 router.use(auth);
 router.get('/', authorizeRole(['super_admin', 'admin']), getSessions);
-router.get('/:id', authorizeRole(['super_admin', 'admin', 'data_entry']), getSession);
-router.post('/', authorizeRole(['super_admin', 'admin', 'data_entry']), createSession);
+router.get('/:id', authorizeRole(['super_admin', 'admin', 'data_entry', 'dialer_agent']), getSession);
+router.post('/', authorizeRole(['super_admin', 'admin', 'data_entry', 'dialer_agent']), createSession);
 
 module.exports = router;

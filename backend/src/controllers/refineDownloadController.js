@@ -33,11 +33,7 @@ const CSV_GOOD_FIELDS = [
   "disposition",
   "age",
 ];
-const CSV_BAD_FIELDS = [
-  ...CSV_GOOD_FIELDS,
-  "dnc_type",
-  "reason",
-];
+const CSV_BAD_FIELDS = [...CSV_GOOD_FIELDS, "dnc_type", "reason"];
 const DNC_UPSERT_BATCH_SIZE = 3000;
 
 const serializeDownloadPayload = (goodRows, badRows, summary, fileName) => {
@@ -90,7 +86,7 @@ const upsertDncNumbersBatched = async ({
         badItem.phone,
         "DNC",
         campaignId || null,
-        vendorId || null
+        vendorId || null,
       );
       idx += 4;
     }
@@ -263,51 +259,62 @@ async function buildFilters(
 
   if (job_id && (Array.isArray(job_id) ? job_id.length > 0 : job_id !== "")) {
     const jobIds = Array.isArray(job_id) ? job_id : [job_id];
-    
+
     const validJobIds = [];
     const missingJobIds = [];
-    
+
     // Check which jobIds exist in refine_data
     for (const jid of jobIds) {
-      const check = await client.query(`SELECT 1 FROM refine_data WHERE job_id = $1 LIMIT 1`, [jid]);
+      const check = await client.query(
+        `SELECT 1 FROM refine_data WHERE job_id = $1 LIMIT 1`,
+        [jid],
+      );
       if (check.rows.length > 0) validJobIds.push(jid);
       else missingJobIds.push(jid);
     }
-    
+
     const jobConditions = [];
-    
+
     if (validJobIds.length > 0) {
-      const placeholders = validJobIds.map((_, i) => `$${paramIdx + i}`).join(',');
+      const placeholders = validJobIds
+        .map((_, i) => `$${paramIdx + i}`)
+        .join(",");
       jobConditions.push(`job_id IN (${placeholders})`);
       params.push(...validJobIds);
       paramIdx += validJobIds.length;
     }
-    
+
     if (missingJobIds.length > 0) {
       const jobRes = await client.query(
         `SELECT j.id, j.created_at, s.vendor_id 
          FROM refine_jobs j
          JOIN refine_sessions s ON j.session_id = s.id
          WHERE j.id = ANY($1)`,
-        [missingJobIds]
+        [missingJobIds],
       );
-      
+
       for (const job of jobRes.rows) {
-        jobConditions.push(`(vendor_id = $${paramIdx++} AND uploaded_at >= $${paramIdx++}::timestamp with time zone - INTERVAL '5 minutes' AND uploaded_at <= $${paramIdx++}::timestamp with time zone + INTERVAL '5 minutes')`);
+        jobConditions.push(
+          `(vendor_id = $${paramIdx++} AND uploaded_at >= $${paramIdx++}::timestamp with time zone - INTERVAL '5 minutes' AND uploaded_at <= $${paramIdx++}::timestamp with time zone + INTERVAL '5 minutes')`,
+        );
         params.push(job.vendor_id, job.created_at, job.created_at);
       }
-      
-      const unfoundJobIds = missingJobIds.filter(id => !jobRes.rows.some(r => String(r.id) === String(id)));
+
+      const unfoundJobIds = missingJobIds.filter(
+        (id) => !jobRes.rows.some((r) => String(r.id) === String(id)),
+      );
       if (unfoundJobIds.length > 0) {
-        const placeholders = unfoundJobIds.map((_, i) => `$${paramIdx + i}`).join(',');
+        const placeholders = unfoundJobIds
+          .map((_, i) => `$${paramIdx + i}`)
+          .join(",");
         jobConditions.push(`job_id IN (${placeholders})`);
         params.push(...unfoundJobIds);
         paramIdx += unfoundJobIds.length;
       }
     }
-    
+
     if (jobConditions.length > 0) {
-      filters.push(`(${jobConditions.join(' OR ')})`);
+      filters.push(`(${jobConditions.join(" OR ")})`);
     }
   } else if (vendor_id && vendor_id !== "all") {
     filters.push(`vendor_id = $${paramIdx++}`);
@@ -351,12 +358,20 @@ async function buildFilters(
     params.push(parseInt(max_age));
   }
 
-  if (min_duration !== undefined && min_duration !== null && min_duration !== "") {
+  if (
+    min_duration !== undefined &&
+    min_duration !== null &&
+    min_duration !== ""
+  ) {
     filters.push(`duration >= $${paramIdx++}`);
     params.push(parseInt(min_duration));
   }
 
-  if (max_duration !== undefined && max_duration !== null && max_duration !== "") {
+  if (
+    max_duration !== undefined &&
+    max_duration !== null &&
+    max_duration !== ""
+  ) {
     filters.push(`duration <= $${paramIdx++}`);
     params.push(parseInt(max_duration));
   }
@@ -410,14 +425,13 @@ async function executeDownload(
   );
   if (campaign_id && campaign_id !== "all") {
     whereParts.push(
-      `NOT EXISTS (SELECT 1 FROM separation_data sd WHERE sd.phone = refine_data.phone AND sd.campaign_id = $${currentParamIdx++})`
+      `NOT EXISTS (SELECT 1 FROM separation_data sd WHERE sd.phone = refine_data.phone AND sd.campaign_id = $${currentParamIdx++})`,
     );
     params.push(campaign_id);
   }
-  const whereClause =
-    whereParts.length > 0 ? whereParts.join(" AND ") : "1=1";
+  const whereClause = whereParts.length > 0 ? whereParts.join(" AND ") : "1=1";
 
-    await client.query("SET local work_mem = '512MB'");
+  await client.query("SET local work_mem = '512MB'");
 
   const updateQuery = `
         WITH selected_leads AS (
@@ -501,7 +515,8 @@ async function executeDownload(
       if (scrubResult.bad.length > 0) {
         const badPhones = scrubResult.bad.map((b) => b.phone);
         const badPhoneSet = new Set(badPhones); // O(1) lookups vs Array.includes
-        const isBadPhone = (rowPhone) => badPhoneSet.has(normalizePhone(rowPhone));
+        const isBadPhone = (rowPhone) =>
+          badPhoneSet.has(normalizePhone(rowPhone));
         const scrubInfoByPhone = new Map(
           scrubResult.bad.map((b) => [b.phone, b]),
         );
@@ -523,7 +538,8 @@ async function executeDownload(
           await upsertDncNumbersBatched({
             queryFn: client.query.bind(client),
             badItems: scrubResult.bad,
-            campaignId: campaign_id && campaign_id !== "all" ? campaign_id : null,
+            campaignId:
+              campaign_id && campaign_id !== "all" ? campaign_id : null,
             vendorId: vendor_id && vendor_id !== "all" ? vendor_id : null,
           });
           await client.query("COMMIT");
@@ -678,22 +694,23 @@ const downloadLeads = async (req, res) => {
     const asyncScrub = requestedAsync || (autoAsync && !forceScrub);
 
     await client.query("BEGIN");
-    const { goodRows, badRows, summary, logId, allPhones } = await executeDownload(client, {
-      vendor_id: vendor_id && vendor_id !== "all" ? vendor_id : null,
-      campaign_id: campaign_id && campaign_id !== "all" ? campaign_id : null,
-      states,
-      quantity,
-      user_id: req.user.id,
-      min_age,
-      max_age,
-      min_duration,
-      max_duration,
-      force_scrub: forceScrub,
-      async_scrub: asyncScrub,
-      job_id,
-      include_downloaded,
-      quality,
-    });
+    const { goodRows, badRows, summary, logId, allPhones } =
+      await executeDownload(client, {
+        vendor_id: vendor_id && vendor_id !== "all" ? vendor_id : null,
+        campaign_id: campaign_id && campaign_id !== "all" ? campaign_id : null,
+        states,
+        quantity,
+        user_id: req.user.id,
+        min_age,
+        max_age,
+        min_duration,
+        max_duration,
+        force_scrub: forceScrub,
+        async_scrub: asyncScrub,
+        job_id,
+        include_downloaded,
+        quality,
+      });
     // executeDownload now commits internally; outer rollback is a no-op afterwards.
 
     if (goodRows.length === 0 && badRows.length === 0) {
@@ -984,20 +1001,23 @@ const reviewDownloadRequest = async (req, res) => {
     await client.query("BEGIN");
     txnStarted = true;
 
-    const { goodRows, badRows, summary, logId } = await executeDownload(client, {
-      vendor_id: dlReq.vendor_id,
-      campaign_id: dlReq.campaign_id,
-      states: dlReq.states,
-      quantity: dlReq.quantity,
-      min_age: dlReq.min_age,
-      max_age: dlReq.max_age,
-      min_duration: dlReq.min_duration,
-      max_duration: dlReq.max_duration,
-      user_id: dlReq.admin_id,
-      approved_by_id: req.user.id,
-      job_id: dlReq.job_id,
-      include_downloaded: dlReq.include_downloaded,
-    });
+    const { goodRows, badRows, summary, logId } = await executeDownload(
+      client,
+      {
+        vendor_id: dlReq.vendor_id,
+        campaign_id: dlReq.campaign_id,
+        states: dlReq.states,
+        quantity: dlReq.quantity,
+        min_age: dlReq.min_age,
+        max_age: dlReq.max_age,
+        min_duration: dlReq.min_duration,
+        max_duration: dlReq.max_duration,
+        user_id: dlReq.admin_id,
+        approved_by_id: req.user.id,
+        job_id: dlReq.job_id,
+        include_downloaded: dlReq.include_downloaded,
+      },
+    );
     // executeDownload already committed (phase 1/2). Outer tx is effectively done.
     txnStarted = false;
 
@@ -1142,7 +1162,10 @@ const getDownloadLogs = async (req, res) => {
 };
 
 const formatDownloadedBy = (row) => {
-  const name = [row.user_first_name, row.user_last_name].filter(Boolean).join(" ").trim();
+  const name = [row.user_first_name, row.user_last_name]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
   return name || row.username || "—";
 };
 
@@ -1162,7 +1185,8 @@ const parseDownloadLogMeta = (row) => {
       const summary = payload.summary || {};
       fileName = summary.fileName || null;
       cleanCount = parseInt(summary.good, 10);
-      if (Number.isNaN(cleanCount)) cleanCount = parseInt(row.quantity, 10) || 0;
+      if (Number.isNaN(cleanCount))
+        cleanCount = parseInt(row.quantity, 10) || 0;
 
       dncCount =
         (parseInt(summary.blacklist, 10) || 0) +
@@ -1177,7 +1201,9 @@ const parseDownloadLogMeta = (row) => {
         canDownloadDnc = badRows > 0;
       }
 
-      canRedownload = Boolean(payload.goodCsv && String(payload.goodCsv).trim());
+      canRedownload = Boolean(
+        payload.goodCsv && String(payload.goodCsv).trim(),
+      );
       scrubPending = summary.scrubPending === true;
       scrubCompleted =
         summary.scrubCompleted === true || summary.scrubPending !== true;
@@ -1195,7 +1221,9 @@ const parseDownloadLogMeta = (row) => {
     }
   }
 
-  const statesList = Array.isArray(row.states) ? row.states.filter(Boolean) : [];
+  const statesList = Array.isArray(row.states)
+    ? row.states.filter(Boolean)
+    : [];
 
   return {
     id: row.id,
@@ -1210,7 +1238,11 @@ const parseDownloadLogMeta = (row) => {
     clean_count: cleanCount,
     scrub_pending: scrubPending,
     scrub_completed: scrubCompleted,
-    scrub_status: scrubPending ? "pending" : scrubFailed ? "failed" : "completed",
+    scrub_status: scrubPending
+      ? "pending"
+      : scrubFailed
+        ? "failed"
+        : "completed",
     campaign_name: row.campaign_name || null,
     can_redownload: canRedownload,
     can_download_dnc: canDownloadDnc,
@@ -1385,8 +1417,7 @@ const getDownloadLogSummary = async (req, res) => {
     const scrubPending = summary.scrubPending === true;
     const scrubFailed = summary.scrubFailed === true;
     const scrubCompleted =
-      summary.scrubCompleted === true ||
-      (!scrubPending && !scrubFailed);
+      summary.scrubCompleted === true || (!scrubPending && !scrubFailed);
 
     return res.status(200).json({
       summary,
@@ -1469,7 +1500,7 @@ const getStateCounts = async (req, res) => {
         dncFilter += ` AND NOT EXISTS (SELECT 1 FROM separation_data sd WHERE sd.phone = refine_data.phone AND sd.campaign_id = $${currentParamIdx++})`;
         params.push(campaign_id);
       }
-      
+
       const query = `
         SELECT area_code, COUNT(id)::int as count 
         FROM refine_data 
@@ -1478,17 +1509,17 @@ const getStateCounts = async (req, res) => {
         GROUP BY area_code
       `;
       const result = await client.query(query, params);
-      
+
       const stateCounts = {};
       for (const row of result.rows) {
         let stateAbbr = areaCodesMap[row.area_code] || "Unknown";
         stateCounts[stateAbbr] = (stateCounts[stateAbbr] || 0) + row.count;
       }
-      
+
       // If specific states were requested, ensure they are all in the response (even if 0)
       if (states && Array.isArray(states) && states.length > 0) {
         for (const s of states) {
-           if (stateCounts[s] === undefined) stateCounts[s] = 0;
+          if (stateCounts[s] === undefined) stateCounts[s] = 0;
         }
       }
 
@@ -1512,7 +1543,7 @@ const downloadJobFile = async (req, res) => {
        JOIN refine_sessions s ON j.session_id = s.id
        JOIN vendors v ON s.vendor_id = v.vendor_id
        WHERE j.id = $1`,
-      [jobId]
+      [jobId],
     );
 
     if (jobRes.rows.length === 0) {
@@ -1527,7 +1558,7 @@ const downloadJobFile = async (req, res) => {
        FROM refine_data
        WHERE job_id = $1
        ORDER BY id ASC`,
-      [jobId]
+      [jobId],
     );
 
     // Fallback if no refine_data have this job_id (old jobs before this migration)
@@ -1539,7 +1570,7 @@ const downloadJobFile = async (req, res) => {
            AND uploaded_at >= $2::timestamp with time zone - INTERVAL '5 minutes'
            AND uploaded_at <= $2::timestamp with time zone + INTERVAL '5 minutes'
          ORDER BY id ASC`,
-        [job.vendor_id, job.created_at]
+        [job.vendor_id, job.created_at],
       );
     }
 
@@ -1558,7 +1589,9 @@ const downloadJobFile = async (req, res) => {
     });
 
     if (refine_data.length === 0) {
-      return res.status(404).json({ message: "No refine_data found for this uploaded file" });
+      return res
+        .status(404)
+        .json({ message: "No refine_data found for this uploaded file" });
     }
 
     const csv = new Parser({ fields: CSV_GOOD_FIELDS }).parse(refine_data);
@@ -1566,11 +1599,13 @@ const downloadJobFile = async (req, res) => {
     return res.status(200).json({
       fileName: job.file_name,
       csv,
-      count: refine_data.length
+      count: refine_data.length,
     });
   } catch (err) {
     console.error("Error downloading job file:", err);
-    return res.status(500).json({ message: "Server error downloading job file" });
+    return res
+      .status(500)
+      .json({ message: "Server error downloading job file" });
   }
 };
 
@@ -1584,7 +1619,7 @@ const getJobStats = async (req, res) => {
        JOIN refine_sessions s ON j.session_id = s.id
        JOIN vendors v ON s.vendor_id = v.vendor_id
        WHERE j.id = $1`,
-      [jobId]
+      [jobId],
     );
 
     if (jobRes.rows.length === 0) {
@@ -1596,7 +1631,7 @@ const getJobStats = async (req, res) => {
     // Check if there are refine_data with this job_id
     const jobCheck = await db.query(
       `SELECT 1 FROM refine_data WHERE job_id = $1 LIMIT 1`,
-      [jobId]
+      [jobId],
     );
 
     let countQuery;
@@ -1632,7 +1667,12 @@ const getJobStats = async (req, res) => {
     }
 
     const countsRes = await db.query(countQuery, countParams);
-    const counts = countsRes.rows[0] || { total_leads: 0, downloaded_leads: 0, available_leads: 0, dnc_leads: 0 };
+    const counts = countsRes.rows[0] || {
+      total_leads: 0,
+      downloaded_leads: 0,
+      available_leads: 0,
+      dnc_leads: 0,
+    };
 
     return res.status(200).json({
       jobId,
@@ -1640,7 +1680,7 @@ const getJobStats = async (req, res) => {
       total_leads: counts.total_leads,
       downloaded_leads: counts.downloaded_leads,
       available_leads: counts.available_leads,
-      dnc_leads: counts.dnc_leads
+      dnc_leads: counts.dnc_leads,
     });
   } catch (err) {
     console.error("Error getting job stats:", err);

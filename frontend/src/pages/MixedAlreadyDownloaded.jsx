@@ -50,8 +50,9 @@ const MixedAlreadyDownloaded = () => {
         try {
             const res = await api.get(`/mixed-download/logs/${log.id}/file`);
             const data = res.data;
-            if (data && data.csv) {
-                downloadBlob(data.csv, data.fileName || log.file_name || `mixed_leads_${log.id}.csv`);
+            const csvContent = data.csv || data.goodCsv;
+            if (data && csvContent) {
+                downloadBlob(csvContent, data.summary?.fileName || data.fileName || log.file_name || `mixed_leads_${log.id}.csv`);
             } else {
                 setError('File data not found or expired.');
             }

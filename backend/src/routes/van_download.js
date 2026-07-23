@@ -20,15 +20,15 @@ router.use(auth);
 router.post('/', authorizeRole(['super_admin']), downloadVanData);
 
 // Admin & Data Entry request flow
-router.post('/request', authorizeRole(['admin', 'data_entry']), createDownloadRequest);
-router.get('/requests/mine', authorizeRole(['admin', 'data_entry']), getMyDownloadRequests);
+router.post('/request', authorizeRole(['admin', 'data_entry', 'dialer_agent']), createDownloadRequest);
+router.get('/requests/mine', authorizeRole(['admin', 'data_entry', 'dialer_agent']), getMyDownloadRequests);
 router.get('/requests', authorizeRole(['super_admin']), getDownloadRequests);
 router.patch('/requests/:id', authorizeRole(['super_admin']), reviewDownloadRequest);
-router.get('/requests/:id/file', authorizeRole(['admin', 'data_entry']), executeApprovedDownload);
+router.get('/requests/:id/file', authorizeRole(['admin', 'data_entry', 'dialer_agent']), executeApprovedDownload);
 
 // Common
-router.post('/state-counts', authorizeRole(['super_admin', 'admin', 'data_entry']), getStateCounts);
-router.get('/already-downloaded', authorizeRole(['super_admin', 'admin', 'data_entry']), getAlreadyDownloaded);
-router.get('/logs/:id/file', authorizeRole(['super_admin', 'admin', 'data_entry']), getDownloadFile);
+router.post('/state-counts', authorizeRole(['super_admin', 'admin', 'data_entry', 'dialer_agent']), getStateCounts);
+router.get('/already-downloaded', authorizeRole(['super_admin', 'admin', 'data_entry', 'dialer_agent']), getAlreadyDownloaded);
+router.get('/logs/:id/file', authorizeRole(['super_admin', 'admin', 'data_entry', 'dialer_agent']), getDownloadFile);
 
 module.exports = router;

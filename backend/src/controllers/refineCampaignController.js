@@ -37,9 +37,21 @@ const createCampaign = async (req, res) => {
 // GET /api/refine_campaigns
 const getCampaigns = async (req, res) => {
   try {
-    const result = await db.query(
-      `SELECT * FROM refine_campaigns ORDER BY created_at DESC`,
-    );
+    let result;
+    if (req.user && req.user.role === 'dialer_agent') {
+        const accessible = req.user.accessible_campaigns || [];
+        if (accessible.length === 0) {
+            return res.json([]);
+        }
+        result = await db.query(
+            `SELECT * FROM refine_campaigns WHERE campaign_id = ANY($1::uuid[]) ORDER BY created_at DESC`,
+            [accessible]
+        );
+    } else {
+        result = await db.query(
+            `SELECT * FROM refine_campaigns ORDER BY created_at DESC`
+        );
+    }
     res.json(result.rows);
   } catch (err) {
     console.error("Error fetching refine_campaigns:", err);

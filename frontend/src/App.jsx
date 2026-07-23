@@ -99,7 +99,7 @@ const ProtectedRoute = ({ children, roles, module }) => {
         let fallbackPath = '/login';
         if (userRole === 'super_admin' || userRole === 'admin') {
             fallbackPath = '/';
-        } else if (userRole === 'data_entry') {
+        } else if (userRole === 'data_entry' || userRole === 'dialer_agent') {
             let modules = user.accessible_modules;
             if (typeof modules === 'string') {
                 try { modules = JSON.parse(modules); } catch { modules = []; }
@@ -114,6 +114,8 @@ const ProtectedRoute = ({ children, roles, module }) => {
                 fallbackPath = '/premium-vendors';
             } else if (modules.includes('van_desk')) {
                 fallbackPath = '/van-vendors';
+            } else if (modules.includes('download_data')) {
+                fallbackPath = '/download';
             }
         }
 
@@ -137,27 +139,27 @@ const AppRoutes = () => {
             <Route path="/logs" element={<ProtectedRoute roles={['super_admin', 'admin']} module="core"><Logs /></ProtectedRoute>} />
             <Route path="/filters" element={<ProtectedRoute roles={['super_admin', 'admin']} module="core"><Filters /></ProtectedRoute>} />
             <Route path="/sessions" element={<ProtectedRoute roles={['super_admin', 'admin']} module="core"><SessionsList /></ProtectedRoute>} />
-            <Route path="/sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']} module="core"><SessionDetails /></ProtectedRoute>} />
-            <Route path="/sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']} module="core"><AddJob /></ProtectedRoute>} />
+            <Route path="/sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="core"><SessionDetails /></ProtectedRoute>} />
+            <Route path="/sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="core"><AddJob /></ProtectedRoute>} />
             <Route path="/dnc" element={<ProtectedRoute roles={['super_admin', 'admin']} module="core"><Dnc /></ProtectedRoute>} />
             <Route path="/dead-numbers/upload" element={<ProtectedRoute roles={['super_admin', 'admin']} module="core"><DeadNumbersUpload /></ProtectedRoute>} />
             <Route path="/dead-numbers/all" element={<ProtectedRoute roles={['super_admin', 'admin']} module="core"><AllDeadNumbers /></ProtectedRoute>} />
 
-            {/* Vendors - super_admin, admin, data_entry */}
-            <Route path="/vendors" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']} module="core"><Vendors /></ProtectedRoute>} />
+            {/* Vendors - super_admin, admin, data_entry, dialer_agent */}
+            <Route path="/vendors" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="core"><Vendors /></ProtectedRoute>} />
 
-            {/* Upload - super_admin, admin, data_entry */}
-            <Route path="/upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']} module="core"><UploadLeads /></ProtectedRoute>} />
+            {/* Upload - super_admin, admin, data_entry, dialer_agent */}
+            <Route path="/upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="core"><UploadLeads /></ProtectedRoute>} />
 
             {/* Compare (DB compare flow) — UploadLeads detects /compare path and sets isCompareMode=true */}
-            <Route path="/compare" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']} module="core"><UploadLeads /></ProtectedRoute>} />
+            <Route path="/compare" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="core"><UploadLeads /></ProtectedRoute>} />
 
             {/* Compare File (new module) - super_admin, admin */}
             <Route path="/compare-file" element={<ProtectedRoute roles={['super_admin', 'admin']} module="core"><CompareFiles /></ProtectedRoute>} />
 
-            {/* Download - super_admin, admin */}
-            <Route path="/download" element={<ProtectedRoute roles={['super_admin', 'admin']} module="core"><DownloadLeads /></ProtectedRoute>} />
-            <Route path="/already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin']} module="core"><AlreadyDownloaded /></ProtectedRoute>} />
+            {/* Download - super_admin, admin, dialer_agent */}
+            <Route path="/download" element={<ProtectedRoute roles={['super_admin', 'admin', 'dialer_agent']} module="download_data"><DownloadLeads /></ProtectedRoute>} />
+            <Route path="/already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin', 'dialer_agent']} module="download_data"><AlreadyDownloaded /></ProtectedRoute>} />
 
             {/* Users management - super_admin only */}
             <Route path="/users" element={<ProtectedRoute roles={['super_admin']}><Users /></ProtectedRoute>} />
@@ -177,14 +179,14 @@ const AppRoutes = () => {
 
             
             {/* REFINE DATA MODULE */}
-            <Route path="/refine-vendors" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']} module="refine"><RefineVendors /></ProtectedRoute>} />
-            <Route path="/refine-upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']} module="refine"><RefineUploadLeads /></ProtectedRoute>} />
+            <Route path="/refine-vendors" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="refine"><RefineVendors /></ProtectedRoute>} />
+            <Route path="/refine-upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="refine"><RefineUploadLeads /></ProtectedRoute>} />
             <Route path="/refine-sessions" element={<ProtectedRoute roles={['super_admin', 'admin']} module="refine"><RefineSessionsList /></ProtectedRoute>} />
-            <Route path="/refine-sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']} module="refine"><RefineSessionDetails /></ProtectedRoute>} />
-            <Route path="/refine-sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']} module="refine"><RefineAddJob /></ProtectedRoute>} />
+            <Route path="/refine-sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="refine"><RefineSessionDetails /></ProtectedRoute>} />
+            <Route path="/refine-sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="refine"><RefineAddJob /></ProtectedRoute>} />
             <Route path="/refine-data" element={<ProtectedRoute roles={['super_admin', 'admin']} module="refine"><RefineLeadsTable /></ProtectedRoute>} />
-            <Route path="/refine-download" element={<ProtectedRoute roles={['super_admin', 'admin']} module="refine"><RefineDownloadLeads /></ProtectedRoute>} />
-            <Route path="/refine-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin']} module="refine"><RefineAlreadyDownloaded /></ProtectedRoute>} />
+            <Route path="/refine-download" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="refine"><RefineDownloadLeads /></ProtectedRoute>} />
+            <Route path="/refine-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="refine"><RefineAlreadyDownloaded /></ProtectedRoute>} />
             <Route path="/refine-dnc" element={<ProtectedRoute roles={['super_admin', 'admin']} module="refine"><RefineDnc /></ProtectedRoute>} />
             <Route path="/refine-campaigns" element={<ProtectedRoute roles={['super_admin', 'admin']} module="refine"><RefineCampaigns /></ProtectedRoute>} />
             <Route path="/refine-campaigns/add" element={<ProtectedRoute roles={['super_admin', 'admin']} module="refine"><RefineAddCampaign /></ProtectedRoute>} />
@@ -195,34 +197,34 @@ const AppRoutes = () => {
             <Route path="/dnc-checker/download" element={<ProtectedRoute roles={['super_admin', 'admin']} module="dnc_checker"><DncDownloadData /></ProtectedRoute>} />
 
             {/* PREMIUM DATA MODULE */}
-            <Route path="/premium-vendors" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']} module="premium"><PremiumVendors /></ProtectedRoute>} />
-            <Route path="/premium-upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']} module="premium"><PremiumUploadLeads /></ProtectedRoute>} />
+            <Route path="/premium-vendors" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="premium"><PremiumVendors /></ProtectedRoute>} />
+            <Route path="/premium-upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="premium"><PremiumUploadLeads /></ProtectedRoute>} />
             <Route path="/premium-sessions" element={<ProtectedRoute roles={['super_admin', 'admin']} module="premium"><PremiumSessionsList /></ProtectedRoute>} />
-            <Route path="/premium-sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']} module="premium"><PremiumSessionDetails /></ProtectedRoute>} />
-            <Route path="/premium-sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']} module="premium"><PremiumAddJob /></ProtectedRoute>} />
+            <Route path="/premium-sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="premium"><PremiumSessionDetails /></ProtectedRoute>} />
+            <Route path="/premium-sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="premium"><PremiumAddJob /></ProtectedRoute>} />
             <Route path="/premium-data" element={<ProtectedRoute roles={['super_admin', 'admin']} module="premium"><PremiumLeadsTable /></ProtectedRoute>} />
-            <Route path="/premium-download" element={<ProtectedRoute roles={['super_admin', 'admin']} module="premium"><PremiumDownloadLeads /></ProtectedRoute>} />
-            <Route path="/premium-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin']} module="premium"><PremiumAlreadyDownloaded /></ProtectedRoute>} />
+            <Route path="/premium-download" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="premium"><PremiumDownloadLeads /></ProtectedRoute>} />
+            <Route path="/premium-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="premium"><PremiumAlreadyDownloaded /></ProtectedRoute>} />
             <Route path="/premium-campaigns" element={<ProtectedRoute roles={['super_admin', 'admin']} module="premium"><PremiumCampaigns /></ProtectedRoute>} />
             <Route path="/premium-campaigns/add" element={<ProtectedRoute roles={['super_admin', 'admin']} module="premium"><PremiumAddCampaign /></ProtectedRoute>} />
             <Route path="/premium-campaigns/edit/:id" element={<ProtectedRoute roles={['super_admin', 'admin']} module="premium"><PremiumAddCampaign editMode /></ProtectedRoute>} />
 
             {/* VAN DESK MODULE */}
-            <Route path="/van-vendors" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']} module="van_desk"><VanVendors /></ProtectedRoute>} />
+            <Route path="/van-vendors" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="van_desk"><VanVendors /></ProtectedRoute>} />
             <Route path="/van-campaigns" element={<ProtectedRoute roles={['super_admin', 'admin']} module="van_desk"><VanCampaigns /></ProtectedRoute>} />
             <Route path="/van-campaigns/add" element={<ProtectedRoute roles={['super_admin', 'admin']} module="van_desk"><VanAddCampaign /></ProtectedRoute>} />
             <Route path="/van-campaigns/edit/:id" element={<ProtectedRoute roles={['super_admin', 'admin']} module="van_desk"><VanAddCampaign editMode /></ProtectedRoute>} />
-            <Route path="/van-upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']} module="van_desk"><VanUploadLeads /></ProtectedRoute>} />
+            <Route path="/van-upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="van_desk"><VanUploadLeads /></ProtectedRoute>} />
             <Route path="/van-sessions" element={<ProtectedRoute roles={['super_admin', 'admin']} module="van_desk"><VanSessionsList /></ProtectedRoute>} />
-            <Route path="/van-sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']} module="van_desk"><VanSessionDetails /></ProtectedRoute>} />
-            <Route path="/van-sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry']} module="van_desk"><VanAddJob /></ProtectedRoute>} />
+            <Route path="/van-sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="van_desk"><VanSessionDetails /></ProtectedRoute>} />
+            <Route path="/van-sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="van_desk"><VanAddJob /></ProtectedRoute>} />
             <Route path="/van-data" element={<ProtectedRoute roles={['super_admin', 'admin']} module="van_desk"><VanLeadsTable /></ProtectedRoute>} />
-            <Route path="/van-download" element={<ProtectedRoute roles={['super_admin', 'admin']} module="van_desk"><VanDownloadLeads /></ProtectedRoute>} />
-            <Route path="/van-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin']} module="van_desk"><VanAlreadyDownloaded /></ProtectedRoute>} />
+            <Route path="/van-download" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="van_desk"><VanDownloadLeads /></ProtectedRoute>} />
+            <Route path="/van-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="van_desk"><VanAlreadyDownloaded /></ProtectedRoute>} />
 
             {/* MIXED DOWNLOAD MODULE */}
-            <Route path="/mixed-download" element={<ProtectedRoute roles={['super_admin', 'admin']}><MixedDownloadLeads /></ProtectedRoute>} />
-            <Route path="/mixed-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin']}><MixedAlreadyDownloaded /></ProtectedRoute>} />
+            <Route path="/mixed-download" element={<ProtectedRoute roles={['super_admin', 'admin', 'dialer_agent']}><MixedDownloadLeads /></ProtectedRoute>} />
+            <Route path="/mixed-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin', 'dialer_agent']}><MixedAlreadyDownloaded /></ProtectedRoute>} />
 
             {/* Clients & Separation */}
             <Route path="/clients" element={<ProtectedRoute roles={['super_admin', 'admin']} module="core"><Clients /></ProtectedRoute>} />

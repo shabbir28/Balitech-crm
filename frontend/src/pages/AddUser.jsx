@@ -18,7 +18,8 @@ const AVAILABLE_MODULES = [
     { id: 'refine', label: 'Refine Data' },
     { id: 'premium', label: 'Premium Data' },
     { id: 'van_desk', label: 'Van Desk' },
-    { id: 'dnc_checker', label: 'DNC Checker' }
+    { id: 'dnc_checker', label: 'DNC Checker' },
+    { id: 'download_data', label: 'Download Data' }
 ];
 
 const AddUser = ({ editMode }) => {
@@ -27,8 +28,9 @@ const AddUser = ({ editMode }) => {
     const fileInputRef = useRef();
     const [form, setForm] = useState({
         first_name: '', last_name: '', email: '', phone: '',
-        date_of_birth: '', password: '', confirm_password: '', role: '', accessible_modules: [],
+        date_of_birth: '', password: '', confirm_password: '', role: '', accessible_modules: [], accessible_campaigns: []
     });
+    const [allCampaigns, setAllCampaigns] = useState({ core: [], refine: [], premium: [], van_desk: [] });
     const [profileFile, setProfileFile] = useState(null);
     const [profilePreview, setProfilePreview] = useState(null);
     const [errors, setErrors] = useState({});
@@ -42,6 +44,22 @@ const AddUser = ({ editMode }) => {
         setToast({ msg, type });
         setTimeout(() => setToast(null), 3500);
     };
+
+    useEffect(() => {
+        Promise.all([
+            api.get('/campaigns').catch(() => ({ data: [] })),
+            api.get('/refine-campaigns').catch(() => ({ data: [] })),
+            api.get('/premium-campaigns').catch(() => ({ data: [] })),
+            api.get('/van-campaigns').catch(() => ({ data: [] }))
+        ]).then(([core, refine, premium, van]) => {
+            setAllCampaigns({
+                core: core.data || [],
+                refine: refine.data || [],
+                premium: premium.data || [],
+                van_desk: van.data || []
+            });
+        });
+    }, []);
 
     useEffect(() => {
         if (!editMode || !id) return;
@@ -59,6 +77,7 @@ const AddUser = ({ editMode }) => {
                     password: '',
                     confirm_password: '',
                     accessible_modules: u.accessible_modules || [],
+                    accessible_campaigns: u.accessible_campaigns || [],
                 }));
                 if (u.profile_picture) {
                     setProfilePreview(`${import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000'}${u.profile_picture}`);
@@ -81,6 +100,17 @@ const AddUser = ({ editMode }) => {
                 return { ...prev, accessible_modules: current.filter(m => m !== modId) };
             } else {
                 return { ...prev, accessible_modules: [...current, modId] };
+            }
+        });
+    };
+
+    const toggleCampaign = (campId) => {
+        setForm(prev => {
+            const current = prev.accessible_campaigns || [];
+            if (current.includes(campId)) {
+                return { ...prev, accessible_campaigns: current.filter(c => c !== campId) };
+            } else {
+                return { ...prev, accessible_campaigns: [...current, campId] };
             }
         });
     };
@@ -127,7 +157,7 @@ const AddUser = ({ editMode }) => {
         try {
             const formData = new FormData();
             Object.entries(form).forEach(([k, v]) => {
-                if (k === 'accessible_modules') {
+                if (k === 'accessible_modules' || k === 'accessible_campaigns') {
                     formData.append(k, JSON.stringify(v || []));
                 } else if (k !== 'confirm_password' && v) {
                     formData.append(k, v);
@@ -136,15 +166,16 @@ const AddUser = ({ editMode }) => {
             if (profileFile) formData.append('profile_picture', profileFile);
 
             if (editMode) {
-                await api.put(`/users/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+                await api.put(`/users/${id}`, formData);
                 showToast('User updated successfully!', 'success');
             } else {
-                await api.post('/users', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+                await api.post('/users', formData);
                 showToast('User created successfully!', 'success');
             }
             setTimeout(() => navigate('/users'), 1500);
         } catch (err) {
-            showToast(err?.response?.data?.message || (editMode ? 'Failed to update user' : 'Failed to create user'), 'error');
+            console.error("User save failed:", err?.response?.data || err);
+            showToast(err?.response?.data?.error || err?.response?.data?.message || (editMode ? 'Failed to update user' : 'Failed to create user'), 'error');
         } finally {
             setSubmitting(false);
         }
@@ -264,11 +295,12 @@ const AddUser = ({ editMode }) => {
                                     <option value="super_admin">Super Admin</option>
                                     <option value="admin">Admin</option>
                                     <option value="data_entry">Data Entry</option>
+                                    <option value="dialer_agent">Dialer Agent</option>
                                 </select>
                             </FormField>
                         </div>
 
-                        {(form.role === 'admin' || form.role === 'data_entry') && (
+                        {(form.role === 'admin' || form.role === 'data_entry' || form.role === 'dialer_agent') && (
                             <div className="md:col-span-2 mt-2">
                                 <FormField label="Module Access">
                                     <p className="text-[11px] text-slate-500 mb-3 -mt-1 font-medium">
@@ -284,6 +316,36 @@ const AddUser = ({ editMode }) => {
                                                 <input type="checkbox" className="hidden" checked={form.accessible_modules?.includes(mod.id) || false} onChange={() => toggleModule(mod.id)} />
                                             </label>
                                         ))}
+                                    </div>
+                                </FormField>
+
+                                <FormField label="Campaign Access">
+                                    <p className="text-[11px] text-slate-500 mb-3 -mt-1 font-medium">
+                                        Select which campaigns this user can access. Only applicable campaigns for the selected modules will be shown.
+                                    </p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-60 overflow-y-auto custom-scrollbar pr-2">
+                                        {AVAILABLE_MODULES.filter(mod => form.accessible_modules?.includes(mod.id)).map(mod => (
+                                            <div key={mod.id} className="col-span-1 sm:col-span-2">
+                                                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 mt-2">{mod.label}</h4>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                    {(allCampaigns[mod.id] || []).map(camp => (
+                                                        <label key={`${mod.id}-${camp.campaign_id}`} className="flex items-center gap-3 p-2.5 rounded-xl border border-white/10 bg-[#0a0a0f] hover:border-brand-500/50 cursor-pointer transition-all">
+                                                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${form.accessible_campaigns?.includes(camp.campaign_id) ? 'bg-brand-500 border-brand-500' : 'border-white/20'}`}>
+                                                                {form.accessible_campaigns?.includes(camp.campaign_id) && <Check className="w-3 h-3 text-white" />}
+                                                            </div>
+                                                            <span className="text-[13px] text-slate-300 font-medium truncate">{camp.name}</span>
+                                                            <input type="checkbox" className="hidden" checked={form.accessible_campaigns?.includes(camp.campaign_id) || false} onChange={() => toggleCampaign(camp.campaign_id)} />
+                                                        </label>
+                                                    ))}
+                                                    {(allCampaigns[mod.id] || []).length === 0 && (
+                                                        <div className="text-xs text-slate-500 col-span-2">No campaigns found for {mod.label}</div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {(!form.accessible_modules || form.accessible_modules.length === 0) && (
+                                            <div className="text-xs text-slate-500">Please select a module first to see its campaigns.</div>
+                                        )}
                                     </div>
                                 </FormField>
                             </div>

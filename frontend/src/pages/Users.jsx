@@ -11,6 +11,7 @@ const ROLE_LABELS = {
     super_admin: 'Super Admin',
     admin: 'Admin',
     data_entry: 'Data Entry',
+    dialer_agent: 'Dialer Agent'
 };
 const ROLE_COLORS = {
     super_admin: '#f59e0b',
@@ -182,6 +183,7 @@ const Users = () => {
                     <option value="super_admin">Super Admin</option>
                     <option value="admin">Admin</option>
                     <option value="data_entry">Data Entry</option>
+                    <option value="dialer_agent">Dialer Agent</option>
                 </select>
                 {/* Status Filter */}
                 <select
