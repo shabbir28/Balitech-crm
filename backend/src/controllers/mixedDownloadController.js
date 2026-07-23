@@ -473,7 +473,7 @@ const getAlreadyDownloaded = async (req, res) => {
       let fileName = `mixed_download_${row.id}.csv`;
       if (row.csv_payload) {
         try {
-          const payload = JSON.parse(row.csv_payload);
+          const payload = typeof row.csv_payload === 'string' ? JSON.parse(row.csv_payload) : row.csv_payload;
           canRedownload = Boolean(payload.csv || payload.goodCsv);
           fileName = payload.summary?.fileName || payload.fileName || fileName;
         } catch (_) {}
@@ -519,7 +519,10 @@ const getDownloadFile = async (req, res) => {
       return res.status(404).json({ message: "Record not found" });
     if (!result.rows[0].csv_payload)
       return res.status(404).json({ message: "No stored file" });
-    res.json(JSON.parse(result.rows[0].csv_payload));
+    const payload = typeof result.rows[0].csv_payload === 'string' 
+      ? JSON.parse(result.rows[0].csv_payload) 
+      : result.rows[0].csv_payload;
+    res.json(payload);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });

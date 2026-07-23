@@ -463,8 +463,9 @@ const MixedDownloadLeads = () => {
                                             min="0"
                                             max="100"
                                             value={form.van_percentage}
+                                            disabled={user?.role !== 'super_admin'}
                                             onChange={e => setForm({ ...form, van_percentage: e.target.value })}
-                                            className="w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 text-white rounded-xl py-3.5 px-4 focus:outline-none focus:border-violet-500/60 transition-all text-sm"
+                                            className={`w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 text-white rounded-xl py-3.5 px-4 focus:outline-none focus:border-violet-500/60 transition-all text-sm ${user?.role !== 'super_admin' ? 'opacity-60 cursor-not-allowed' : ''}`}
                                             placeholder="50"
                                         />
                                     </Field>
@@ -487,8 +488,9 @@ const MixedDownloadLeads = () => {
                                             min="0"
                                             max="100"
                                             value={form.refine_percentage}
+                                            disabled={user?.role !== 'super_admin'}
                                             onChange={e => setForm({ ...form, refine_percentage: e.target.value })}
-                                            className="w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 text-white rounded-xl py-3.5 px-4 focus:outline-none focus:border-violet-500/60 transition-all text-sm"
+                                            className={`w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 text-white rounded-xl py-3.5 px-4 focus:outline-none focus:border-violet-500/60 transition-all text-sm ${user?.role !== 'super_admin' ? 'opacity-60 cursor-not-allowed' : ''}`}
                                             placeholder="30"
                                         />
                                     </Field>
@@ -511,8 +513,9 @@ const MixedDownloadLeads = () => {
                                             min="0"
                                             max="100"
                                             value={form.premium_percentage}
+                                            disabled={user?.role !== 'super_admin'}
                                             onChange={e => setForm({ ...form, premium_percentage: e.target.value })}
-                                            className="w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 text-white rounded-xl py-3.5 px-4 focus:outline-none focus:border-violet-500/60 transition-all text-sm"
+                                            className={`w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 text-white rounded-xl py-3.5 px-4 focus:outline-none focus:border-violet-500/60 transition-all text-sm ${user?.role !== 'super_admin' ? 'opacity-60 cursor-not-allowed' : ''}`}
                                             placeholder="20"
                                         />
                                     </Field>
@@ -579,18 +582,6 @@ const MixedDownloadLeads = () => {
                                         {filters.map(f => (
                                             <option key={f.id} value={f.id}>{f.name} ({f.states?.length || 0} states)</option>
                                         ))}
-                                    </SelectInput>
-                                </Field>
-
-                                {/* Quality Filter */}
-                                <Field label="Quality Filter" required hint="Select which data quality to export">
-                                    <SelectInput
-                                        value={form.quality}
-                                        onChange={e => setForm({ ...form, quality: e.target.value })}
-                                    >
-                                        <option value="All">All Quality</option>
-                                        <option value="Good">Good</option>
-                                        <option value="Bad">Bad</option>
                                     </SelectInput>
                                 </Field>
 
