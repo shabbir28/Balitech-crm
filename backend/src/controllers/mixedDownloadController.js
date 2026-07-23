@@ -67,6 +67,7 @@ function buildFilters(
     include_downloaded,
     vendor_id,
     quality,
+    data_campaigns
   },
 ) {
   const filters = include_downloaded
@@ -129,10 +130,20 @@ function buildFilters(
     params.push(quality);
   }
 
-  if (data_campaign && data_campaign !== "all") {
+  if (data_campaigns && Array.isArray(data_campaigns) && data_campaigns.length > 0) {
+    const placeholders = data_campaigns.map(() => `$${idx++}`).join(",");
     if (tableName === "van_data") {
       filters.push(
-        `EXISTS (SELECT 1 FROM van_sessions s WHERE s.id = van_data.session_id AND s.campaign_type = $${idx++})`,
+        `EXISTS (SELECT 1 FROM van_sessions s WHERE s.id = van_data.session_id AND s.campaign_type IN (${placeholders}))`
+      );
+    } else {
+      filters.push(`campaign_type IN (${placeholders})`);
+    }
+    params.push(...data_campaigns);
+  } else if (data_campaign && data_campaign !== "all") {
+    if (tableName === "van_data") {
+      filters.push(
+        `EXISTS (SELECT 1 FROM van_sessions s WHERE s.id = van_data.session_id AND s.campaign_type = $${idx++})`
       );
       params.push(String(data_campaign));
     } else {
@@ -536,19 +547,28 @@ const { createNotification } = require('./notificationController');
 // Added for request handling
 const createMixedDownloadRequest = async (req, res) => {
   try {
-    const { quantity, states, min_age, max_age, min_duration, max_duration, include_downloaded, van_percentage, refine_percentage, premium_percentage } = req.body;
+    const { global_campaign, quantity, states, min_age, max_age, min_duration, max_duration, include_downloaded, van_percentage, refine_percentage, premium_percentage } = req.body;
 
     if (!quantity || quantity <= 0) {
       return res.status(400).json({ message: "Valid quantity is required." });
     }
 
+    let actual_campaign_id = null;
+    if (global_campaign && global_campaign !== 'all') {
+      const campRes = await db.query('SELECT campaign_id FROM campaigns WHERE name = $1 LIMIT 1', [global_campaign]);
+      if (campRes.rows.length > 0) {
+        actual_campaign_id = campRes.rows[0].campaign_id;
+      }
+    }
+
     const result = await db.query(
       `INSERT INTO mixed_download_requests
-               (admin_id, quantity, van_percentage, refine_percentage, premium_percentage, states, min_age, max_age, min_duration, max_duration, include_downloaded)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+               (admin_id, campaign_id, quantity, van_percentage, refine_percentage, premium_percentage, states, min_age, max_age, min_duration, max_duration, include_downloaded)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
              RETURNING *`,
       [
         req.user.id,
+        actual_campaign_id,
         quantity,
         van_percentage || 0,
         refine_percentage || 0,
@@ -585,6 +605,7 @@ const createMixedDownloadRequest = async (req, res) => {
       request: newRequest,
     });
   } catch (err) {
+    require('fs').appendFileSync('error_mixed.log', err.stack + '\\n');
     console.error("Create Mixed Download Request Error:", err);
     return res.status(500).json({ message: "Server error creating request" });
   }
@@ -597,9 +618,11 @@ const getDownloadRequests = async (req, res) => {
                 dr.*,
                 u.username as admin_username,
                 u.first_name as admin_first_name,
-                u.last_name as admin_last_name
+                u.last_name as admin_last_name,
+                c.name as campaign_name
             FROM mixed_download_requests dr
             LEFT JOIN users u ON dr.admin_id = u.id
+            LEFT JOIN campaigns c ON dr.campaign_id = c.campaign_id
             ORDER BY dr.requested_at DESC
         `);
     return res.status(200).json(result.rows);
@@ -613,8 +636,9 @@ const getMyDownloadRequests = async (req, res) => {
   try {
     const result = await db.query(
       `
-            SELECT dr.*
+            SELECT dr.*, c.name as campaign_name
             FROM mixed_download_requests dr
+            LEFT JOIN campaigns c ON dr.campaign_id = c.campaign_id
             WHERE dr.admin_id = $1
             ORDER BY dr.requested_at DESC
         `,
@@ -671,9 +695,33 @@ const reviewDownloadRequest = async (req, res) => {
     const refine_qty = Math.floor(dlReq.quantity * ((dlReq.refine_percentage || 0) / 100));
     const premium_qty = dlReq.quantity - van_qty - refine_qty;
 
-    const vanFilters = buildFilters("van_data", { states, min_age: dlReq.min_age, max_age: dlReq.max_age, include_downloaded: dlReq.include_downloaded });
-    const refineFilters = buildFilters("refine_data", { states, min_age: dlReq.min_age, max_age: dlReq.max_age, include_downloaded: dlReq.include_downloaded });
-    const premiumFilters = buildFilters("premium_data", { states, min_age: dlReq.min_age, max_age: dlReq.max_age, include_downloaded: dlReq.include_downloaded });
+    let data_campaigns = [];
+    if (dlReq.campaign_id) {
+        // If a specific campaign was requested, fetch its name
+        const campRes = await client.query('SELECT name FROM campaigns WHERE campaign_id = $1', [dlReq.campaign_id]);
+        if (campRes.rows.length > 0) {
+            data_campaigns = [campRes.rows[0].name];
+        }
+    } else {
+        // If no specific campaign was requested, fetch accessible campaigns of the requester
+        const adminRes = await client.query('SELECT role, accessible_campaigns FROM users WHERE id = $1', [dlReq.admin_id]);
+        if (adminRes.rows.length > 0) {
+            const admin = adminRes.rows[0];
+            if (admin.role !== 'super_admin' && admin.role !== 'admin') {
+                const accessible = admin.accessible_campaigns || [];
+                if (accessible.length > 0) {
+                    const campsRes = await client.query('SELECT name FROM campaigns WHERE campaign_id = ANY($1::uuid[])', [accessible]);
+                    data_campaigns = campsRes.rows.map(r => r.name);
+                } else {
+                    data_campaigns = ['none_accessible'];
+                }
+            }
+        }
+    }
+
+    const vanFilters = buildFilters("van_data", { states, min_age: dlReq.min_age, max_age: dlReq.max_age, include_downloaded: dlReq.include_downloaded, data_campaigns });
+    const refineFilters = buildFilters("refine_data", { states, min_age: dlReq.min_age, max_age: dlReq.max_age, include_downloaded: dlReq.include_downloaded, data_campaigns });
+    const premiumFilters = buildFilters("premium_data", { states, min_age: dlReq.min_age, max_age: dlReq.max_age, include_downloaded: dlReq.include_downloaded, data_campaigns });
 
     const vanRows = await fetchFromTable(client, "van_data", van_qty, vanFilters);
     const refineRows = await fetchFromTable(client, "refine_data", refine_qty, refineFilters);

@@ -10,26 +10,27 @@ const Login = () => {
     const [formData, setFormData] = useState({ username: '', password: '' });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [captchaToken, setCaptchaToken] = useState(null);
 
     const recaptchaRef = React.useRef(null);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        const token = recaptchaRef.current?.getValue();
-        if (!token) {
-            setError('Please complete the reCAPTCHA to continue');
+        if (!captchaToken) {
+            setError('Please complete the reCAPTCHA');
             return;
         }
 
         setLoading(true);
         setError('');
         try {
-            await login(formData.username, formData.password, token);
+            await login(formData.username, formData.password, captchaToken);
             navigate('/');
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to login');
             recaptchaRef.current?.reset();
+            setCaptchaToken(null);
         } finally {
             setLoading(false);
         }
@@ -111,8 +112,10 @@ const Login = () => {
                             <div className="pt-2 flex justify-center">
                                 <ReCAPTCHA
                                     ref={recaptchaRef}
-                                    sitekey="6LeLzwctAAAAAIRVXWG_PUJcMegb1k1B-o_s4q1w"
+                                    sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
+                                    onChange={setCaptchaToken}
                                     theme="dark"
+                                    className="transform scale-95 origin-left"
                                 />
                             </div>
 

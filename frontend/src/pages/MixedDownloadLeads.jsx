@@ -244,7 +244,7 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
     );
 };
 
-const fmtDate = (d) => d ? new Date(d).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+
 const MixedDownloadLeads = () => {
     const { user } = useContext(AuthContext);
     const isSuperAdmin = user?.role === 'super_admin';
@@ -273,6 +273,7 @@ const MixedDownloadLeads = () => {
         van_vendor: 'all',
         refine_vendor: 'all',
         premium_vendor: 'all',
+        campaign_id: null,
         global_campaign: 'all',
         van_campaign: 'all',
         refine_campaign: 'all',
@@ -292,18 +293,6 @@ const MixedDownloadLeads = () => {
     const [scrubSummaryData, setScrubSummaryData] = useState(null);
     const [scrubPolling] = useState(false);
     const scrubPollCancelRef = useRef(false);
-
-    const [dlId, setDlId] = useState(null);
-    const [myRequests, setMyRequests] = useState([]);
-    const [loadingReq, setLoadingReq] = useState(false);
-
-    const fetchMyReqs = async () => {
-        if (canDownloadDirectly) return;
-        setLoadingReq(true);
-        try { const r = await api.get('/mixed-download/requests/mine'); setMyRequests(r.data); }
-        catch (err) { console.error(err); } finally { setLoadingReq(false); }
-    };
-    useEffect(() => { fetchMyReqs(); }, []);
 
 
     useEffect(() => {
@@ -345,25 +334,6 @@ const MixedDownloadLeads = () => {
         return () => document.removeEventListener('mousedown', h);
     }, []);
 
-    
-    const handleDownloadCSV = async (req) => {
-        setDlId(req.id);
-        try {
-            const res = await api.get(`/mixed-download/requests/${req.id}/file`);
-            setScrubSummaryData(res.data);
-            if (res.data?.goodCsv) {
-                const blob = new Blob([res.data.goodCsv], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement('a');
-                const url = URL.createObjectURL(blob);
-                link.setAttribute('href', url);
-                link.setAttribute('download', res.data.summary?.fileName || `mixed_leads_${req.id}.csv`);
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            }
-        } catch { alert('Download failed. Try again.'); }
-        finally { setDlId(null); }
-    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -388,7 +358,6 @@ const MixedDownloadLeads = () => {
             } else {
                 const res = await api.post('/mixed-download/request', form);
                 setSuccessMsg(res.data.message || 'Request submitted successfully to Super Admin.');
-                fetchMyReqs();
             }
         } catch (err) {
             const status = err.response?.status;
@@ -547,6 +516,7 @@ const MixedDownloadLeads = () => {
                                             setForm({
                                                 ...form,
                                                 global_campaign: selectedName,
+                                                campaign_id: selectedName === 'all' ? null : ((vanC || refC || premC)?.campaign_id || null),
                                                 van_campaign: vanC ? String(vanC.campaign_id) : (selectedName === 'all' ? 'all' : ''),
                                                 refine_campaign: refC ? selectedName : (selectedName === 'all' ? 'all' : ''),
                                                 premium_campaign: premC ? selectedName : (selectedName === 'all' ? 'all' : '')

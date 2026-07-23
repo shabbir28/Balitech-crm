@@ -24,7 +24,7 @@ const getCampaigns = async (req, res) => {
             return res.json([]);
         }
         result = await db.query(
-            `SELECT * FROM van_campaigns WHERE campaign_id = ANY($1::uuid[]) ORDER BY created_at DESC`,
+            `SELECT vc.* FROM van_campaigns vc JOIN campaigns c ON vc.name = c.name WHERE c.campaign_id = ANY($1::uuid[]) ORDER BY vc.created_at DESC`,
             [accessible]
         );
     } else {
