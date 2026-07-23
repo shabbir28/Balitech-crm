@@ -112,7 +112,7 @@ const Login = () => {
                             <div className="pt-2 flex justify-center">
                                 <ReCAPTCHA
                                     ref={recaptchaRef}
-                                    sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
+                                    sitekey="6LeLzwctAAAAAIRVXWG_PUJcMegb1k1B-o_s4q1w"
                                     onChange={setCaptchaToken}
                                     theme="dark"
                                     className="transform scale-95 origin-left"
