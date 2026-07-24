@@ -38,3 +38,8 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 backend/exports/
+
+# Ignore backend root helper/debug scripts
+backend/*.js
+backend/*.txt
+!backend/package.json
