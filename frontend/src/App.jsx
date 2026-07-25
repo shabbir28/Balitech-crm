@@ -66,6 +66,18 @@ import VanLeadsTable from './pages/VanLeadsTable';
 import VanDownloadLeads from './pages/VanDownloadLeads';
 import VanAlreadyDownloaded from './pages/VanAlreadyDownloaded';
 
+// WC DB Module
+import WcDbVendors from './pages/WcDbVendors';
+import WcDbCampaigns from './pages/WcDbCampaigns';
+import WcDbAddCampaign from './pages/WcDbAddCampaign';
+import WcDbUploadLeads from './pages/WcDbUploadLeads';
+import WcDbSessionsList from './pages/WcDbSessionsList';
+import WcDbSessionDetails from './pages/WcDbSessionDetails';
+import WcDbAddJob from './pages/WcDbAddJob';
+import WcDbLeadsTable from './pages/WcDbLeadsTable';
+import WcDbDownloadLeads from './pages/WcDbDownloadLeads';
+import WcDbAlreadyDownloaded from './pages/WcDbAlreadyDownloaded';
+
 // Mixed Data Download
 import MixedDownloadLeads from './pages/MixedDownloadLeads';
 import MixedAlreadyDownloaded from './pages/MixedAlreadyDownloaded';
@@ -114,6 +126,8 @@ const ProtectedRoute = ({ children, roles, module }) => {
                 fallbackPath = '/premium-vendors';
             } else if (modules.includes('van_desk')) {
                 fallbackPath = '/van-vendors';
+            } else if (modules.includes('wc_db')) {
+                fallbackPath = '/wc-db-vendors';
             } else if (modules.includes('download_data')) {
                 fallbackPath = '/download';
             }
@@ -221,6 +235,19 @@ const AppRoutes = () => {
             <Route path="/van-data" element={<ProtectedRoute roles={['super_admin', 'admin']} module="van_desk"><VanLeadsTable /></ProtectedRoute>} />
             <Route path="/van-download" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="van_desk"><VanDownloadLeads /></ProtectedRoute>} />
             <Route path="/van-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="van_desk"><VanAlreadyDownloaded /></ProtectedRoute>} />
+
+            {/* WC DB MODULE */}
+            <Route path="/wc-db-vendors" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="wc_db"><WcDbVendors /></ProtectedRoute>} />
+            <Route path="/wc-db-campaigns" element={<ProtectedRoute roles={['super_admin', 'admin']} module="wc_db"><WcDbCampaigns /></ProtectedRoute>} />
+            <Route path="/wc-db-campaigns/add" element={<ProtectedRoute roles={['super_admin', 'admin']} module="wc_db"><WcDbAddCampaign /></ProtectedRoute>} />
+            <Route path="/wc-db-campaigns/edit/:id" element={<ProtectedRoute roles={['super_admin', 'admin']} module="wc_db"><WcDbAddCampaign editMode /></ProtectedRoute>} />
+            <Route path="/wc-db-upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="wc_db"><WcDbUploadLeads /></ProtectedRoute>} />
+            <Route path="/wc-db-sessions" element={<ProtectedRoute roles={['super_admin', 'admin']} module="wc_db"><WcDbSessionsList /></ProtectedRoute>} />
+            <Route path="/wc-db-sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="wc_db"><WcDbSessionDetails /></ProtectedRoute>} />
+            <Route path="/wc-db-sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="wc_db"><WcDbAddJob /></ProtectedRoute>} />
+            <Route path="/wc-db-data" element={<ProtectedRoute roles={['super_admin', 'admin']} module="wc_db"><WcDbLeadsTable /></ProtectedRoute>} />
+            <Route path="/wc-db-download" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="wc_db"><WcDbDownloadLeads /></ProtectedRoute>} />
+            <Route path="/wc-db-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="wc_db"><WcDbAlreadyDownloaded /></ProtectedRoute>} />
 
             {/* MIXED DOWNLOAD MODULE */}
             <Route path="/mixed-download" element={<ProtectedRoute roles={['super_admin', 'admin', 'dialer_agent']}><MixedDownloadLeads /></ProtectedRoute>} />

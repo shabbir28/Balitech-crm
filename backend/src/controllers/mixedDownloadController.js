@@ -67,7 +67,8 @@ function buildFilters(
     include_downloaded,
     vendor_id,
     quality,
-    data_campaigns
+    data_campaigns,
+    job_ids,
   },
 ) {
   const filters = include_downloaded
@@ -128,6 +129,13 @@ function buildFilters(
   ) {
     filters.push(`quality = $${idx++}`);
     params.push(quality);
+  }
+
+  if (job_ids && Array.isArray(job_ids) && job_ids.length > 0) {
+    const placeholders = job_ids.map(() => `$${idx++}`).join(",");
+    const colName = tableName === "van_data" ? "session_id" : "job_id";
+    filters.push(`${colName} IN (${placeholders})`);
+    params.push(...job_ids);
   }
 
   if (data_campaigns && Array.isArray(data_campaigns) && data_campaigns.length > 0) {
@@ -200,6 +208,9 @@ const downloadMixedData = async (req, res) => {
       van_campaign,
       refine_campaign,
       premium_campaign,
+      van_job_ids,
+      refine_job_ids,
+      premium_job_ids,
     } = req.body;
 
     if (!quantity || quantity <= 0)
@@ -224,6 +235,7 @@ const downloadMixedData = async (req, res) => {
       include_downloaded,
       vendor_id: van_vendor,
       quality,
+      job_ids: van_job_ids,
     });
     const refineFilters = buildFilters("refine_data", {
       data_campaign: refine_campaign,
@@ -233,6 +245,7 @@ const downloadMixedData = async (req, res) => {
       include_downloaded,
       vendor_id: refine_vendor,
       quality,
+      job_ids: refine_job_ids,
     });
     const premiumFilters = buildFilters("premium_data", {
       data_campaign: premium_campaign,
@@ -242,6 +255,7 @@ const downloadMixedData = async (req, res) => {
       include_downloaded,
       vendor_id: premium_vendor,
       quality,
+      job_ids: premium_job_ids,
     });
 
     const vanRows = await fetchFromTable(
@@ -547,7 +561,7 @@ const { createNotification } = require('./notificationController');
 // Added for request handling
 const createMixedDownloadRequest = async (req, res) => {
   try {
-    const { global_campaign, quantity, states, min_age, max_age, min_duration, max_duration, include_downloaded, van_percentage, refine_percentage, premium_percentage } = req.body;
+    const { global_campaign, quantity, states, min_age, max_age, min_duration, max_duration, include_downloaded, van_percentage, refine_percentage, premium_percentage, van_job_ids, refine_job_ids, premium_job_ids } = req.body;
 
     if (!quantity || quantity <= 0) {
       return res.status(400).json({ message: "Valid quantity is required." });
@@ -563,23 +577,10 @@ const createMixedDownloadRequest = async (req, res) => {
 
     const result = await db.query(
       `INSERT INTO mixed_download_requests
-               (admin_id, campaign_id, quantity, van_percentage, refine_percentage, premium_percentage, states, min_age, max_age, min_duration, max_duration, include_downloaded)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-             RETURNING *`,
-      [
-        req.user.id,
-        actual_campaign_id,
-        quantity,
-        van_percentage || 0,
-        refine_percentage || 0,
-        premium_percentage || 0,
-        states && states.length ? JSON.stringify(states) : null,
-        min_age || null,
-        max_age || null,
-        min_duration || null,
-        max_duration || null,
-        include_downloaded === true || include_downloaded === "true",
-      ],
+               (admin_id, campaign_id, quantity, van_percentage, refine_percentage, premium_percentage, states, min_age, max_age, min_duration, max_duration, include_downloaded, van_job_ids, refine_job_ids, premium_job_ids)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       RETURNING *`,
+      [req.user.id, actual_campaign_id, quantity, van_percentage || 0, refine_percentage || 0, premium_percentage || 0, states && states.length > 0 ? JSON.stringify(states) : null, min_age || null, max_age || null, min_duration || null, max_duration || null, include_downloaded === true || include_downloaded === "true", van_job_ids ? JSON.stringify(van_job_ids) : null, refine_job_ids ? JSON.stringify(refine_job_ids) : null, premium_job_ids ? JSON.stringify(premium_job_ids) : null],
     );
 
     const newRequest = result.rows[0];

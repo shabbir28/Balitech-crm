@@ -260,6 +260,16 @@ const MixedDownloadLeads = () => {
     const [refineCampaigns, setRefineCampaigns]   = useState([]);
     const [premiumCampaigns, setPremiumCampaigns] = useState([]);
 
+    const [vanFiles, setVanFiles] = useState([]);
+    const [refineFiles, setRefineFiles] = useState([]);
+    const [premiumFiles, setPremiumFiles] = useState([]);
+    const [selectedVanFiles, setSelectedVanFiles] = useState([]);
+    const [selectedRefineFiles, setSelectedRefineFiles] = useState([]);
+    const [selectedPremiumFiles, setSelectedPremiumFiles] = useState([]);
+    const [loadingVanFiles, setLoadingVanFiles] = useState(false);
+    const [loadingRefineFiles, setLoadingRefineFiles] = useState(false);
+    const [loadingPremiumFiles, setLoadingPremiumFiles] = useState(false);
+
     const [filters, setFilters] = useState([]);
     const [loadingFilters, setLoadingFilters] = useState(true);
     const [selectedFilterId, setSelectedFilterId] = useState('');
@@ -321,8 +331,58 @@ const MixedDownloadLeads = () => {
         api.get('/filters')
             .then(res => setFilters(res.data))
             .catch(() => {})
-            .finally(() => setLoadingFilters(false));
+            .finally(() => {
+                setLoadingFilters(false); 
+            });
     }, []);
+
+    // Fetch Van Files
+    useEffect(() => {
+        if (form.van_vendor && form.van_vendor !== 'all') {
+            setLoadingVanFiles(true);
+            setSelectedVanFiles([]);
+            setVanFiles([]);
+            api.get(`/van-vendors/${form.van_vendor}/files`)
+                .then(res => setVanFiles(res.data || []))
+                .catch(err => console.error(err))
+                .finally(() => setLoadingVanFiles(false));
+        } else {
+            setVanFiles([]);
+            setSelectedVanFiles([]);
+        }
+    }, [form.van_vendor]);
+
+    // Fetch Refine Files
+    useEffect(() => {
+        if (form.refine_vendor && form.refine_vendor !== 'all') {
+            setLoadingRefineFiles(true);
+            setSelectedRefineFiles([]);
+            setRefineFiles([]);
+            api.get(`/refine-vendors/${form.refine_vendor}/files`)
+                .then(res => setRefineFiles(res.data || []))
+                .catch(err => console.error(err))
+                .finally(() => setLoadingRefineFiles(false));
+        } else {
+            setRefineFiles([]);
+            setSelectedRefineFiles([]);
+        }
+    }, [form.refine_vendor]);
+
+    // Fetch Premium Files
+    useEffect(() => {
+        if (form.premium_vendor && form.premium_vendor !== 'all') {
+            setLoadingPremiumFiles(true);
+            setSelectedPremiumFiles([]);
+            setPremiumFiles([]);
+            api.get(`/premium-vendors/${form.premium_vendor}/files`)
+                .then(res => setPremiumFiles(res.data || []))
+                .catch(err => console.error(err))
+                .finally(() => setLoadingPremiumFiles(false));
+        } else {
+            setPremiumFiles([]);
+            setSelectedPremiumFiles([]);
+        }
+    }, [form.premium_vendor]);
 
     useEffect(() => () => {
         scrubPollCancelRef.current = true;
@@ -350,13 +410,19 @@ const MixedDownloadLeads = () => {
 
         setSubmitting(true); setError(''); setSuccessMsg('');
         try {
+            const payload = {
+                ...form,
+                van_job_ids: selectedVanFiles.length > 0 ? selectedVanFiles : undefined,
+                refine_job_ids: selectedRefineFiles.length > 0 ? selectedRefineFiles : undefined,
+                premium_job_ids: selectedPremiumFiles.length > 0 ? selectedPremiumFiles : undefined,
+            };
             const timeoutMs = 30 * 60 * 1000;
             if (canDownloadDirectly) {
-                const res = await api.post('/mixed-download', form, { timeout: timeoutMs });
+                const res = await api.post('/mixed-download', payload, { timeout: timeoutMs });
                 setScrubSummaryData(res.data);
                 setSuccessMsg('Export complete! Choose what to download from the summary below.');
             } else {
-                const res = await api.post('/mixed-download/request', form);
+                const res = await api.post('/mixed-download/request', payload);
                 setSuccessMsg(res.data.message || 'Request submitted successfully to Super Admin.');
             }
         } catch (err) {
@@ -448,6 +514,50 @@ const MixedDownloadLeads = () => {
                                             {vanVendors.map(v => <option key={v.vendor_id} value={v.vendor_id}>{v.name} ({v.available_leads || 0} available)</option>)}
                                         </SelectInput>
                                     </Field>
+                                    {form.van_vendor && form.van_vendor !== 'all' && (
+                                        <Field label="Van Desk Files" hint="Select specific files to download from (optional)">
+                                            <div className="bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 rounded-xl p-4 max-h-[200px] overflow-y-auto custom-scrollbar">
+                                                {loadingVanFiles ? (
+                                                    <div className="flex items-center justify-center p-4">
+                                                        <span className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin"></span>
+                                                    </div>
+                                                ) : vanFiles.length === 0 ? (
+                                                    <p className="text-slate-500 text-xs text-center italic">No files available for this vendor.</p>
+                                                ) : (
+                                                    <div className="space-y-2">
+                                                        {vanFiles.map(file => (
+                                                            <label key={file.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group">
+                                                                <div className="relative flex items-center justify-center">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        className="peer sr-only"
+                                                                        checked={selectedVanFiles.includes(file.id)}
+                                                                        onChange={(e) => {
+                                                                            if (e.target.checked) setSelectedVanFiles([...selectedVanFiles, file.id]);
+                                                                            else setSelectedVanFiles(selectedVanFiles.filter(id => id !== file.id));
+                                                                        }}
+                                                                    />
+                                                                    <div className="w-4 h-4 rounded border border-white/20 bg-black/20 peer-checked:bg-violet-500 peer-checked:border-violet-500 transition-all flex items-center justify-center group-hover:border-violet-500/50">
+                                                                        <Check className="h-3 w-3 text-white opacity-0 peer-checked:opacity-100 transition-opacity" />
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="text-[13px] text-slate-300 group-hover:text-white transition-colors truncate">
+                                                                        {file.file_name || `Session ${file.id}`}
+                                                                    </div>
+                                                                    <div className="text-[10px] text-slate-500 flex gap-2">
+                                                                        <span>{file.total_rows?.toLocaleString() || 0} rows</span>
+                                                                        <span>•</span>
+                                                                        <span>{new Date(file.upload_date || file.created_at).toLocaleDateString()}</span>
+                                                                    </div>
+                                                                </div>
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </Field>
+                                    )}
                                 </div>
 
                                 <div className="space-y-4">
@@ -473,6 +583,50 @@ const MixedDownloadLeads = () => {
                                             {refineVendors.map(v => <option key={v.vendor_id} value={v.vendor_id}>{v.name} ({v.available_leads || 0} available)</option>)}
                                         </SelectInput>
                                     </Field>
+                                    {form.refine_vendor && form.refine_vendor !== 'all' && (
+                                        <Field label="Refine Files" hint="Select specific files to download from (optional)">
+                                            <div className="bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 rounded-xl p-4 max-h-[200px] overflow-y-auto custom-scrollbar">
+                                                {loadingRefineFiles ? (
+                                                    <div className="flex items-center justify-center p-4">
+                                                        <span className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin"></span>
+                                                    </div>
+                                                ) : refineFiles.length === 0 ? (
+                                                    <p className="text-slate-500 text-xs text-center italic">No files available for this vendor.</p>
+                                                ) : (
+                                                    <div className="space-y-2">
+                                                        {refineFiles.map(file => (
+                                                            <label key={file.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group">
+                                                                <div className="relative flex items-center justify-center">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        className="peer sr-only"
+                                                                        checked={selectedRefineFiles.includes(file.id)}
+                                                                        onChange={(e) => {
+                                                                            if (e.target.checked) setSelectedRefineFiles([...selectedRefineFiles, file.id]);
+                                                                            else setSelectedRefineFiles(selectedRefineFiles.filter(id => id !== file.id));
+                                                                        }}
+                                                                    />
+                                                                    <div className="w-4 h-4 rounded border border-white/20 bg-black/20 peer-checked:bg-violet-500 peer-checked:border-violet-500 transition-all flex items-center justify-center group-hover:border-violet-500/50">
+                                                                        <Check className="h-3 w-3 text-white opacity-0 peer-checked:opacity-100 transition-opacity" />
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="text-[13px] text-slate-300 group-hover:text-white transition-colors truncate">
+                                                                        {file.file_name || `Job ${file.id}`}
+                                                                    </div>
+                                                                    <div className="text-[10px] text-slate-500 flex gap-2">
+                                                                        <span>{file.total_rows?.toLocaleString() || 0} rows</span>
+                                                                        <span>•</span>
+                                                                        <span>{new Date(file.upload_date || file.created_at).toLocaleDateString()}</span>
+                                                                    </div>
+                                                                </div>
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </Field>
+                                    )}
                                 </div>
 
                                 <div className="space-y-4">
@@ -498,6 +652,50 @@ const MixedDownloadLeads = () => {
                                             {premiumVendors.map(v => <option key={v.vendor_id} value={v.vendor_id}>{v.name} ({v.available_leads || 0} available)</option>)}
                                         </SelectInput>
                                     </Field>
+                                    {form.premium_vendor && form.premium_vendor !== 'all' && (
+                                        <Field label="Premium Files" hint="Select specific files to download from (optional)">
+                                            <div className="bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 rounded-xl p-4 max-h-[200px] overflow-y-auto custom-scrollbar">
+                                                {loadingPremiumFiles ? (
+                                                    <div className="flex items-center justify-center p-4">
+                                                        <span className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin"></span>
+                                                    </div>
+                                                ) : premiumFiles.length === 0 ? (
+                                                    <p className="text-slate-500 text-xs text-center italic">No files available for this vendor.</p>
+                                                ) : (
+                                                    <div className="space-y-2">
+                                                        {premiumFiles.map(file => (
+                                                            <label key={file.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group">
+                                                                <div className="relative flex items-center justify-center">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        className="peer sr-only"
+                                                                        checked={selectedPremiumFiles.includes(file.id)}
+                                                                        onChange={(e) => {
+                                                                            if (e.target.checked) setSelectedPremiumFiles([...selectedPremiumFiles, file.id]);
+                                                                            else setSelectedPremiumFiles(selectedPremiumFiles.filter(id => id !== file.id));
+                                                                        }}
+                                                                    />
+                                                                    <div className="w-4 h-4 rounded border border-white/20 bg-black/20 peer-checked:bg-violet-500 peer-checked:border-violet-500 transition-all flex items-center justify-center group-hover:border-violet-500/50">
+                                                                        <Check className="h-3 w-3 text-white opacity-0 peer-checked:opacity-100 transition-opacity" />
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="text-[13px] text-slate-300 group-hover:text-white transition-colors truncate">
+                                                                        {file.file_name || `Job ${file.id}`}
+                                                                    </div>
+                                                                    <div className="text-[10px] text-slate-500 flex gap-2">
+                                                                        <span>{file.total_rows?.toLocaleString() || 0} rows</span>
+                                                                        <span>•</span>
+                                                                        <span>{new Date(file.upload_date || file.created_at).toLocaleDateString()}</span>
+                                                                    </div>
+                                                                </div>
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </Field>
+                                    )}
                                 </div>
                             </div>
 

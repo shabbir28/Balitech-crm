@@ -291,6 +291,16 @@ const Layout = ({ children }) => {
         { to: '/van-already-downloaded', icon: History, label: 'Already Downloaded' },
     ];
 
+    const WC_DB_NAV_ITEMS = [
+        { to: '/wc-db-vendors', icon: Database, label: 'WC DB Vendors' },
+        { to: '/wc-db-campaigns', icon: Target, label: 'WC DB Campaigns' },
+        { to: '/wc-db-upload', icon: FolderUp, label: 'Upload WC DB Data' },
+        { to: '/wc-db-sessions', icon: Layers, label: 'WC DB Sessions' },
+        { to: '/wc-db-data', icon: FileStack, label: 'All WC DB Data' },
+        { to: '/wc-db-download', icon: FolderDown, label: 'Download WC DB Data' },
+        { to: '/wc-db-already-downloaded', icon: History, label: 'Already Downloaded (WC DB)' },
+    ];
+
     const MIXED_NAV_ITEMS = [
         { to: '/mixed-download', icon: FolderDown, label: 'Mixed Download' },
         { to: '/mixed-already-downloaded', icon: History, label: 'Already Downloaded' },
@@ -329,6 +339,15 @@ const Layout = ({ children }) => {
     useEffect(() => {
         if (location.pathname.startsWith('/van')) {
             setVanMenuOpen(true);
+        }
+    }, [location.pathname]);
+
+    const isWcDbPath = location.pathname.startsWith('/wc-db');
+    const [wcDbMenuOpen, setWcDbMenuOpen] = useState(isWcDbPath);
+
+    useEffect(() => {
+        if (location.pathname.startsWith('/wc-db')) {
+            setWcDbMenuOpen(true);
         }
     }, [location.pathname]);
 
@@ -398,6 +417,13 @@ const Layout = ({ children }) => {
         { label: 'All Van Data',                path: '/van-data',                 roles: ['super_admin','admin'],        icon: <FileStack className="h-4 w-4" /> },
         { label: 'Download Van Data',           path: '/van-download',             roles: ['super_admin','admin'],        icon: <FolderDown className="h-4 w-4" /> },
         { label: 'Already Downloaded (Van)',    path: '/van-already-downloaded',   roles: ['super_admin','admin'], icon: <History className="h-4 w-4" /> },
+        { label: 'WC DB Vendors',               path: '/wc-db-vendors',            roles: ['super_admin','admin','data_entry'], icon: <Database className="h-4 w-4" /> },
+        { label: 'WC DB Campaigns',             path: '/wc-db-campaigns',          roles: ['super_admin','admin'],        icon: <Target className="h-4 w-4" /> },
+        { label: 'Upload WC DB Data',           path: '/wc-db-upload',             roles: ['super_admin','admin','data_entry'], icon: <FolderUp className="h-4 w-4" /> },
+        { label: 'WC DB Sessions',              path: '/wc-db-sessions',           roles: ['super_admin','admin'],        icon: <Layers className="h-4 w-4" /> },
+        { label: 'All WC DB Data',              path: '/wc-db-data',               roles: ['super_admin','admin'],        icon: <FileStack className="h-4 w-4" /> },
+        { label: 'Download WC DB Data',         path: '/wc-db-download',           roles: ['super_admin','admin'],        icon: <FolderDown className="h-4 w-4" /> },
+        { label: 'Already Downloaded (WC DB)',  path: '/wc-db-already-downloaded', roles: ['super_admin','admin'], icon: <History className="h-4 w-4" /> },
     ];
 
     const matchesSearchText = (value, query) =>
@@ -411,8 +437,9 @@ const Layout = ({ children }) => {
         if (p.path.startsWith('/refine-') && !hasModule('refine')) return false;
         if (p.path.startsWith('/premium-') && !hasModule('premium')) return false;
         if (p.path.startsWith('/van-') && !hasModule('van_desk')) return false;
+        if (p.path.startsWith('/wc-db') && !hasModule('wc_db')) return false;
         if (p.path.startsWith('/dnc-checker') && !hasModule('dnc_checker')) return false;
-        if (!p.path.startsWith('/refine-') && !p.path.startsWith('/premium-') && !p.path.startsWith('/van-') && !p.path.startsWith('/dnc-checker') && p.path !== '/' && p.path !== '/users' && p.path !== '/security' && p.path !== '/download-requests') {
+        if (!p.path.startsWith('/refine-') && !p.path.startsWith('/premium-') && !p.path.startsWith('/van-') && !p.path.startsWith('/wc-db') && !p.path.startsWith('/dnc-checker') && p.path !== '/' && p.path !== '/users' && p.path !== '/security' && p.path !== '/download-requests') {
             if (!hasModule('core')) return false;
         }
         return true;
@@ -735,6 +762,43 @@ const Layout = ({ children }) => {
                                 </div>
                             )}
 
+                            {/* WC DB Collapsible */}
+                            {hasModule('wc_db') && (
+                                <div className="mt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setWcDbMenuOpen((open) => !open)}
+                                    className={`w-full flex items-center px-3.5 py-2.5 text-[13px] font-medium rounded-xl transition-all duration-200 gap-3 mb-0.5 border ${
+                                        isWcDbPath
+                                            ? 'bg-gradient-to-r from-cyan-500/15 to-transparent text-white border-cyan-500/25'
+                                            : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border-transparent'
+                                    }`}
+                                >
+                                    <Database className="h-[15px] w-[15px] shrink-0 text-cyan-400" />
+                                    <span className="flex-1 text-left">WC DB</span>
+                                    <ChevronDown
+                                        className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${wcDbMenuOpen ? 'rotate-180' : ''}`}
+                                    />
+                                </button>
+
+                                <div
+                                    className={`overflow-hidden transition-all duration-300 ease-out ${
+                                        wcDbMenuOpen ? 'max-h-[520px] opacity-100 mt-1' : 'max-h-0 opacity-0'
+                                    }`}
+                                >
+                                    {WC_DB_NAV_ITEMS.map((item) => {
+                                        const ItemIcon = item.icon;
+                                        return (
+                                            <NavLink key={item.to} to={item.to} className={getSubClassName}>
+                                                <ItemIcon className="h-[14px] w-[14px] shrink-0" />
+                                                <span>{item.label}</span>
+                                            </NavLink>
+                                        );
+                                    })}
+                                </div>
+                                </div>
+                            )}
+
                             {/* MIXED DOWNLOAD Collapsible (Always available to super_admin/admin, no specific module needed, or maybe tie it to van_desk/premium/refine?) */}
                             {(isSuperAdmin || isAdmin) && (
                                 <div className="mt-4">
@@ -996,6 +1060,44 @@ const Layout = ({ children }) => {
                                                 </NavLink>
                                                 <NavLink to="/van-already-downloaded" className={getSubClassName}>
                                                     <History className="h-[14px] w-[14px] shrink-0" /><span>Already Downloaded</span>
+                                                </NavLink>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {hasModule('wc_db') && (
+                                <div className="mt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setWcDbMenuOpen((open) => !open)}
+                                        className={`w-full flex items-center px-3.5 py-2.5 text-[13px] font-medium rounded-xl transition-all duration-200 gap-3 mb-0.5 border ${
+                                            isWcDbPath
+                                                ? 'bg-gradient-to-r from-cyan-500/15 to-transparent text-white border-cyan-500/25'
+                                                : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border-transparent'
+                                        }`}
+                                    >
+                                        <Database className="h-[15px] w-[15px] shrink-0 text-cyan-400" />
+                                        <span className="flex-1 text-left">WC DB</span>
+                                        <ChevronDown
+                                            className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${wcDbMenuOpen ? 'rotate-180' : ''}`}
+                                        />
+                                    </button>
+                                    <div className={`overflow-hidden transition-all duration-300 ease-out ${wcDbMenuOpen ? 'max-h-[520px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+                                        <NavLink to="/wc-db-vendors" className={getSubClassName}>
+                                            <Building2 className="h-[14px] w-[14px] shrink-0" /><span>WC DB Vendors</span>
+                                        </NavLink>
+                                        <NavLink to="/wc-db-upload" className={getSubClassName}>
+                                            <FolderUp className="h-[14px] w-[14px] shrink-0" /><span>Upload WC DB Data</span>
+                                        </NavLink>
+                                        {hasModule('download_data') && (
+                                            <>
+                                                <NavLink to="/wc-db-download" className={getSubClassName}>
+                                                    <FolderDown className="h-[14px] w-[14px] shrink-0" /><span>Download WC DB Data</span>
+                                                </NavLink>
+                                                <NavLink to="/wc-db-already-downloaded" className={getSubClassName}>
+                                                    <History className="h-[14px] w-[14px] shrink-0" /><span>Already Downloaded (WC DB)</span>
                                                 </NavLink>
                                             </>
                                         )}

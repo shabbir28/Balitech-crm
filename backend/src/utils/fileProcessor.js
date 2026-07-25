@@ -617,6 +617,16 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
     if (phone) {
       const digitsOnly = phone.replace(/\D/g, "");
       if (digitsOnly.length >= 7 && digitsOnly.length <= 15) {
+        const rawRow = {};
+        if (typeof actualHeaders !== 'undefined' && actualHeaders.length > 0) {
+          for (let i = 0; i < values.length; i++) {
+            if (actualHeaders[i]) {
+              const k = actualHeaders[i].trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+              rawRow[k] = String(values[i] || "").trim();
+            }
+          }
+        }
+
         return {
           name: name || null,
           phone: digitsOnly,
@@ -630,11 +640,14 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
           caller_id: caller_id || null,
           duration: duration || null,
           call_date: call_date || null,
+          raw: rawRow
         };
       }
     }
     return null;
   };
+
+  let actualHeaders = [];
 
   const isExcel =
     mimetype ===
@@ -668,6 +681,7 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
         );
         if (hasHeader) {
           isHeaderDetected = true;
+          actualHeaders = jsonData[i].map(v => String(v));
           headerIndices = guessIndices(rowLower);
           rowLower.forEach((v, idx) => {
             if (v.includes("src") || v.includes("source")) {
@@ -733,6 +747,7 @@ const processFileBuffer = async (bufferOrPath, mimetype, originalname) => {
           );
           if (hasHeader) {
             isHeaderDetected = true;
+            actualHeaders = values.map(v => String(v));
             headerIndices = guessIndices(rowLower);
             rowLower.forEach((v, idx) => {
               if (v.includes("src") || v.includes("source")) {

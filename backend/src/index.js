@@ -57,6 +57,14 @@ const vanDataRoutes = require("./routes/van_data");
 const vanDownloadRoutes = require("./routes/van_download");
 const mixedDownloadRoutes = require("./routes/mixed_download");
 
+// WC DB Module
+const wcDbVendorRoutes = require("./routes/wc_db_vendors");
+const wcDbCampaignRoutes = require("./routes/wc_db_campaigns");
+const wcDbSessionRoutes = require("./routes/wc_db_sessions");
+const wcDbJobRoutes = require("./routes/wc_db_jobs");
+const wcDbDataRoutes = require("./routes/wc_db_data");
+const wcDbDownloadRoutes = require("./routes/wc_db_download");
+
 const clientRoutes = require("./routes/clientRoutes");
 const separationRoutes = require("./routes/separationRoutes");
 
@@ -217,6 +225,14 @@ app.use("/api/van-jobs", vanJobRoutes);
 app.use("/api/van-data", vanDataRoutes);
 app.use("/api/van-download", vanDownloadRoutes);
 app.use("/api/mixed-download", mixedDownloadRoutes);
+
+// WC DB Module
+app.use("/api/wc-db-vendors", wcDbVendorRoutes);
+app.use("/api/wc-db-campaigns", wcDbCampaignRoutes);
+app.use("/api/wc-db-sessions", wcDbSessionRoutes);
+app.use("/api/wc-db-jobs", wcDbJobRoutes);
+app.use("/api/wc-db-data", wcDbDataRoutes);
+app.use("/api/wc-db-download", wcDbDownloadRoutes);
 
 // Clients and Separation
 app.use("/api/clients", clientRoutes);
