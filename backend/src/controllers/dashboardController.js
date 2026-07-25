@@ -18,6 +18,8 @@ const getStats = async (req, res) => {
       vanCampaignStatsResult,
       separationStatsResult,
       separationCampaignStatsResult,
+      wcDbStatsResult,
+      wcDbCampaignStatsResult,
     ] = await Promise.all([
       // 1. Leads Overall Stats (Single Scan)
       db.query(`
@@ -187,6 +189,32 @@ const getStats = async (req, res) => {
                 GROUP BY COALESCE(c.name, 'Untagged')
                 ORDER BY count DESC
             `),
+
+      // 16. Wc Db Data Total Stats
+      db.query(`
+                SELECT 
+                    COUNT(*)::int AS total_wc_db_data,
+                    COUNT(CASE WHEN status = 'available' THEN 1 END)::int AS total_wc_db_available,
+                    COUNT(CASE WHEN status = 'downloaded' THEN 1 END)::int AS total_wc_db_downloaded
+                FROM wc_db_data
+            `),
+
+      // 17. Wc Db Data per campaign
+      db.query(`
+                SELECT
+                    COALESCE(c.name, s.campaign_type, 'Untagged') AS name,
+                    COUNT(*)::int AS count,
+                    COUNT(CASE WHEN d.status = 'available' THEN 1 END)::int AS available_count,
+                    COUNT(CASE WHEN d.status = 'downloaded' THEN 1 END)::int AS downloaded_count
+                FROM wc_db_data d
+                LEFT JOIN wc_db_sessions s ON d.session_id = s.id
+                LEFT JOIN wc_db_campaigns c ON 
+                  (s.campaign_type ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND c.campaign_id = NULLIF(s.campaign_type, '')::uuid)
+                  OR (s.campaign_type !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND c.name ILIKE s.campaign_type)
+                WHERE s.campaign_type IS NOT NULL AND TRIM(s.campaign_type) <> ''
+                GROUP BY COALESCE(c.name, s.campaign_type, 'Untagged')
+                ORDER BY count DESC
+            `),
     ]);
 
     // Construct totals object
@@ -197,6 +225,7 @@ const getStats = async (req, res) => {
     const deadNumbersStats = deadNumbersStatsResult.rows[0] || { total_dead_numbers: 0 };
     const vanStats = vanStatsResult.rows[0] || { total_van_data: 0 };
     const separationStats = separationStatsResult.rows[0] || { total_separation_data: 0 };
+    const wcDbStats = wcDbStatsResult.rows[0] || { total_wc_db_data: 0 };
     
     const totals = {
       ...leadsStats,
@@ -205,7 +234,8 @@ const getStats = async (req, res) => {
       ...premiumStats,
       ...deadNumbersStats,
       ...vanStats,
-      ...separationStats
+      ...separationStats,
+      ...wcDbStats
     };
 
     // Construct lead status breakdown from leadsStats
@@ -225,6 +255,7 @@ const getStats = async (req, res) => {
       premiumCampaignStats: premiumCampaignStatsResult.rows,
       vanCampaignStats: vanCampaignStatsResult.rows,
       separationCampaignStats: separationCampaignStatsResult.rows,
+      wcDbCampaignStats: wcDbCampaignStatsResult.rows,
     });
   } catch (err) {
     console.error("Dashboard Stats Error:", err);
