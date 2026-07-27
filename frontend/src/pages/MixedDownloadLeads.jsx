@@ -250,6 +250,7 @@ const MixedDownloadLeads = () => {
     const isSuperAdmin = user?.role === 'super_admin';
     const isAdmin = user?.role === 'admin';
     const canDownloadDirectly = isSuperAdmin || isAdmin;
+    const canSubmitRequest = !isSuperAdmin; // admins, data_entry, dialer_agent submit requests
 
     const [vanVendors, setVanVendors]         = useState([]);
     const [refineVendors, setRefineVendors]   = useState([]);
@@ -303,6 +304,43 @@ const MixedDownloadLeads = () => {
     const [scrubSummaryData, setScrubSummaryData] = useState(null);
     const [scrubPolling] = useState(false);
     const scrubPollCancelRef = useRef(false);
+
+    const [myRequests, setMyRequests] = useState([]);
+    const [loadingReqs, setLoadingReqs] = useState(false);
+    const [dlId, setDlId] = useState(null);
+
+    const fetchMyReqs = async () => {
+        if (isSuperAdmin) return;
+        setLoadingReqs(true);
+        try {
+            const res = await api.get('/mixed-download/requests/mine');
+            setMyRequests(res.data || []);
+        } catch (err) { console.error(err); }
+        finally { setLoadingReqs(false); }
+    };
+
+    const handleDownloadMixed = async (req) => {
+        if (!req.has_csv && req.status === 'accepted') {
+            alert('CSV is still being prepared. Please wait a few minutes and refresh.');
+            return;
+        }
+        setDlId(req.id);
+        try {
+            const res = await api.get(`/mixed-download/requests/${req.id}/file`);
+            const data = res.data;
+            if (data.goodCsv || data.csv) {
+                const fileName = data.summary?.fileName || `mixed_leads_request_${req.id}.csv`;
+                downloadBlob(data.goodCsv || data.csv, fileName);
+                setScrubSummaryData(data);
+            } else {
+                alert(data.message || 'CSV is still being prepared. Please wait a few minutes and try again.');
+            }
+        } catch (err) {
+            const msg = err.response?.data?.message || 'Download failed. Please try again.';
+            alert(msg);
+        }
+        finally { setDlId(null); }
+    };
 
 
     useEffect(() => {
@@ -388,6 +426,8 @@ const MixedDownloadLeads = () => {
         scrubPollCancelRef.current = true;
     }, []);
 
+    useEffect(() => { fetchMyReqs(); }, []); // eslint-disable-line
+
     useEffect(() => {
         const h = (e) => { if (stateRef.current && !stateRef.current.contains(e.target)) setStateOpen(false); };
         document.addEventListener('mousedown', h);
@@ -424,6 +464,7 @@ const MixedDownloadLeads = () => {
             } else {
                 const res = await api.post('/mixed-download/request', payload);
                 setSuccessMsg(res.data.message || 'Request submitted successfully to Super Admin.');
+                await fetchMyReqs();
             }
         } catch (err) {
             const status = err.response?.status;
@@ -903,6 +944,89 @@ const MixedDownloadLeads = () => {
                         onClose={() => setScrubSummaryData(null)} 
                         scrubPolling={scrubPolling}
                     />
+
+                    {/* ── My Requests Panel (for non-super-admin) ─────────────── */}
+                    {!isSuperAdmin && (
+                        <div className="mt-6 bg-[#13151f]/80 backdrop-blur-xl border border-white/[0.07] rounded-2xl shadow-2xl overflow-hidden">
+                            <div className="px-6 py-4 border-b border-white/[0.06] flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="h-8 w-8 rounded-xl bg-violet-500/20 flex items-center justify-center">
+                                        <ArrowRight className="h-4 w-4 text-violet-400" />
+                                    </div>
+                                    <h3 className="font-bold text-white text-sm">My Mixed Download Requests</h3>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={fetchMyReqs}
+                                    disabled={loadingReqs}
+                                    className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs font-bold transition-colors"
+                                >
+                                    <RefreshCw className={`h-3.5 w-3.5 ${loadingReqs ? 'animate-spin' : ''}`} />
+                                    Refresh
+                                </button>
+                            </div>
+
+                            {loadingReqs ? (
+                                <div className="flex items-center justify-center p-8">
+                                    <RefreshCw className="h-5 w-5 text-violet-400 animate-spin" />
+                                </div>
+                            ) : myRequests.length === 0 ? (
+                                <div className="p-8 text-center">
+                                    <p className="text-slate-500 text-sm">No requests submitted yet.</p>
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-white/[0.05] max-h-[400px] overflow-y-auto">
+                                    {myRequests.map(req => {
+                                        const isAccepted = req.status === 'accepted';
+                                        const isPending = req.status === 'pending';
+                                        const isRejected = req.status === 'rejected';
+                                        const hasCsv = !!req.has_csv;
+                                        const isDownloading = dlId === req.id;
+                                        return (
+                                            <div key={req.id} className="px-5 py-4 flex items-center justify-between gap-3 hover:bg-white/[0.02] transition-colors">
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <StatusBadge status={req.status} />
+                                                        {isAccepted && !hasCsv && (
+                                                            <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                                                <RefreshCw className="h-2.5 w-2.5 animate-spin" /> Preparing CSV…
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-xs text-slate-400 truncate">
+                                                        <span className="font-bold text-white">{Number(req.quantity).toLocaleString()}</span> leads &bull; {new Date(req.requested_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+                                                    </p>
+                                                    {isRejected && req.rejection_reason && (
+                                                        <p className="text-[10px] text-red-400 mt-0.5 truncate">Reason: {req.rejection_reason}</p>
+                                                    )}
+                                                </div>
+                                                {isAccepted && hasCsv && (
+                                                    <button
+                                                        type="button"
+                                                        disabled={isDownloading}
+                                                        onClick={() => handleDownloadMixed(req)}
+                                                        className="flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 hover:border-emerald-500/40 text-emerald-400 font-bold text-xs px-3 py-2 rounded-xl transition-all shrink-0"
+                                                    >
+                                                        {isDownloading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+                                                        {isDownloading ? 'Downloading…' : 'Download CSV'}
+                                                    </button>
+                                                )}
+                                                {isAccepted && !hasCsv && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={fetchMyReqs}
+                                                        className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold text-xs px-3 py-2 rounded-xl transition-all shrink-0"
+                                                    >
+                                                        <RefreshCw className="h-3.5 w-3.5" /> Check Status
+                                                    </button>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                 </div>
 

@@ -11,7 +11,7 @@ router.use(auth);
 router.get('/', authorizeRole(['super_admin', 'admin', 'data_entry', 'dialer_agent']), getVendors);
 
 // Get vendor files list
-router.get('/:id/files', authorizeRole(['super_admin', 'admin']), getVendorFiles);
+router.get('/:id/files', authorizeRole(['super_admin', 'admin', 'data_entry', 'dialer_agent']), getVendorFiles);
 
 // super_admin, admin, and data_entry can create vendors
 router.post('/', authorizeRole(['super_admin', 'admin', 'data_entry', 'dialer_agent']), createVendor);

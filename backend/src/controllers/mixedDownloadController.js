@@ -637,7 +637,12 @@ const getMyDownloadRequests = async (req, res) => {
   try {
     const result = await db.query(
       `
-            SELECT dr.*, c.name as campaign_name
+            SELECT 
+                dr.id, dr.quantity, dr.states, dr.status, dr.rejection_reason,
+                dr.min_age, dr.max_age, dr.requested_at, dr.reviewed_at,
+                dr.van_percentage, dr.refine_percentage, dr.premium_percentage,
+                (dr.csv_data IS NOT NULL) as has_csv,
+                c.name as campaign_name
             FROM mixed_download_requests dr
             LEFT JOIN campaigns c ON dr.campaign_id = c.campaign_id
             WHERE dr.admin_id = $1
@@ -735,22 +740,53 @@ const reviewDownloadRequest = async (req, res) => {
       return res.status(404).json({ message: "No matching leads found for this request criteria." });
     }
 
-    const phones = allRows.map((r) => r.phone);
+    // Mark as accepted immediately to prevent double-processing
+    await client.query(
+      `UPDATE mixed_download_requests SET status = 'accepted', reviewed_at = NOW(), reviewed_by = $1 WHERE id = $2`,
+      [req.user.id, id]
+    );
+
+    // Commit the fetch and status update to release locks early
+    await client.query("COMMIT");
+    client.release();
+
+    // Send success response to avoid Nginx 502 Bad Gateway timeout on large datasets
+    res.status(200).json({ message: `Request approved. ${allRows.length} leads are being scrubbed and prepared in the background.` });
+
+    // --- Background Processing ---
+    (async () => {
+      const bgClient = await db.getClient();
+      try {
+        const phones = allRows.map((r) => r.phone);
     let badPhoneSet = new Set();
     let finalGoodRows = allRows;
     let finalBadRows = [];
     
-    // We skip async scrub for this mixed request to keep it simple, or run standard scrub
-    const scrubResult = await scrubPhones(phones);
-    
-    let blacklist = 0, stateDnc = 0, federalDnc = 0, badPhone = 0;
-    if (scrubResult.bad.length > 0) {
-      const badPhones = scrubResult.bad.map((b) => b.phone);
-      badPhoneSet = new Set(badPhones);
-      const scrubInfoByPhone = new Map(scrubResult.bad.map((b) => [b.phone, b]));
+      // We skip async scrub for this mixed request to keep it simple, or run standard scrub
+      const scrubResult = await scrubPhones(phones);
+      
+      let blacklist = 0, stateDnc = 0, federalDnc = 0, badPhone = 0;
+      if (scrubResult.bad.length > 0) {
+        const badPhones = scrubResult.bad.map((b) => b.phone);
+        badPhoneSet = new Set(badPhones);
+        const scrubInfoByPhone = new Map(scrubResult.bad.map((b) => [b.phone, b]));
 
-      // Update dead numbers
-      await upsertDeadNumbersBatched({ queryFn: client.query.bind(client), badItems: scrubResult.bad });
+        await bgClient.query("BEGIN");
+        
+        // Revert bad rows
+        const badVan = vanRows.filter((r) => badPhoneSet.has(normalizePhone(r.phone))).map((r) => r.phone);
+        if (badVan.length > 0) await bgClient.query(`UPDATE van_data SET status='DNC', downloaded_at=null WHERE phone = ANY($1::text[])`, [badVan]);
+        
+        const badRefine = refineRows.filter((r) => badPhoneSet.has(normalizePhone(r.phone))).map((r) => r.phone);
+        if (badRefine.length > 0) await bgClient.query(`UPDATE refine_data SET status='DNC', downloaded_at=null WHERE phone = ANY($1::text[])`, [badRefine]);
+        
+        const badPremium = premiumRows.filter((r) => badPhoneSet.has(normalizePhone(r.phone))).map((r) => r.phone);
+        if (badPremium.length > 0) await bgClient.query(`UPDATE premium_data SET status='DNC', downloaded_at=null WHERE phone = ANY($1::text[])`, [badPremium]);
+
+        // Update dead numbers
+        await upsertDeadNumbersBatched({ queryFn: bgClient.query.bind(bgClient), badItems: scrubResult.bad });
+        
+        await bgClient.query("COMMIT");
 
       finalBadRows = allRows.filter((r) => badPhoneSet.has(normalizePhone(r.phone))).map(r => {
         const info = scrubInfoByPhone.get(normalizePhone(r.phone)) || {};
@@ -789,38 +825,49 @@ const reviewDownloadRequest = async (req, res) => {
       summary
     };
 
-    const csvDataString = JSON.stringify(payloadObj);
+      const csvDataString = JSON.stringify(payloadObj);
 
-    await client.query(
-      `UPDATE mixed_download_requests SET status = 'accepted', reviewed_at = NOW(), reviewed_by = $1, csv_data = $2 WHERE id = $3`,
-      [req.user.id, csvDataString, id]
-    );
+      await bgClient.query("BEGIN");
+      await bgClient.query(
+        `UPDATE mixed_download_requests SET status = 'accepted', reviewed_at = NOW(), reviewed_by = $1, csv_data = $2 WHERE id = $3`,
+        [req.user.id, csvDataString, id]
+      );
 
-    // Save download log
-    await client.query(
-      `INSERT INTO mixed_download_logs (user_id, quantity, states, min_age, max_age, csv_payload) VALUES ($1, $2, $3, $4, $5, $6)`,
-      [
-        dlReq.admin_id,
-        finalGoodRows.length,
-        dlReq.states ? (typeof dlReq.states === 'string' ? dlReq.states : JSON.stringify(dlReq.states)) : null,
-        dlReq.min_age || null,
-        dlReq.max_age || null,
-        csvDataString,
-        
-      ]
-    );
+      // Save download log
+      await bgClient.query(
+        `INSERT INTO mixed_download_logs (user_id, quantity, states, min_age, max_age, csv_payload) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          dlReq.admin_id,
+          finalGoodRows.length,
+          dlReq.states ? (typeof dlReq.states === 'string' ? dlReq.states : JSON.stringify(dlReq.states)) : null,
+          dlReq.min_age || null,
+          dlReq.max_age || null,
+          csvDataString,
+        ]
+      );
 
-    await client.query("COMMIT");
-    client.release();
+      await bgClient.query("COMMIT");
+      await createNotification(dlReq.admin_id, "download_request_accepted", "✅ Download Request Approved", `Your mixed download request has been approved and is ready to download.`, id);
+      
+      } catch (bgErr) {
+        await bgClient.query("ROLLBACK").catch(() => {});
+        console.error("Background Mixed Request Scrub Error:", bgErr);
+        await bgClient.query(
+          `UPDATE mixed_download_requests SET status = 'rejected', rejection_reason = 'Failed during background generation', reviewed_at = NOW(), reviewed_by = $1 WHERE id = $2`,
+          [req.user.id, id]
+        );
+      } finally {
+        bgClient.release();
+      }
+    })(); // End of background processing
 
-    await createNotification(dlReq.admin_id, "download_request_accepted", "✅ Download Request Approved", `Your mixed download request has been approved.`, id);
-
-    return res.status(200).json({ message: `Request approved. ${finalGoodRows.length} leads are ready for the admin to download.`, lead_count: finalGoodRows.length });
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
     client.release();
     console.error("Review Mixed Request Error:", err);
-    return res.status(500).json({ message: "Server error reviewing request" });
+    if (!res.headersSent) {
+      return res.status(500).json({ message: "Server error reviewing request" });
+    }
   }
 };
 
@@ -831,8 +878,9 @@ const executeApprovedDownload = async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ message: "Request not found." });
     
     const dlReq = result.rows[0];
-    if (dlReq.status !== "accepted") return res.status(400).json({ message: `Request is ${dlReq.status}` });
-    if (!dlReq.csv_data) return res.status(400).json({ message: "CSV data not available." });
+    if (dlReq.status === "pending") return res.status(400).json({ message: `Request is still pending approval.` });
+    if (dlReq.status === "rejected") return res.status(400).json({ message: `Request was rejected.` });
+    if (!dlReq.csv_data) return res.status(400).json({ message: "CSV data is still being generated in the background. Please wait a few moments and try again." });
 
     if (typeof dlReq.csv_data === 'string' && dlReq.csv_data.trim().startsWith("{")) {
         return res.status(200).json(JSON.parse(dlReq.csv_data));

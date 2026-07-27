@@ -691,10 +691,7 @@ const reviewDownloadRequest = async (req, res) => {
       return res.json({ message: "Request rejected successfully." });
     }
 
-    // Accept -> We must execute the download logic similar to downloadVanData
-    if (typeof res.setTimeout === "function") res.setTimeout(0);
-    req.socket?.setKeepAlive?.(true, 30 * 1000);
-
+    // ── Accept: lock rows immediately, respond fast, scrub in background ─────
     const { filters, params, paramIdx } = buildFilters({
       vendor_id: dlReq.vendor_id,
       states: dlReq.states,
@@ -725,105 +722,108 @@ const reviewDownloadRequest = async (req, res) => {
         `UPDATE van_download_requests SET status='rejected', rejection_reason='No available leads found matching criteria at time of approval.', reviewed_at=NOW(), reviewed_by=$1 WHERE id=$2`,
         [req.user.id, id],
       );
-      return res
-        .status(404)
-        .json({ message: "No available leads found. Request rejected." });
+      client.release();
+      return res.status(404).json({ message: "No available leads found. Request rejected." });
     }
 
-    let finalRows = result.rows;
-    let badRowsWithState = [];
-    const allPhones = result.rows.map((r) => r.phone);
-
-    try {
-      const scrubResult = await scrubPhones(allPhones);
-      if (scrubResult.bad.length > 0) {
-        const badPhones = scrubResult.bad.map((b) => b.phone);
-        const badPhoneSet = new Set(badPhones);
-        const isBadPhone = (rowPhone) =>
-          badPhoneSet.has(normalizePhone(rowPhone));
-        const scrubInfoByPhone = new Map(
-          scrubResult.bad.map((b) => [b.phone, b]),
-        );
-
-        await client.query("BEGIN");
-        await client.query(
-          `UPDATE van_data SET status='DNC', downloaded_at=null WHERE phone=ANY($1::text[])`,
-          [badPhones],
-        );
-        await upsertDeadNumbersBatched({
-          queryFn: client.query.bind(client),
-          badItems: scrubResult.bad,
-        });
-        await client.query("COMMIT");
-
-        badRowsWithState = result.rows
-          .filter((r) => isBadPhone(r.phone))
-          .map((r) => {
-            const scrubInfo =
-              scrubInfoByPhone.get(normalizePhone(r.phone)) || {};
-            return {
-              ...r,
-              dnc_type: scrubInfo.type || "DNC",
-              reason: scrubInfo.reason || "Blacklist Alliance",
-            };
-          });
-        finalRows = result.rows.filter((r) => !isBadPhone(r.phone));
-      }
-    } catch (e) {
-      console.error("Scrub failed during review", e);
-    }
-
-    const rowsWithState = finalRows.map((r) => {
-      let code = r.area_code;
-      if (!code || code === "Unknown") {
-        const clean = r.phone ? String(r.phone).replace(/\D/g, "") : "";
-        if (clean.length === 11 && clean.startsWith("1"))
-          code = clean.substring(1, 4);
-        else if (clean.length === 10) code = clean.substring(0, 3);
-      }
-      return { ...r, state: areaCodesMap[code] || "Unknown" };
-    });
-
-    const goodCsv =
-      rowsWithState.length > 0
-        ? new Parser({ fields: CSV_GOOD_FIELDS }).parse(rowsWithState)
-        : "";
-    const badCsv =
-      badRowsWithState.length > 0
-        ? new Parser({ fields: CSV_BAD_FIELDS }).parse(badRowsWithState)
-        : "";
-    const serializedData = JSON.stringify({
-      isScrubbed: true,
-      goodCsv,
-      badCsv,
-    });
-
-    await client.query(
-      `UPDATE van_download_requests SET status='accepted', reviewed_at=NOW(), reviewed_by=$1, csv_data=$2 WHERE id=$3`,
-      [req.user.id, serializedData, id],
-    );
-
+    // Mark accepted immediately
     await db.query(
-      `INSERT INTO notifications (user_id, type, title, message, reference_id) VALUES ($1, $2, $3, $4, $5)`,
-      [
-        dlReq.admin_id,
-        "download_request_accepted",
-        "✅ Download Request Approved!",
-        `Your download request for ${rowsWithState.length.toLocaleString()} leads has been approved.`,
-        dlReq.id,
-      ],
+      `UPDATE van_download_requests SET status='accepted', reviewed_at=NOW(), reviewed_by=$1 WHERE id=$2`,
+      [req.user.id, id],
     );
 
-    return res.json({
-      message: `Request accepted. ${rowsWithState.length} leads are ready to download.`,
-      lead_count: rowsWithState.length,
+    client.release();
+
+    // Respond immediately — no more 502!
+    res.json({
+      message: `Request accepted. ${result.rows.length} van leads are being prepared. The admin will be notified when ready to download.`,
+      lead_count: result.rows.length,
     });
+
+    const exportedRows = result.rows;
+
+    // ── Background: BLA scrub + CSV generation ──────────────────────────
+    (async () => {
+      const bgClient = await db.getClient();
+      try {
+        let finalRows = exportedRows;
+        let badRowsWithState = [];
+        const allPhones = exportedRows.map(r => r.phone);
+
+        try {
+          const scrubResult = await scrubPhones(allPhones);
+          if (scrubResult.bad.length > 0) {
+            const badPhones = scrubResult.bad.map(b => b.phone);
+            const badPhoneSet = new Set(badPhones);
+            const isBadPhone = rowPhone => badPhoneSet.has(normalizePhone(rowPhone));
+            const scrubInfoByPhone = new Map(scrubResult.bad.map(b => [b.phone, b]));
+
+            await bgClient.query('BEGIN');
+            await bgClient.query(
+              `UPDATE van_data SET status='DNC', downloaded_at=null WHERE phone=ANY($1::text[])`,
+              [badPhones],
+            );
+            await upsertDeadNumbersBatched({ queryFn: bgClient.query.bind(bgClient), badItems: scrubResult.bad });
+            await bgClient.query('COMMIT');
+
+            badRowsWithState = exportedRows.filter(r => isBadPhone(r.phone)).map(r => {
+              const scrubInfo = scrubInfoByPhone.get(normalizePhone(r.phone)) || {};
+              return { ...r, dnc_type: scrubInfo.type || 'DNC', reason: scrubInfo.reason || 'Blacklist Alliance' };
+            });
+            finalRows = exportedRows.filter(r => !isBadPhone(r.phone));
+          }
+        } catch (e) {
+          console.error('[BG Scrub van] scrub failed, using unfiltered rows:', e.message);
+        }
+
+        const rowsWithState = finalRows.map(r => {
+          let code = r.area_code;
+          if (!code || code === 'Unknown') {
+            const clean = r.phone ? String(r.phone).replace(/\D/g, '') : '';
+            if (clean.length === 11 && clean.startsWith('1')) code = clean.substring(1, 4);
+            else if (clean.length === 10) code = clean.substring(0, 3);
+          }
+          return { ...r, state: areaCodesMap[code] || 'Unknown' };
+        });
+
+        const goodCsv = rowsWithState.length > 0 ? new Parser({ fields: CSV_GOOD_FIELDS }).parse(rowsWithState) : '';
+        const badCsv = badRowsWithState.length > 0 ? new Parser({ fields: CSV_BAD_FIELDS }).parse(badRowsWithState) : '';
+        const serializedData = JSON.stringify({ isScrubbed: true, goodCsv, badCsv });
+
+        await db.query(
+          `UPDATE van_download_requests SET csv_data=$1 WHERE id=$2`,
+          [serializedData, id],
+        );
+
+        await db.query(
+          `INSERT INTO notifications (user_id, type, title, message, reference_id) VALUES ($1, $2, $3, $4, $5)`,
+          [
+            dlReq.admin_id,
+            'download_request_accepted',
+            '✅ Download Request Approved!',
+            `Your download request for ${rowsWithState.length.toLocaleString()} van leads has been approved. You can now download your CSV file.`,
+            dlReq.id,
+          ],
+        );
+      } catch (bgErr) {
+        console.error('[BG van download] error:', bgErr.message);
+        await bgClient.query('ROLLBACK').catch(() => {});
+        await db.query(
+          `UPDATE van_download_requests SET status='rejected', rejection_reason=$1 WHERE id=$2`,
+          [`Background processing failed: ${bgErr.message}`, id],
+        ).catch(() => {});
+      } finally {
+        bgClient.release();
+      }
+    })();
+
+    return; // Response already sent
+
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
-    console.error("Review Request Error:", err);
-    return res.status(500).json({ message: "Server error" });
-  } finally {
     client.release();
+    console.error("Review Request Error:", err);
+    if (!res.headersSent) return res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -847,7 +847,7 @@ const executeApprovedDownload = async (req, res) => {
         .status(400)
         .json({ message: `Request is ${dlReq.status}, not accepted.` });
     if (!dlReq.csv_data)
-      return res.status(400).json({ message: "CSV data not available." });
+      return res.status(400).json({ message: "CSV is still being prepared in the background. Please wait a few minutes and try downloading again." });
 
     if (dlReq.csv_data.trim().startsWith("{")) {
       return res.status(200).json(JSON.parse(dlReq.csv_data));

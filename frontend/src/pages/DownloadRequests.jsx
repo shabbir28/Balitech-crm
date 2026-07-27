@@ -151,7 +151,7 @@ const AcceptModal = ({ req, onConfirm, onCancel }) => (
                 <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3">
                     <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
                     <p className="text-sm text-amber-200/90 leading-relaxed font-medium">
-                        Approving will immediately lock the requested leads and prepare the CSV payload.
+                        Approving will immediately lock the requested leads. DNC scrubbing and CSV preparation happen in the <strong>background</strong> — the admin will receive a notification when the file is ready to download.
                         <strong className="block mt-1 font-extrabold text-amber-400">This action cannot be undone.</strong>
                     </p>
                 </div>

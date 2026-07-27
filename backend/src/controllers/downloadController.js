@@ -959,15 +959,13 @@ const reviewDownloadRequest = async (req, res) => {
       return res.json({ message: "Request rejected successfully." });
     }
 
-    // ── Accept ── executeDownload manages its own short transactions internally
-    if (typeof res.setTimeout === "function") res.setTimeout(0);
-    req.socket?.setKeepAlive?.(true, 30 * 1000);
-
-    await client.query("BEGIN");
-    txnStarted = true;
+  // ── Accept: grab leads immediately, respond fast, scrub in background ─────
+  const client2 = await db.getClient();
+  try {
+    await client2.query("BEGIN");
 
     const { goodRows, badRows, summary, logId } = await executeDownload(
-      client,
+      client2,
       {
         vendor_id: dlReq.vendor_id,
         campaign_id: dlReq.campaign_id,
@@ -975,14 +973,16 @@ const reviewDownloadRequest = async (req, res) => {
         quantity: dlReq.quantity,
         min_age: dlReq.min_age,
         max_age: dlReq.max_age,
+        min_duration: dlReq.min_duration,
+        max_duration: dlReq.max_duration,
         user_id: dlReq.admin_id,
         approved_by_id: req.user.id,
         job_id: dlReq.job_id,
         include_downloaded: dlReq.include_downloaded,
+        async_scrub: true, // skip sync BLA call — we handle it below
       },
     );
-    // executeDownload already committed (phase 1/2). Outer tx is effectively done.
-    txnStarted = false;
+    // executeDownload committed phase-1 (rows locked & marked downloaded).
 
     if (goodRows.length === 0 && badRows.length === 0) {
       await db.query(
@@ -992,52 +992,99 @@ const reviewDownloadRequest = async (req, res) => {
                  WHERE id=$2`,
         [req.user.id, id],
       );
+      client2.release();
+      client.release();
       return res.status(404).json({
-        message:
-          "No available leads found. Request has been marked as rejected.",
+        message: "No available leads found. Request has been marked as rejected.",
       });
     }
 
-    const serializedData = serializeDownloadPayload(
-      goodRows,
-      badRows,
-      summary,
-      `approved_leads_${id}.csv`,
-    );
-
+    // Mark as 'processing' immediately so admin sees it changed
     await db.query(
-      `UPDATE download_requests
-             SET status='accepted', reviewed_at=NOW(), reviewed_by=$1, csv_data=$2
-             WHERE id=$3`,
-      [req.user.id, serializedData, id],
+      `UPDATE download_requests SET status='accepted', reviewed_at=NOW(), reviewed_by=$1 WHERE id=$2`,
+      [req.user.id, id],
     );
 
-    saveDownloadLogPayload(logId, serializedData).catch((err) =>
-      console.error("Failed to persist download payload:", err.message),
-    );
-    txnStarted = false;
+    client2.release();
+    client.release();
 
-    // Notify the admin that their request was approved
-    await createNotification(
-      dlReq.admin_id,
-      "download_request_accepted",
-      "✅ Download Request Approved!",
-      `Your download request for ${goodRows.length.toLocaleString()} leads has been approved. You can now download your CSV file.`,
-      dlReq.id,
-    );
-
-    return res.json({
-      message: `Request accepted. ${goodRows.length} leads are ready for the admin to download.`,
+    // Respond immediately — no more 502!
+    res.json({
+      message: `Request accepted. ${goodRows.length} leads are being prepared. The admin will be notified when ready to download.`,
       lead_count: goodRows.length,
     });
+
+    // ── Background: BLA scrub + CSV generation ─────────────────────────────
+    (async () => {
+      const bgClient = await db.getClient();
+      try {
+        // Re-run scrub on the exported rows (they are already in goodRows from executeDownload)
+        const { scrubPhones, normalizePhone } = require('../utils/blacklistAlliance');
+        const allPhones = [...goodRows, ...badRows].map(r => r.phone);
+        let finalGood = goodRows;
+        let finalBad = badRows;
+
+        try {
+          const scrubResult = await scrubPhones(allPhones);
+          if (scrubResult.bad.length > 0) {
+            const badPhoneSet = new Set(scrubResult.bad.map(b => b.phone));
+            const scrubInfoByPhone = new Map(scrubResult.bad.map(b => [b.phone, b]));
+            const isBad = r => badPhoneSet.has(normalizePhone(r.phone));
+
+            await bgClient.query('BEGIN');
+            await bgClient.query(
+              `UPDATE leads SET status='available', downloaded_at=null, disposition='DNC' WHERE phone=ANY($1::text[])`,
+              [scrubResult.bad.map(b => b.phone)],
+            );
+            await bgClient.query('COMMIT');
+
+            finalBad = [...finalBad, ...[...goodRows, ...badRows].filter(isBad).map(r => {
+              const info = scrubInfoByPhone.get(normalizePhone(r.phone)) || {};
+              return { ...r, dnc_type: info.type || 'DNC', reason: info.reason || 'BLA Match' };
+            })];
+            finalGood = [...goodRows, ...badRows].filter(r => !isBad(r));
+          }
+        } catch (scrubErr) {
+          console.error('[BG Scrub leads] scrub failed, using unfiltered rows:', scrubErr.message);
+        }
+
+        const serializedData = serializeDownloadPayload(finalGood, finalBad, { ...summary, total: allPhones.length }, `approved_leads_${id}.csv`);
+
+        await db.query(
+          `UPDATE download_requests SET csv_data=$1 WHERE id=$2`,
+          [serializedData, id],
+        );
+
+        if (logId) saveDownloadLogPayload(logId, serializedData).catch(() => {});
+
+        await createNotification(
+          dlReq.admin_id,
+          'download_request_accepted',
+          '✅ Download Request Approved!',
+          `Your download request for ${finalGood.length.toLocaleString()} leads has been approved. You can now download your CSV file.`,
+          dlReq.id,
+        );
+      } catch (bgErr) {
+        console.error('[BG leads download] error:', bgErr.message);
+        await bgClient.query('ROLLBACK').catch(() => {});
+        // Mark as failed so admin knows
+        await db.query(
+          `UPDATE download_requests SET status='rejected', rejection_reason='Background processing failed: ${bgErr.message.replace(/'/g,"''")}' WHERE id=$1`,
+          [id],
+        ).catch(() => {});
+      } finally {
+        bgClient.release();
+      }
+    })();
+
+    return; // Response already sent
   } catch (err) {
-    if (txnStarted) await client.query("ROLLBACK").catch(() => {});
-    console.error("Review Download Request Error:", err);
-    return res.status(500).json({ message: "Server error processing request" });
-  } finally {
-    client.release();
+    client2.release();
+
+    if (!res.headersSent) return res.status(500).json({ message: 'Server error processing request' });
   }
 };
+
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/download/requests/:id/file
@@ -1062,7 +1109,7 @@ const executeApprovedDownload = async (req, res) => {
     if (!dlReq.csv_data) {
       return res
         .status(400)
-        .json({ message: "CSV data not available for this request." });
+        .json({ message: "CSV is still being prepared in the background. Please wait a few minutes and try downloading again." });
     }
 
     if (dlReq.csv_data.trim().startsWith("{")) {
