@@ -113,6 +113,7 @@ const WcDbAddJob = () => {
                             if (progressEvent.total) {
                                 const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
                                 setFileProgresses(prev => ({ ...prev, [i]: percentCompleted }));
+                                setProgress(Math.round(((i + (percentCompleted / 100)) / files.length) * 100));
                             }
                         }
                     });
@@ -154,6 +155,7 @@ const WcDbAddJob = () => {
     const handleUploadFresh = async () => {
         if (files.length === 0) { setError('Please select at least one file to upload'); return; }
         setUploading(true); setError(''); setResult(null); setFileProgresses({});
+        setProgress(0);
         const aggregate = { total_processed: 0, fresh_count: 0, existing_count: 0, duplicates_in_file: 0, dnc_skipped: 0, dead_skipped: 0, inserted: 0, premium_overlap: 0, refine_overlap: 0, van_desk_overlap: 0, raw_overlap: 0, failed_files: [] };
         try {
             for (let i = 0; i < files.length; i++) {
@@ -162,7 +164,10 @@ const WcDbAddJob = () => {
                     const formData = new FormData();
                     formData.append('file', files[i]);
                     formData.append('session_id', id);
-                    const data = await uploadAndPoll(formData, fileLabel, (pct) => setFileProgresses(prev => ({ ...prev, [i]: pct })));
+                    const data = await uploadAndPoll(formData, fileLabel, (pct) => {
+                        setFileProgresses(prev => ({ ...prev, [i]: pct }));
+                        setProgress(Math.round(((i + (pct / 100)) / files.length) * 100));
+                    });
                     setProgress(Math.round(((i + 1) / files.length) * 100));
                     aggregate.total_processed += data.total_processed || 0;
                     aggregate.fresh_count += data.fresh_count || 0;
