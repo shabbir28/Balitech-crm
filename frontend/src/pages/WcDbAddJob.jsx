@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
-import { UploadCloud, CheckCircle, ChevronRight, Settings, UserCircle, Database, FileSpreadsheet, X } from 'lucide-react';
+import { UploadCloud, CheckCircle, ChevronRight, Settings, UserCircle, Database, FileSpreadsheet, X, ArrowRight, FileX, Server } from 'lucide-react';
 
 const BULK_UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 const POLL_INTERVAL_MS = 3000;
@@ -55,6 +55,8 @@ const WcDbAddJob = () => {
     const [fileProgresses, setFileProgresses] = useState({});
     const [error, setError] = useState('');
     const [result, setResult] = useState(null);
+    const [comparing, setComparing] = useState(false);
+    const [compareResult, setCompareResult] = useState(null);
 
     const formatBytes = (b) => { if (!b) return '0 Bytes'; const k = 1024; const sizes = ['Bytes', 'KB', 'MB', 'GB']; const i = Math.floor(Math.log(b) / Math.log(k)); return parseFloat((b / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]; };
 
@@ -68,7 +70,88 @@ const WcDbAddJob = () => {
         }
     };
 
-    const handleUpload = async () => {
+    const handleCompare = async () => {
+        if (files.length === 0) {
+            setError('Please select at least one file to compare');
+            return;
+        }
+
+        setComparing(true);
+        setError('');
+        setCompareResult(null);
+        setFileProgresses({});
+        setProgress(0);
+
+        const aggregate = {
+            total_processed: 0,
+            total_unique_phones: 0,
+            duplicates_in_file: 0,
+            fresh_count: 0,
+            existing_count: 0,
+            dnc_skipped: 0,
+            sales_skipped: 0,
+            dead_skipped: 0,
+            premium_overlap: 0,
+            refine_overlap: 0,
+            van_desk_overlap: 0,
+            raw_overlap: 0,
+            failed_files: [],
+        };
+
+        try {
+            for (let i = 0; i < files.length; i++) {
+                const fileLabel = files[i]?.name || `File ${i + 1}`;
+                try {
+                    const formData = new FormData();
+                    formData.append('file', files[i]);
+                    formData.append('session_id', id);
+
+                    // We use basic api.post since /compare is synchronous in wcDbJobController
+                    const res = await api.post('/wc-db-jobs/compare', formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' },
+                        onUploadProgress: (progressEvent) => {
+                            if (progressEvent.total) {
+                                const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                                setFileProgresses(prev => ({ ...prev, [i]: percentCompleted }));
+                            }
+                        }
+                    });
+
+                    setProgress(Math.round(((i + 1) / files.length) * 100));
+
+                    aggregate.total_processed += res.data.total_processed || 0;
+                    aggregate.total_unique_phones += res.data.total_unique_phones || 0;
+                    aggregate.duplicates_in_file += res.data.duplicates_in_file || 0;
+                    aggregate.fresh_count += res.data.fresh_count || 0;
+                    aggregate.existing_count += res.data.existing_count || 0;
+                    aggregate.dnc_skipped += res.data.dnc_skipped || 0;
+                    aggregate.sales_skipped += res.data.sales_skipped || 0;
+                    aggregate.dead_skipped += res.data.dead_skipped || 0;
+                    aggregate.premium_overlap += res.data.premium_overlap || 0;
+                    aggregate.refine_overlap += res.data.refine_overlap || 0;
+                    aggregate.van_desk_overlap += res.data.van_desk_overlap || 0;
+                    aggregate.raw_overlap += res.data.raw_overlap || 0;
+                } catch (fileErr) {
+                    console.error(`Error comparing file ${fileLabel}:`, fileErr);
+                    const detail = fileErr.response?.data?.error || fileErr.response?.data?.message || fileErr.message;
+                    aggregate.failed_files.push({ name: fileLabel, error: detail });
+                    setFileProgresses(prev => ({ ...prev, [i]: -1 }));
+                    setProgress(Math.round(((i + 1) / files.length) * 100));
+                }
+            }
+            
+            setProgress(100);
+            setCompareResult(aggregate);
+            setStep(2); // Analysis / Preview
+        } catch (err) {
+            const detail = err.response?.data?.error || err.response?.data?.message;
+            setError(detail || 'Server error comparing file(s)');
+        } finally {
+            setComparing(false);
+        }
+    };
+
+    const handleUploadFresh = async () => {
         if (files.length === 0) { setError('Please select at least one file to upload'); return; }
         setUploading(true); setError(''); setResult(null); setFileProgresses({});
         const aggregate = { total_processed: 0, fresh_count: 0, existing_count: 0, duplicates_in_file: 0, dnc_skipped: 0, dead_skipped: 0, inserted: 0, premium_overlap: 0, refine_overlap: 0, van_desk_overlap: 0, raw_overlap: 0, failed_files: [] };
@@ -100,14 +183,14 @@ const WcDbAddJob = () => {
                     setProgress(Math.round(((i + 1) / files.length) * 100));
                 }
             }
-            setProgress(100); setResult(aggregate); setStep(2);
+            setProgress(100); setResult(aggregate); setStep(3);
         } catch (err) {
             const detail = err.response?.data?.error || err.response?.data?.message || err.message;
             setError(detail || 'Server error uploading file(s)');
         } finally { setUploading(false); }
     };
 
-    const stepLabels = ['Upload File', 'Results'];
+    const stepLabels = ['Upload File', 'Analysis / Preview', 'Upload Results'];
 
     return (
         <div className="w-full flex justify-center pb-20 font-sans">
@@ -131,14 +214,14 @@ const WcDbAddJob = () => {
                     {/* Stepper */}
                     <div className="w-full max-w-3xl px-4 sm:px-12 mb-10 relative z-10">
                         <div className="absolute top-[28px] left-[15%] right-[15%] h-[2px] bg-white/5 -z-10 rounded-full" />
-                        <div className="absolute top-[28px] left-[15%] h-[2px] bg-cyan-500 -z-10 rounded-full transition-all duration-500" style={{ width: step === 1 ? '0%' : '100%' }} />
+                        <div className="absolute top-[28px] left-[15%] h-[2px] bg-cyan-500 -z-10 rounded-full transition-all duration-500" style={{ width: step === 1 ? '0%' : step === 2 ? '50%' : '100%' }} />
                         <div className="flex justify-between items-start relative z-10">
                             {stepLabels.map((label, index) => {
                                 const stepNum = index + 1;
                                 const isActive = step === stepNum;
                                 const isPast = step > stepNum;
                                 return (
-                                    <div key={label} className="flex flex-col items-center w-32 text-center">
+                                    <div key={label} className="flex flex-col items-center w-24 sm:w-32 text-center group">
                                         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 ${isActive || isPast ? 'bg-gradient-to-br from-cyan-500 to-cyan-600 text-white shadow-[0_0_20px_rgba(6,182,212,0.3)] border border-cyan-400/50 scale-110' : 'bg-[#0a0a0f] text-slate-500 border border-white/10'}`}>
                                             {isPast ? <CheckCircle className="w-6 h-6 stroke-[3]" /> : <span className="font-bold text-lg">{stepNum}</span>}
                                         </div>
@@ -208,29 +291,175 @@ const WcDbAddJob = () => {
                                     </div>
                                 )}
 
-                                {uploading && (
+                                {comparing && (
                                     <div className="mt-6 space-y-2">
                                         <div className="flex justify-between text-[12px] text-slate-400">
-                                            <span>Processing {files.length} file(s)...</span><span className="font-mono text-cyan-400">{progress}%</span>
+                                            <span>Comparing {files.length} file(s)...</span><span className="font-mono text-cyan-400">{progress}%</span>
                                         </div>
                                         <div className="w-full h-2 bg-[#0a0a0f] rounded-full overflow-hidden border border-white/5">
                                             <div className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 rounded-full transition-all duration-300 shadow-[0_0_10px_rgba(6,182,212,0.4)]" style={{ width: `${progress}%` }} />
                                         </div>
-                                        <p className="text-[11px] text-slate-500 text-center animate-pulse">Please wait — processing may take a few minutes for large files...</p>
+                                        <p className="text-[11px] text-slate-500 text-center animate-pulse">Please wait — analyzing data...</p>
                                     </div>
                                 )}
 
                                 <div className="mt-8 flex gap-4">
-                                    <button onClick={() => navigate(`/wc-db-sessions/${id}`)} disabled={uploading} className="px-6 py-3 bg-[#0a0a0f] hover:bg-white/5 border border-white/10 text-slate-300 rounded-xl font-semibold text-[13px] disabled:opacity-50">Cancel</button>
-                                    <button onClick={handleUpload} disabled={uploading || files.length === 0}
-                                        className={`flex-1 py-3 rounded-xl font-bold text-white text-[13px] flex items-center justify-center gap-2 transition-all ${uploading || files.length === 0 ? 'bg-cyan-500/40 cursor-not-allowed' : 'bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 shadow-[0_4px_14px_rgba(6,182,212,0.3)]'}`}>
-                                        {uploading ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Processing {files.length} file(s)...</> : <><UploadCloud className="w-4 h-4" /> {isBulk ? 'Bulk Upload to WC DB' : 'Upload to WC DB'}</>}
+                                    <button onClick={() => navigate(`/wc-db-sessions/${id}`)} disabled={comparing} className="px-6 py-3 bg-[#0a0a0f] hover:bg-white/5 border border-white/10 text-slate-300 rounded-xl font-semibold text-[13px] disabled:opacity-50">Cancel</button>
+                                    <button onClick={handleCompare} disabled={comparing || files.length === 0}
+                                        className={`flex-1 py-3 rounded-xl font-bold text-white text-[13px] flex items-center justify-center gap-2 transition-all ${comparing || files.length === 0 ? 'bg-cyan-500/40 cursor-not-allowed' : 'bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 shadow-[0_4px_14px_rgba(6,182,212,0.3)]'}`}>
+                                        {comparing ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Analyzing {files.length} file(s)...</> : <><ArrowRight className="w-4 h-4" /> {isBulk ? 'Start Bulk Compare' : 'Start Compare'}</>}
                                     </button>
                                 </div>
                             </div>
                         )}
 
-                        {step === 2 && result && (
+                        {step === 2 && compareResult && (
+                            <div className="w-full max-w-5xl mx-auto animate-fade-in flex flex-col md:flex-row gap-8">
+                                <div className="flex-1 w-full space-y-6">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <h2 className="text-3xl font-extrabold text-white tracking-tight">Analysis Complete</h2>
+                                        <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-4 py-1.5 rounded-full text-xs font-bold tracking-widest uppercase shadow-inner">
+                                            {isBulk ? `${files.length} Files Scanned` : 'File Scanned'}
+                                        </span>
+                                    </div>
+                                    <p className="text-slate-400 text-[14px] font-medium max-w-lg mb-8">We've identified how many clean, fresh leads can be imported into the WC DB database.</p>
+                                    
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="bg-[#1e1e2d] border border-white/5 rounded-[1.5rem] p-6 hover:bg-[#1e1e2d]/80 transition-colors shadow-lg relative overflow-hidden group">
+                                            <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all"></div>
+                                            <p className="text-slate-400 text-xs font-bold tracking-widest uppercase mb-1 flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> Fresh Valid Leads</p>
+                                            <p className="text-3xl font-black text-white">{compareResult.fresh_count.toLocaleString()}</p>
+                                            <p className="text-[10px] text-emerald-400/80 mt-2 font-medium bg-emerald-500/10 inline-block px-2 py-0.5 rounded-md">Ready to import</p>
+                                        </div>
+                                        <div className="bg-[#1e1e2d] border border-white/5 rounded-[1.5rem] p-6 hover:bg-[#1e1e2d]/80 transition-colors shadow-lg relative overflow-hidden group">
+                                            <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition-all"></div>
+                                            <p className="text-slate-400 text-xs font-bold tracking-widest uppercase mb-1 flex items-center gap-2"><Settings className="w-3.5 h-3.5 text-amber-500" /> Existing Leads</p>
+                                            <p className="text-3xl font-black text-white">{compareResult.existing_count.toLocaleString()}</p>
+                                            <p className="text-[10px] text-amber-400/80 mt-2 font-medium bg-amber-500/10 inline-block px-2 py-0.5 rounded-md">Already in WC DB</p>
+                                        </div>
+                                        
+                                        <div className="col-span-2 bg-[#0a0a0f] border border-red-500/20 rounded-[1.5rem] p-6 shadow-inner relative overflow-hidden">
+                                            <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-bl from-red-500/5 to-transparent pointer-events-none"></div>
+                                            <div className="flex items-center justify-between mb-4">
+                                                <p className="text-red-400 text-xs font-bold tracking-widest uppercase flex items-center gap-2"><FileX className="w-4 h-4" /> Automatically Skipped</p>
+                                                <span className="text-[10px] text-slate-500 font-mono">{(compareResult.duplicates_in_file + compareResult.dnc_skipped + compareResult.dead_skipped + compareResult.sales_skipped).toLocaleString()} Total Skipped</span>
+                                            </div>
+                                            <div className="grid grid-cols-4 gap-4">
+                                                <div className="bg-[#1e1e2d] rounded-xl p-3 border border-white/5">
+                                                    <p className="text-slate-500 text-[10px] font-bold uppercase mb-1">In-File Dupes</p>
+                                                    <p className="text-lg font-bold text-slate-300">{compareResult.duplicates_in_file.toLocaleString()}</p>
+                                                </div>
+                                                <div className="bg-[#1e1e2d] rounded-xl p-3 border border-white/5">
+                                                    <p className="text-slate-500 text-[10px] font-bold uppercase mb-1">Global DNCs</p>
+                                                    <p className="text-lg font-bold text-slate-300">{compareResult.dnc_skipped.toLocaleString()}</p>
+                                                </div>
+                                                <div className="bg-[#1e1e2d] rounded-xl p-3 border border-white/5">
+                                                    <p className="text-slate-500 text-[10px] font-bold uppercase mb-1">Dead Nums</p>
+                                                    <p className="text-lg font-bold text-slate-300">{compareResult.dead_skipped.toLocaleString()}</p>
+                                                </div>
+                                                <div className="bg-[#1e1e2d] rounded-xl p-3 border border-white/5">
+                                                    <p className="text-slate-500 text-[10px] font-bold uppercase mb-1">Global Sales</p>
+                                                    <p className="text-lg font-bold text-slate-300">{compareResult.sales_skipped.toLocaleString()}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="col-span-2 bg-[#0a0a0f] border border-cyan-500/20 rounded-[1.5rem] p-6 shadow-inner relative overflow-hidden mt-2">
+                                            <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-bl from-cyan-500/5 to-transparent pointer-events-none"></div>
+                                            <div className="flex items-center justify-between mb-4">
+                                                <p className="text-cyan-400 text-xs font-bold tracking-widest uppercase flex items-center gap-2"><Settings className="w-4 h-4" /> System Overlaps</p>
+                                                <span className="text-[10px] text-slate-500 font-mono">Found in other modules</span>
+                                            </div>
+                                            <div className="grid grid-cols-4 gap-4">
+                                                <div className="bg-[#1e1e2d] rounded-xl p-3 border border-white/5">
+                                                    <p className="text-slate-500 text-[10px] font-bold uppercase mb-1">Premium</p>
+                                                    <p className="text-lg font-bold text-slate-300">{compareResult.premium_overlap?.toLocaleString()}</p>
+                                                </div>
+                                                <div className="bg-[#1e1e2d] rounded-xl p-3 border border-white/5">
+                                                    <p className="text-slate-500 text-[10px] font-bold uppercase mb-1">Refine</p>
+                                                    <p className="text-lg font-bold text-slate-300">{compareResult.refine_overlap?.toLocaleString()}</p>
+                                                </div>
+                                                <div className="bg-[#1e1e2d] rounded-xl p-3 border border-white/5">
+                                                    <p className="text-slate-500 text-[10px] font-bold uppercase mb-1">Van Desk</p>
+                                                    <p className="text-lg font-bold text-slate-300">{compareResult.van_desk_overlap?.toLocaleString()}</p>
+                                                </div>
+                                                <div className="bg-[#1e1e2d] rounded-xl p-3 border border-white/5">
+                                                    <p className="text-slate-500 text-[10px] font-bold uppercase mb-1">Raw Leads</p>
+                                                    <p className="text-lg font-bold text-slate-300">{compareResult.raw_overlap?.toLocaleString()}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    {compareResult.failed_files?.length > 0 && (
+                                        <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl">
+                                            <h4 className="text-red-400 font-bold text-sm mb-2">Files that failed comparison:</h4>
+                                            <ul className="list-disc pl-5 text-xs text-red-300/80 space-y-1">
+                                                {compareResult.failed_files.map((ff, i) => (
+                                                    <li key={i}><span className="font-semibold text-red-300">{ff.name}:</span> {ff.error}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+
+                                    {error && (
+                                        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl text-sm font-medium flex items-center gap-3 animate-fade-in">
+                                            <div className="w-1.5 h-1.5 bg-red-400 rounded-full shrink-0"></div>
+                                            {error}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Right Side Actions / Info */}
+                                <div className="w-full md:w-[320px] shrink-0">
+                                    <div className="sticky top-6">
+                                        <div className="bg-gradient-to-b from-[#1e1e2d] to-[#0a0a0f] rounded-[2rem] p-8 border border-white/5 shadow-[0_20px_50px_rgba(0,0,0,0.3)] flex flex-col items-center text-center">
+                                            <div className="w-20 h-20 rounded-full bg-brand-500/10 border border-brand-500/20 flex items-center justify-center mb-6 shadow-inner relative">
+                                                <div className="absolute inset-0 rounded-full bg-brand-400/20 animate-ping"></div>
+                                                <Server className="w-10 h-10 text-brand-400 relative z-10" />
+                                            </div>
+                                            
+                                            <h3 className="text-white font-bold text-xl mb-2">Ready to Import?</h3>
+                                            <p className="text-slate-400 text-sm font-medium mb-8">We will inject <strong className="text-brand-400">{compareResult.fresh_count.toLocaleString()}</strong> clean leads into the WC DB database asynchronously.</p>
+                                            
+                                            {uploading && isBulk && (
+                                                <div className="w-full mb-6">
+                                                    <div className="flex justify-between text-[11px] font-bold text-brand-400 mb-2 tracking-wide uppercase">
+                                                        <span>Uploading {files.length} files...</span>
+                                                        <span>{progress}%</span>
+                                                    </div>
+                                                    <div className="w-full bg-[#0a0a0f] rounded-full h-1 overflow-hidden border border-white/5">
+                                                        <div className="bg-brand-500 h-full rounded-full transition-all duration-300 shadow-[0_0_10px_rgba(59,130,246,0.8)]" style={{ width: `${progress}%` }}></div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <button 
+                                                onClick={handleUploadFresh}
+                                                disabled={uploading || compareResult.fresh_count === 0}
+                                                className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white py-4 rounded-xl font-bold transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-[0_0_25px_rgba(16,185,129,0.5)] active:scale-[0.98]"
+                                            >
+                                                {uploading ? (
+                                                    <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Injecting...</>
+                                                ) : (
+                                                    <><CheckCircle className="w-5 h-5" strokeWidth={2.5} /> Save Valid Leads</>
+                                                )}
+                                            </button>
+                                            
+                                            <button 
+                                                onClick={() => { setStep(1); setCompareResult(null); }}
+                                                disabled={uploading}
+                                                className="w-full mt-4 bg-transparent border border-white/10 hover:bg-white/5 text-slate-300 py-3 rounded-xl font-medium transition-all text-sm disabled:opacity-50"
+                                            >
+                                                Go Back
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {step === 3 && result && (
                             <div className="w-full max-w-2xl mx-auto animate-fade-in">
                                 <div className="text-center mb-8">
                                     <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
