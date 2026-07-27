@@ -802,7 +802,7 @@ const reviewDownloadRequest = async (req, res) => {
             dlReq.admin_id,
             dlReq.vendor_id,
             finalRows.length,
-            dlReq.states,
+            dlReq.states ? JSON.stringify(dlReq.states) : null,
             dlReq.min_age,
             dlReq.max_age,
             JSON.stringify({
