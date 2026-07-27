@@ -160,7 +160,6 @@ const WcDbAddJob = () => {
                                         type="file" 
                                         accept=".csv, .xls, .xlsx, .txt" 
                                         multiple 
-                                        {...(isBulk ? { webkitdirectory: "", directory: "" } : {})}
                                         onChange={handleFileChange} 
                                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20" 
                                     />

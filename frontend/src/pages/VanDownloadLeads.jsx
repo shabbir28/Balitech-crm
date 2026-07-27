@@ -1300,8 +1300,8 @@ const VanDownloadLeads = () => {
 
 
 
-            {/* â”€â”€ MY REQUESTS TABLE (Admin only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-            {isAdmin && (
+            {/* ── MY REQUESTS TABLE (Admin only) ──────────────── */}
+            {!isSuperAdmin && (
                 <div className="mt-10">
                     <div className="flex items-center justify-between mb-5">
                         <div>

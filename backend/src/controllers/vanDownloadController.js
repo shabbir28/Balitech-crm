@@ -796,6 +796,24 @@ const reviewDownloadRequest = async (req, res) => {
         );
 
         await db.query(
+          `INSERT INTO van_download_logs (user_id, vendor_id, quantity, states, min_age, max_age, csv_payload, download_date)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+          [
+            dlReq.admin_id,
+            dlReq.vendor_id,
+            finalRows.length,
+            dlReq.states ? JSON.stringify(dlReq.states) : null,
+            dlReq.min_age,
+            dlReq.max_age,
+            JSON.stringify({
+              csv: goodCsv,
+              badCsv,
+              fileName: `van_download_request_${id}.csv`
+            })
+          ]
+        );
+
+        await db.query(
           `INSERT INTO notifications (user_id, type, title, message, reference_id) VALUES ($1, $2, $3, $4, $5)`,
           [
             dlReq.admin_id,

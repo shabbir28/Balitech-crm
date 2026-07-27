@@ -714,7 +714,8 @@ const reviewDownloadRequest = async (req, res) => {
         if (adminRes.rows.length > 0) {
             const admin = adminRes.rows[0];
             if (admin.role !== 'super_admin' && admin.role !== 'admin') {
-                const accessible = admin.accessible_campaigns || [];
+                const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                const accessible = (admin.accessible_campaigns || []).filter(id => uuidRegex.test(id));
                 if (accessible.length > 0) {
                     const campsRes = await client.query('SELECT name FROM campaigns WHERE campaign_id = ANY($1::uuid[])', [accessible]);
                     data_campaigns = campsRes.rows.map(r => r.name);

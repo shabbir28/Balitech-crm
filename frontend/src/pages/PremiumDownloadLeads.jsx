@@ -1316,7 +1316,7 @@ const PremiumDownloadLeads = () => {
 
 
             {/* ── MY REQUESTS TABLE (Admin only) ──────────────── */}
-            {isAdmin && (
+            {!isSuperAdmin && (
                 <div className="mt-10">
                     <div className="flex items-center justify-between mb-5">
                         <div>

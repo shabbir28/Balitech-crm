@@ -250,8 +250,6 @@ const MixedDownloadLeads = () => {
     const isSuperAdmin = user?.role === 'super_admin';
     const isAdmin = user?.role === 'admin';
     const canDownloadDirectly = isSuperAdmin || isAdmin;
-    const canSubmitRequest = !isSuperAdmin; // admins, data_entry, dialer_agent submit requests
-
     const [vanVendors, setVanVendors]         = useState([]);
     const [refineVendors, setRefineVendors]   = useState([]);
     const [premiumVendors, setPremiumVendors] = useState([]);
@@ -978,7 +976,6 @@ const MixedDownloadLeads = () => {
                                 <div className="divide-y divide-white/[0.05] max-h-[400px] overflow-y-auto">
                                     {myRequests.map(req => {
                                         const isAccepted = req.status === 'accepted';
-                                        const isPending = req.status === 'pending';
                                         const isRejected = req.status === 'rejected';
                                         const hasCsv = !!req.has_csv;
                                         const isDownloading = dlId === req.id;

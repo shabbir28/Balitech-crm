@@ -1093,7 +1093,21 @@ const reviewDownloadRequest = async (req, res) => {
         );
 
         await db.query(`UPDATE refine_download_requests SET csv_data=$1 WHERE id=$2`, [serializedData, id]);
-        if (logId) saveDownloadLogPayload(logId, serializedData).catch(() => {});
+        
+        await db.query(
+          `INSERT INTO refine_download_logs (user_id, vendor_id, campaign_id, quantity, states, min_age, max_age, csv_payload, download_date)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+          [
+            dlReq.admin_id,
+            dlReq.vendor_id,
+            dlReq.campaign_id,
+            goodRows.length,
+            dlReq.states ? JSON.stringify(dlReq.states) : null,
+            dlReq.min_age,
+            dlReq.max_age,
+            serializedData
+          ]
+        );
 
         await createNotification(
           dlReq.admin_id,
