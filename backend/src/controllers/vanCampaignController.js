@@ -19,7 +19,8 @@ const getCampaigns = async (req, res) => {
   try {
     let result;
     if (req.user && req.user.role === 'dialer_agent') {
-        const accessible = req.user.accessible_campaigns || [];
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const accessible = (req.user.accessible_campaigns || []).filter(id => uuidRegex.test(id));
         if (accessible.length === 0) {
             return res.json([]);
         }
