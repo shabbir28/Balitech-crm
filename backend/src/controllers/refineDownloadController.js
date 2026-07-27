@@ -1088,7 +1088,7 @@ const reviewDownloadRequest = async (req, res) => {
 
         const serializedData = serializeDownloadPayload(
           finalGood, finalBad,
-          { ...summary, total: goodRows.length + badRows.length },
+          { ...summary, total: goodRows.length + badRows.length, scrubPending: false, scrubCompleted: true },
           `approved_leads_${id}.csv`,
         );
 

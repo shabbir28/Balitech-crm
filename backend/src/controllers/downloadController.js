@@ -1048,7 +1048,7 @@ const reviewDownloadRequest = async (req, res) => {
           console.error('[BG Scrub leads] scrub failed, using unfiltered rows:', scrubErr.message);
         }
 
-        const serializedData = serializeDownloadPayload(finalGood, finalBad, { ...summary, total: allPhones.length }, `approved_leads_${id}.csv`);
+        const serializedData = serializeDownloadPayload(finalGood, finalBad, { ...summary, total: allPhones.length, scrubPending: false, scrubCompleted: true }, `approved_leads_${id}.csv`);
 
         await db.query(
           `UPDATE download_requests SET csv_data=$1 WHERE id=$2`,

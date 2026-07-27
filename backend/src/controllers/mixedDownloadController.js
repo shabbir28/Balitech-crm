@@ -816,7 +816,8 @@ const reviewDownloadRequest = async (req, res) => {
       scrubDate: new Date().toLocaleString(),
       total: allRows.length,
       blacklist, suppress: 0, stateDnc, federalDnc, wireless: 0, landline: 0,
-      good: finalGoodRows.length, errors: 0, badPhone
+      good: finalGoodRows.length, errors: 0, badPhone,
+      scrubPending: false, scrubCompleted: true
     };
 
     const payloadObj = {
