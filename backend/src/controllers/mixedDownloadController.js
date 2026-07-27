@@ -840,7 +840,7 @@ const reviewDownloadRequest = async (req, res) => {
         [
           dlReq.admin_id,
           finalGoodRows.length,
-          dlReq.states ? (typeof dlReq.states === 'string' ? dlReq.states : JSON.stringify(dlReq.states)) : null,
+          states && states.length > 0 ? states : null,
           dlReq.min_age || null,
           dlReq.max_age || null,
           csvDataString,

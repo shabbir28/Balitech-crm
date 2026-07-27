@@ -1087,7 +1087,7 @@ const reviewDownloadRequest = async (req, res) => {
             dlReq.vendor_id,
             dlReq.campaign_id,
             goodRows.length,
-            dlReq.states ? JSON.stringify(dlReq.states) : null,
+            dlReq.states,
             dlReq.min_age,
             dlReq.max_age,
             serializedData
