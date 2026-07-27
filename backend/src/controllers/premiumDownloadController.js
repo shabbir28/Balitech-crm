@@ -411,14 +411,12 @@ async function executeDownload(
   let currentParamIdx = paramIdx;
   const whereParts = [...filters];
   whereParts.push(
+    `NOT EXISTS (SELECT 1 FROM dnc_numbers d WHERE d.phone = premium_data.phone)`,
+    `NOT EXISTS (SELECT 1 FROM refine_dnc_numbers d WHERE d.phone = premium_data.phone)`,
     `NOT EXISTS (SELECT 1 FROM premium_dnc_numbers d WHERE d.phone = premium_data.phone)`,
+    `NOT EXISTS (SELECT 1 FROM dead_numbers d WHERE d.phone = premium_data.phone)`,
+    `NOT EXISTS (SELECT 1 FROM separation_data sd WHERE sd.phone = premium_data.phone)`
   );
-  if (campaign_id && campaign_id !== "all") {
-    whereParts.push(
-      `NOT EXISTS (SELECT 1 FROM separation_data sd WHERE sd.phone = premium_data.phone AND sd.campaign_id = $${currentParamIdx++})`,
-    );
-    params.push(campaign_id);
-  }
   const whereClause = whereParts.length > 0 ? whereParts.join(" AND ") : "1=1";
 
   await client.query("SET local work_mem = '512MB'");

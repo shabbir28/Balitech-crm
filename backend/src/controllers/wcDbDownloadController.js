@@ -67,8 +67,13 @@ function buildFilters({ vendor_id, states, min_age, max_age, include_downloaded,
     ? ["status IN ('available', 'downloaded')"]
     : ["status = 'available'"];
 
-  // Only exclude DNC from wc_db's own perspective — no cross-module check
-  filters.push(`NOT EXISTS (SELECT 1 FROM dnc_numbers d WHERE d.phone = wc_db_data.phone)`);
+  filters.push(
+    `NOT EXISTS (SELECT 1 FROM dnc_numbers d WHERE d.phone = wc_db_data.phone)`,
+    `NOT EXISTS (SELECT 1 FROM refine_dnc_numbers d WHERE d.phone = wc_db_data.phone)`,
+    `NOT EXISTS (SELECT 1 FROM premium_dnc_numbers d WHERE d.phone = wc_db_data.phone)`,
+    `NOT EXISTS (SELECT 1 FROM dead_numbers d WHERE d.phone = wc_db_data.phone)`,
+    `NOT EXISTS (SELECT 1 FROM separation_data sd WHERE sd.phone = wc_db_data.phone)`
+  );
 
   const params = [];
   let idx = 1;

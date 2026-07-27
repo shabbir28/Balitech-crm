@@ -73,16 +73,13 @@ function buildFilters({
 
   filters.push(
     `NOT EXISTS (SELECT 1 FROM dnc_numbers d WHERE d.phone = van_data.phone)`,
+    `NOT EXISTS (SELECT 1 FROM refine_dnc_numbers d WHERE d.phone = van_data.phone)`,
+    `NOT EXISTS (SELECT 1 FROM premium_dnc_numbers d WHERE d.phone = van_data.phone)`,
+    `NOT EXISTS (SELECT 1 FROM dead_numbers d WHERE d.phone = van_data.phone)`,
+    `NOT EXISTS (SELECT 1 FROM separation_data sd WHERE sd.phone = van_data.phone)`
   );
   const params = [];
   let idx = 1;
-
-  if (campaign_id && campaign_id !== "all" && isUuid(String(campaign_id))) {
-    filters.push(
-      `NOT EXISTS (SELECT 1 FROM separation_data sd WHERE sd.phone = van_data.phone AND sd.campaign_id = $${idx++})`,
-    );
-    params.push(String(campaign_id));
-  }
 
   if (vendor_id && vendor_id !== "all") {
     filters.push(`vendor_id = $${idx++}`);

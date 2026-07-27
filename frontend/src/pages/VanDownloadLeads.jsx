@@ -649,12 +649,11 @@ const VanDownloadLeads = () => {
     }, [selectedFileIds]);
 
     const fetchMyReqs = async () => {
-        if (!isAdmin) return;
         setLoadingReq(true);
         try { const r = await api.get('/Van-download/requests/mine'); setMyRequests(r.data); }
         catch (err) { console.error(err); } finally { setLoadingReq(false); }
     };
-    useEffect(() => { fetchMyReqs(); }, []); // eslint-disable-line
+    useEffect(() => { fetchMyReqs(); }, []);
 
     useEffect(() => {
         const h = (e) => { if (stateRef.current && !stateRef.current.contains(e.target)) setStateOpen(false); };
