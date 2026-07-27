@@ -1121,6 +1121,13 @@ const reviewDownloadRequest = async (req, res) => {
       return res.status(500).json({ message: 'Server error processing request' });
     }
   }
+} catch (outerErr) {
+  client.release();
+  console.error("Review Refine Download Request Error:", outerErr);
+  if (!res.headersSent) {
+    return res.status(500).json({ message: 'Server error processing request' });
+  }
+}
 };
 
 
