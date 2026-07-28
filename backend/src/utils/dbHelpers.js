@@ -108,6 +108,21 @@ const lookupDeadPhones = async (exec, phones) => {
   return deadSet;
 };
 
+const lookupSeparationPhones = async (exec, phones) => {
+  const sepSet = new Set();
+  for (const chunk of chunkArray(phones, 5000)) {
+    await new Promise((resolve) => setImmediate(resolve));
+    const sepRes = await exec.query(
+      "SELECT phone FROM separation_data WHERE phone = ANY($1::text[])",
+      [chunk]
+    );
+    for (const row of sepRes.rows) {
+      sepSet.add(row.phone);
+    }
+  }
+  return sepSet;
+};
+
 const lookupExistingLeads = async (exec, phones, currentCampaign) => {
   const existingSet = new Set();
   const existingBreakdown = {};
@@ -158,6 +173,7 @@ module.exports = {
   withSessionUploadLock,
   lookupDncPhones,
   lookupDeadPhones,
+  lookupSeparationPhones,
   lookupExistingLeads,
   safeRollback,
 };

@@ -6,6 +6,9 @@ const { cleanupFile } = require("../middleware/upload");
 const {
   withSessionUploadLock,
   isRetryableDbError,
+  lookupDncPhones,
+  lookupDeadPhones,
+  lookupSeparationPhones,
 } = require("../utils/dbHelpers");
 const {
   insertPremiumLeadsBatches,
@@ -107,13 +110,28 @@ const createJob = async (req, res) => {
     }
 
     const uniqueRecords = dedupeAndNormalizeRecords(validRecords);
+    const uniquePhones = uniqueRecords.map((r) => String(r.phone));
+
+    const { dncSet, dncSkippedDnc, dncSkippedSale } = await lookupDncPhones(
+      db,
+      uniquePhones,
+    );
+    const deadSet = await lookupDeadPhones(db, uniquePhones);
+    const sepSet = await lookupSeparationPhones(db, uniquePhones);
+
+    const recordsToInsert = uniqueRecords.filter(
+      (r) => !dncSet.has(r.phone) && !deadSet.has(r.phone) && !sepSet.has(r.phone)
+    );
+    const dncSkipped = dncSet.size;
+    const deadSkipped = deadSet.size;
+    const separationSkipped = sepSet.size;
 
     let insertedCount = 0;
 
     try {
       await withSessionUploadLock(db, session_id, async (exec) => {
         insertedCount = await insertPremiumLeadsBatches(exec, {
-          records: uniqueRecords,
+          records: recordsToInsert,
           session,
           truncate,
           job_id: job.id,
@@ -134,10 +152,12 @@ const createJob = async (req, res) => {
         total_processed: validRecords.length,
         inserted: insertedCount,
         updated: 0,
-        dnc_skipped: 0,
-        dnc_skipped_dnc: 0,
-        dnc_skipped_sale: 0,
-        duplicates_skipped: validRecords.length - insertedCount,
+        dnc_skipped: dncSkipped,
+        dnc_skipped_dnc: dncSkippedDnc,
+        dnc_skipped_sale: dncSkippedSale,
+        dead_skipped: deadSkipped,
+        separation_skipped: separationSkipped,
+        duplicates_skipped: validRecords.length - recordsToInsert.length,
       });
     } catch (err) {
       await db.query(
@@ -181,17 +201,32 @@ const compareJob = async (req, res) => {
     const uniqueRecords = dedupeAndNormalizeRecords(validRecords);
     const duplicatesInFile = validRecords.length - uniqueRecords.length;
 
-    const phones = uniqueRecords.map(r => String(r.phone));
+    const uniquePhones = uniqueRecords.map(r => String(r.phone));
+
+    const { dncSet, dncSkippedDnc, dncSkippedSale } = await lookupDncPhones(
+      db,
+      uniquePhones,
+    );
+    const deadSet = await lookupDeadPhones(db, uniquePhones);
+    const sepSet = await lookupSeparationPhones(db, uniquePhones);
+
+    const phonesNotDnc = uniquePhones.filter(
+      (p) => !dncSet.has(p) && !deadSet.has(p) && !sepSet.has(p)
+    );
+    const recordsToInsert = uniqueRecords.filter(
+      (r) => !dncSet.has(r.phone) && !deadSet.has(r.phone) && !sepSet.has(r.phone)
+    );
+
     let existingCount = 0;
     let replacedCount = 0;
     const existingBreakdown = {};
-    if (phones.length > 0) {
+    if (phonesNotDnc.length > 0) {
       const existingResult = await db.query(
         `SELECT p.phone, p.duration, v.name as vendor_name 
          FROM premium_data p
          LEFT JOIN premium_vendors v ON p.vendor_id = v.vendor_id
          WHERE p.phone = ANY($1::varchar[])`,
-        [phones]
+        [phonesNotDnc]
       );
       existingCount = existingResult.rows.length;
 
@@ -212,7 +247,7 @@ const compareJob = async (req, res) => {
       }
     }
 
-    const freshCount = uniqueRecords.length - existingCount;
+    const freshCount = recordsToInsert.length - existingCount;
 
     return res.json({
       message: "Compare completed",
@@ -222,10 +257,12 @@ const compareJob = async (req, res) => {
       fresh_count: freshCount,
       existing_count: existingCount,
       replaced_count: replacedCount,
-      dnc_skipped: 0,
-      dnc_skipped_dnc: 0,
-      dnc_skipped_sale: 0,
-      fresh_sample: uniqueRecords.slice(0, 25).map(r => ({ phone: r.phone, name: r.name })),
+      dnc_skipped: dncSet.size,
+      dead_skipped: deadSet.size,
+      separation_skipped: sepSet.size,
+      dnc_skipped_dnc: dncSkippedDnc,
+      dnc_skipped_sale: dncSkippedSale,
+      fresh_sample: recordsToInsert.slice(0, 25).map(r => ({ phone: r.phone, name: r.name })),
       existing_breakdown: existingBreakdown,
     });
   } catch (err) {
@@ -241,7 +278,7 @@ const getJobStatus = async (req, res) => {
     const { jobId } = req.params;
     const result = await db.query(
       `SELECT id, status, error_message, total_rows, fresh_count, existing_count,
-              duplicates_in_file, dnc_skipped, dnc_skipped_dnc, dnc_skipped_sale,
+              duplicates_in_file, dnc_skipped, dead_skipped, separation_skipped, dnc_skipped_dnc, dnc_skipped_sale,
               inserted, updated, start_time, end_time
        FROM premium_jobs WHERE id = $1`,
       [jobId]
@@ -332,19 +369,44 @@ const uploadFreshJob = async (req, res) => {
     setImmediate(async () => {
       let insertedCount = 0;
       let existingCount = 0;
+      let dncSkipped = 0;
+      let deadSkipped = 0;
+      let sepSkipped = 0;
+      let dncSkippedDnc = 0;
+      let dncSkippedSale = 0;
+      let freshCount = 0;
+
       try {
         const phones = uniqueRecords.map(r => String(r.phone));
-        if (phones.length > 0) {
+
+        const dncLookup = await lookupDncPhones(db, phones);
+        const deadSet = await lookupDeadPhones(db, phones);
+        const sepSet = await lookupSeparationPhones(db, phones);
+
+        dncSkipped = dncLookup.dncSet.size;
+        deadSkipped = deadSet.size;
+        sepSkipped = sepSet.size;
+        dncSkippedDnc = dncLookup.dncSkippedDnc;
+        dncSkippedSale = dncLookup.dncSkippedSale;
+
+        const recordsToInsert = uniqueRecords.filter(
+          (r) => !dncLookup.dncSet.has(r.phone) && !deadSet.has(r.phone) && !sepSet.has(r.phone)
+        );
+        const phonesNotDnc = recordsToInsert.map(r => String(r.phone));
+
+        if (phonesNotDnc.length > 0) {
           const existingResult = await db.query(
             `SELECT phone FROM premium_data WHERE phone = ANY($1::varchar[])`,
-            [phones]
+            [phonesNotDnc]
           );
           existingCount = existingResult.rows.length;
         }
 
+        freshCount = recordsToInsert.length - existingCount;
+
         await withSessionUploadLock(db, session_id, async (exec) => {
           insertedCount = await insertPremiumLeadsBatches(exec, {
-            records: uniqueRecords,
+            records: recordsToInsert,
             session,
             truncate,
             job_id: job.id,
@@ -359,18 +421,25 @@ const uploadFreshJob = async (req, res) => {
                fresh_count        = $3,
                existing_count     = $4,
                duplicates_in_file = $5,
-               dnc_skipped        = 0,
-               dnc_skipped_dnc    = 0,
-               dnc_skipped_sale   = 0,
-               inserted           = $6,
+               dnc_skipped        = $6,
+               dead_skipped       = $7,
+               separation_skipped = $8,
+               dnc_skipped_dnc    = $9,
+               dnc_skipped_sale   = $10,
+               inserted           = $11,
                updated            = 0
            WHERE id = $2`,
           [
             validRecords.length,
             job.id,
-            uniqueRecords.length - existingCount,
+            freshCount,
             existingCount,
             duplicatesInFile,
+            dncSkipped,
+            deadSkipped,
+            sepSkipped,
+            dncSkippedDnc,
+            dncSkippedSale,
             insertedCount,
           ]
         );

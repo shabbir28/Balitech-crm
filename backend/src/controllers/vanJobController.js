@@ -2,6 +2,7 @@ const path = require("path");
 const db = require("../config/db");
 const { processFileBuffer } = require("../utils/fileProcessor");
 const { cleanupFile } = require("../middleware/upload");
+const { lookupDncPhones, lookupDeadPhones, lookupSeparationPhones } = require("../utils/dbHelpers");
 const { areaCodesMap } = require("../utils/areaCodes");
 
 const truncate = (val, max) => {
@@ -138,15 +139,19 @@ const createJob = async (req, res) => {
 
     const uniqueRecords = dedupeRecords(validRecords);
 
-    // Skip dead numbers
-    const uniquePhones = uniqueRecords.map((r) => r.phone);
-    const deadRes = await db.query(
-      "SELECT phone FROM dead_numbers WHERE phone = ANY($1::text[])",
-      [uniquePhones]
+    // Skip dead, dnc, separation numbers
+    const uniquePhones = uniqueRecords.map((r) => String(r.phone));
+    
+    const { dncSet, dncSkippedDnc, dncSkippedSale } = await lookupDncPhones(db, uniquePhones);
+    const deadSet = await lookupDeadPhones(db, uniquePhones);
+    const sepSet = await lookupSeparationPhones(db, uniquePhones);
+    
+    const recordsToInsert = uniqueRecords.filter(
+      (r) => !dncSet.has(r.phone) && !deadSet.has(r.phone) && !sepSet.has(r.phone)
     );
-    const deadSet = new Set(deadRes.rows.map((r) => r.phone));
-    const recordsToInsert = uniqueRecords.filter((r) => !deadSet.has(r.phone));
-    const deadSkipped = uniqueRecords.length - recordsToInsert.length;
+    const deadSkipped = deadSet.size;
+    const dncSkipped = dncSet.size;
+    const sepSkipped = sepSet.size;
 
     const { insertedCount, updatedCount } = await insertVanDataBatches(db.query.bind(db), {
       records: recordsToInsert,
@@ -156,8 +161,8 @@ const createJob = async (req, res) => {
     });
 
     await db.query(
-      `UPDATE van_jobs SET status='Completed', total_rows=$1, end_time=CURRENT_TIMESTAMP, inserted=$2, updated=$3, dnc_skipped=$4 WHERE id=$5`,
-      [validRecords.length, insertedCount, updatedCount, deadSkipped, job.id]
+      `UPDATE van_jobs SET status='Completed', total_rows=$1, end_time=CURRENT_TIMESTAMP, inserted=$2, updated=$3, dead_skipped=$4, dnc_skipped=$5, separation_skipped=$6, dnc_skipped_dnc=$7, dnc_skipped_sale=$8 WHERE id=$9`,
+      [validRecords.length, insertedCount, updatedCount, deadSkipped, dncSkipped, sepSkipped, dncSkippedDnc, dncSkippedSale, job.id]
     );
 
     res.json({
@@ -166,6 +171,8 @@ const createJob = async (req, res) => {
       inserted: insertedCount,
       updated: updatedCount,
       dead_skipped: deadSkipped,
+      dnc_skipped: dncSkipped,
+      separation_skipped: sepSkipped,
       duplicates_skipped: validRecords.length - uniqueRecords.length,
     });
   } catch (err) {
@@ -204,9 +211,10 @@ const compareJob = async (req, res) => {
     const existingRes = await db.query('SELECT phone FROM van_data WHERE phone = ANY($1::text[])', [uniquePhones]);
     const existingSet = new Set(existingRes.rows.map(r => r.phone));
 
-    // 2. Check dead numbers
-    const deadRes = await db.query('SELECT phone FROM dead_numbers WHERE phone = ANY($1::text[])', [uniquePhones]);
-    const deadSet = new Set(deadRes.rows.map(r => r.phone));
+    // 2. Check exclusions
+    const { dncSet, dncSkippedDnc, dncSkippedSale } = await lookupDncPhones(db, uniquePhones);
+    const deadSet = await lookupDeadPhones(db, uniquePhones);
+    const sepSet = await lookupSeparationPhones(db, uniquePhones);
 
     // 3. Check main leads
     const mainLeadsRes = await db.query('SELECT phone FROM leads WHERE phone = ANY($1::text[])', [uniquePhones]);
@@ -228,9 +236,10 @@ const compareJob = async (req, res) => {
       existing_count: existingCount,
       dead_skipped: deadSkipped,
       fresh_count: Math.max(0, freshCount),
-      dnc_skipped: 0,
-      dnc_skipped_dnc: 0,
-      dnc_skipped_sale: 0,
+      dnc_skipped: dncSet.size,
+      separation_skipped: sepSet.size,
+      dnc_skipped_dnc: dncSkippedDnc,
+      dnc_skipped_sale: dncSkippedSale,
       main_leads_overlap: mainLeadsCount
     });
 
@@ -276,12 +285,17 @@ const uploadFresh = async (req, res) => {
         const mainLeadsRes = await db.query('SELECT phone, name, age FROM leads WHERE phone = ANY($1::text[])', [uniquePhones]);
         const mainLeadsMap = new Map(mainLeadsRes.rows.map(r => [r.phone, r]));
 
-        // Dead numbers skip
-        const deadRes = await db.query('SELECT phone FROM dead_numbers WHERE phone = ANY($1::text[])', [uniquePhones]);
-        const deadSet = new Set(deadRes.rows.map(r => r.phone));
+        // Dead, DNC, Sep skip
+        const { dncSet, dncSkippedDnc, dncSkippedSale } = await lookupDncPhones(db, uniquePhones);
+        const deadSet = await lookupDeadPhones(db, uniquePhones);
+        const sepSet = await lookupSeparationPhones(db, uniquePhones);
 
-        const recordsToInsert = uniqueRecords.filter(r => !deadSet.has(r.phone));
-        const deadSkipped = uniqueRecords.length - recordsToInsert.length;
+        const recordsToInsert = uniqueRecords.filter(
+          r => !dncSet.has(r.phone) && !deadSet.has(r.phone) && !sepSet.has(r.phone)
+        );
+        const deadSkipped = deadSet.size;
+        const dncSkipped = dncSet.size;
+        const sepSkipped = sepSet.size;
 
         // Perform main leads transfer (delete from main if in this file and file has good info)
         let deletedFromMain = 0;
@@ -306,8 +320,8 @@ const uploadFresh = async (req, res) => {
         });
 
         await db.query(
-          `UPDATE van_jobs SET status='Completed', total_rows=$1, end_time=CURRENT_TIMESTAMP, inserted=$2, updated=$3, dead_skipped=$4, main_leads_overlap=$5 WHERE id=$6`,
-          [validRecords.length, insertedCount, updatedCount, deadSkipped, deletedFromMain, job.id]
+          `UPDATE van_jobs SET status='Completed', total_rows=$1, end_time=CURRENT_TIMESTAMP, inserted=$2, updated=$3, dead_skipped=$4, dnc_skipped=$5, separation_skipped=$6, dnc_skipped_dnc=$7, dnc_skipped_sale=$8, main_leads_overlap=$9 WHERE id=$10`,
+          [validRecords.length, insertedCount, updatedCount, deadSkipped, dncSkipped, sepSkipped, dncSkippedDnc, dncSkippedSale, deletedFromMain, job.id]
         );
 
       } catch (err) {

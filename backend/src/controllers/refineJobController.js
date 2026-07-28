@@ -5,10 +5,13 @@ const { parsePhone } = require("../utils/phoneParser");
 const { cleanupFile } = require("../middleware/upload");
 const {
   lookupDncPhones,
-  lookupExistingLeads,
   withSessionUploadLock,
   isRetryableDbError,
 } = require("../utils/refineDbHelpers");
+const {
+  lookupDeadPhones,
+  lookupSeparationPhones,
+} = require("../utils/dbHelpers");
 const {
   insertFreshLeadsBatches,
   insertLeadsUpsertBatches,
@@ -119,8 +122,15 @@ const createJob = async (req, res) => {
       db,
       uniquePhones,
     );
-    const recordsToInsert = uniqueRecords.filter((r) => !dncSet.has(r.phone));
-    const dncSkipped = uniqueRecords.length - recordsToInsert.length;
+    const deadSet = await lookupDeadPhones(db, uniquePhones);
+    const sepSet = await lookupSeparationPhones(db, uniquePhones);
+
+    const recordsToInsert = uniqueRecords.filter(
+      (r) => !dncSet.has(r.phone) && !deadSet.has(r.phone) && !sepSet.has(r.phone)
+    );
+    const dncSkipped = dncSet.size;
+    const deadSkipped = deadSet.size;
+    const sepSkipped = sepSet.size;
 
     let insertedCount = 0;
     let updatedCount = 0;
@@ -154,8 +164,10 @@ const createJob = async (req, res) => {
         dnc_skipped: dncSkipped,
         dnc_skipped_dnc: dncSkippedDnc,
         dnc_skipped_sale: dncSkippedSale,
+        dead_skipped: deadSkipped,
+        separation_skipped: sepSkipped,
         duplicates_skipped:
-          validRecords.length - insertedCount - updatedCount - dncSkipped,
+          validRecords.length - uniqueRecords.length,
       });
     } catch (err) {
       console.error("Inner Job Processing Error:", err);
@@ -229,9 +241,16 @@ const compareJob = async (req, res) => {
       db,
       uniquePhones,
     );
-    const dncSkipped = dncSet.size;
+    const deadSet = await lookupDeadPhones(db, uniquePhones);
+    const sepSet = await lookupSeparationPhones(db, uniquePhones);
 
-    const phonesNotDnc = uniquePhones.filter((p) => !dncSet.has(p));
+    const dncSkipped = dncSet.size;
+    const deadSkipped = deadSet.size;
+    const sepSkipped = sepSet.size;
+
+    const phonesNotDnc = uniquePhones.filter(
+      (p) => !dncSet.has(p) && !deadSet.has(p) && !sepSet.has(p)
+    );
     const { existingSet, existingBreakdown } = await lookupExistingLeads(
       db,
       phonesNotDnc,
@@ -264,6 +283,8 @@ const compareJob = async (req, res) => {
       fresh_count: freshCount,
       existing_count: existingCount,
       dnc_skipped: dncSkipped,
+      dead_skipped: deadSkipped,
+      separation_skipped: sepSkipped,
       dnc_skipped_dnc: dncSkippedDnc,
       dnc_skipped_sale: dncSkippedSale,
       fresh_sample: freshSample,
@@ -286,7 +307,7 @@ const getJobStatus = async (req, res) => {
     const { jobId } = req.params;
     const result = await db.query(
       `SELECT id, status, error_message, total_rows, fresh_count, existing_count,
-              duplicates_in_file, dnc_skipped, dnc_skipped_dnc, dnc_skipped_sale,
+              duplicates_in_file, dnc_skipped, dead_skipped, separation_skipped, dnc_skipped_dnc, dnc_skipped_sale,
               inserted, updated, start_time, end_time
        FROM refine_jobs WHERE id = $1`,
       [jobId]
@@ -411,7 +432,12 @@ const uploadFreshJob = async (req, res) => {
             exec,
             uniquePhones,
           );
-          const phonesNotDnc = uniquePhones.filter((p) => !dncSet.has(p));
+          const deadSet = await lookupDeadPhones(exec, uniquePhones);
+          const sepSet = await lookupSeparationPhones(exec, uniquePhones);
+
+          const phonesNotDnc = uniquePhones.filter(
+            (p) => !dncSet.has(p) && !deadSet.has(p) && !sepSet.has(p)
+          );
           const { existingSet, existingBreakdown } = await lookupExistingLeads(
             exec,
             phonesNotDnc,
@@ -420,7 +446,7 @@ const uploadFreshJob = async (req, res) => {
           const existingCount = existingSet.size;
           const freshCount = phonesNotDnc.length - existingCount;
           const freshRecords = uniqueRecords.filter(
-            (r) => !dncSet.has(r.phone),
+            (r) => !dncSet.has(r.phone) && !deadSet.has(r.phone) && !sepSet.has(r.phone) && !existingSet.has(r.phone),
           );
 
           const inserted = await insertFreshLeadsBatches(exec, {
@@ -432,6 +458,8 @@ const uploadFreshJob = async (req, res) => {
 
           return {
             dncSet,
+            deadSet,
+            sepSet,
             dncSkippedDnc,
             dncSkippedSale,
             existingCount,
@@ -452,10 +480,12 @@ const uploadFreshJob = async (req, res) => {
                existing_count     = $4,
                duplicates_in_file = $5,
                dnc_skipped        = $6,
-               dnc_skipped_dnc    = $7,
-               dnc_skipped_sale   = $8,
-               inserted           = $9,
-               updated            = $10
+               dead_skipped       = $7,
+               separation_skipped = $8,
+               dnc_skipped_dnc    = $9,
+               dnc_skipped_sale   = $10,
+               inserted           = $11,
+               updated            = $12
            WHERE id = $2`,
           [
             validRecords.length,
@@ -464,6 +494,8 @@ const uploadFreshJob = async (req, res) => {
             stats.existingCount,
             duplicatesInFile,
             stats.dncSet.size,
+            stats.deadSet.size,
+            stats.sepSet.size,
             stats.dncSkippedDnc,
             stats.dncSkippedSale,
             insertedCount,

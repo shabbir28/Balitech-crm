@@ -3,6 +3,7 @@ const { processFileBuffer } = require("../utils/fileProcessor");
 const { parsePhone } = require("../utils/phoneParser");
 const { getAreaCodesForStateSearch } = require("../utils/areaCodes");
 const { cleanupFile } = require('../middleware/upload');
+const { lookupDncPhones, lookupDeadPhones, lookupSeparationPhones } = require('../utils/dbHelpers');
 
 // POST /api/premium_data/upload
 const uploadLeads = async (req, res) => {
@@ -40,17 +41,34 @@ const uploadLeads = async (req, res) => {
     }
 
     const client = await db.getClient();
+
+    let uniquePhones = [];
+    records.forEach(r => {
+      const { phone } = parsePhone(r.phone);
+      if (phone) uniquePhones.push(phone);
+    });
+
+    const { dncSet } = await lookupDncPhones(db, uniquePhones);
+    const deadSet = await lookupDeadPhones(db, uniquePhones);
+    const sepSet = await lookupSeparationPhones(db, uniquePhones);
+
+    const validRecords = records.filter(r => {
+      const { phone } = parsePhone(r.phone);
+      return phone && !dncSet.has(phone) && !deadSet.has(phone) && !sepSet.has(phone);
+    });
+
     let insertedCount = 0;
     let updatedCount = 0;
     let duplicateCount = 0;
+    const skippedCount = records.length - validRecords.length;
 
     try {
       await client.query("BEGIN");
 
       const BATCH_SIZE = 1000;
 
-      for (let i = 0; i < records.length; i += BATCH_SIZE) {
-        const batch = records.slice(i, i + BATCH_SIZE);
+      for (let i = 0; i < validRecords.length; i += BATCH_SIZE) {
+        const batch = validRecords.slice(i, i + BATCH_SIZE);
 
         const valueStrings = [];
         const values = [];
@@ -117,7 +135,8 @@ const uploadLeads = async (req, res) => {
         total_processed: records.length,
         inserted: insertedCount,
         updated: updatedCount,
-        duplicates_skipped: records.length - insertedCount,
+        duplicates_skipped: duplicateCount,
+        filter_skipped: skippedCount,
       });
     } catch (err) {
       await client.query("ROLLBACK");

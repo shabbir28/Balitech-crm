@@ -2,6 +2,7 @@ const path = require("path");
 const db = require("../config/db");
 const { processFileBuffer } = require("../utils/fileProcessor");
 const { cleanupFile } = require("../middleware/upload");
+const { lookupDncPhones, lookupDeadPhones, lookupSeparationPhones } = require("../utils/dbHelpers");
 const { areaCodesMap } = require("../utils/areaCodes");
 
 const truncate = (val, max) => {
@@ -142,28 +143,19 @@ const createJob = async (req, res) => {
         const duplicatesInFile = validRecords.length - uniqueRecords.length;
         const uniquePhones = uniqueRecords.map((r) => r.phone);
 
-        // 2. Skip dead numbers
-        const deadRes = await db.query(
-          "SELECT phone FROM dead_numbers WHERE phone = ANY($1::text[])",
-          [uniquePhones]
-        );
-        const deadSet = new Set(deadRes.rows.map((r) => r.phone));
+        // 2. Skip exclusions
+        const { dncSet, dncSkippedDnc, dncSkippedSale } = await lookupDncPhones(db, uniquePhones);
+        const deadSet = await lookupDeadPhones(db, uniquePhones);
+        const sepSet = await lookupSeparationPhones(db, uniquePhones);
 
-        // 3. Skip DNC numbers (both 'dnc' and 'sale' types)
-        const dncRes = await db.query(
-          "SELECT phone, dnc_type FROM dnc_numbers WHERE phone = ANY($1::text[])",
-          [uniquePhones]
-        );
-        const dncSet = new Set(dncRes.rows.filter(r => r.dnc_type === 'dnc' || !r.dnc_type).map((r) => r.phone));
-        const salesSet = new Set(dncRes.rows.filter(r => r.dnc_type === 'sale').map((r) => r.phone));
-
-        // Filter out dead + DNC + sales
+        // Filter out exclusions
         const recordsToInsert = uniqueRecords.filter(
-          (r) => !deadSet.has(r.phone) && !dncSet.has(r.phone) && !salesSet.has(r.phone)
+          (r) => !deadSet.has(r.phone) && !dncSet.has(r.phone) && !sepSet.has(r.phone)
         );
-        const deadSkipped = uniqueRecords.filter((r) => deadSet.has(r.phone)).length;
-        const dncSkipped = uniqueRecords.filter((r) => !deadSet.has(r.phone) && dncSet.has(r.phone)).length;
-        const salesSkipped = uniqueRecords.filter((r) => !deadSet.has(r.phone) && !dncSet.has(r.phone) && salesSet.has(r.phone)).length;
+        const deadSkipped = deadSet.size;
+        const dncSkipped = dncSkippedDnc;
+        const salesSkipped = dncSkippedSale;
+        const sepSkipped = sepSet.size;
 
         // 4. Insert — ON CONFLICT (phone) DO NOTHING skips phones already in wc_db_data
         const { insertedCount, skippedExisting } = await insertWcDbDataBatches(db.query.bind(db), {
@@ -209,9 +201,10 @@ const createJob = async (req, res) => {
             refine_overlap=$9,
             van_desk_overlap=$10,
             raw_overlap=$11,
-            sales_skipped=$13
+            sales_skipped=$13,
+            separation_skipped=$14
           WHERE id=$12`,
-          [validRecords.length, insertedCount, existingCount, duplicatesInFile, deadSkipped, dncSkipped, freshCount, premiumOverlap, refineOverlap, vanDeskOverlap, rawOverlap, job.id, salesSkipped]
+          [validRecords.length, insertedCount, existingCount, duplicatesInFile, deadSkipped, dncSkipped, freshCount, premiumOverlap, refineOverlap, vanDeskOverlap, rawOverlap, job.id, salesSkipped, sepSkipped]
         );
 
       } catch (err) {
@@ -262,28 +255,19 @@ const compareJob = async (req, res) => {
     );
     const existingSet = new Set(existingRes.rows.map((r) => r.phone));
 
-    // Dead numbers
-    const deadRes = await db.query(
-      "SELECT phone FROM dead_numbers WHERE phone = ANY($1::text[])",
-      [uniquePhones]
-    );
-    const deadSet = new Set(deadRes.rows.map((r) => r.phone));
+    // Exclusions
+    const { dncSet, dncSkippedDnc, dncSkippedSale } = await lookupDncPhones(db, uniquePhones);
+    const deadSet = await lookupDeadPhones(db, uniquePhones);
+    const sepSet = await lookupSeparationPhones(db, uniquePhones);
 
-    // DNC numbers
-    const dncRes = await db.query(
-      "SELECT phone, dnc_type FROM dnc_numbers WHERE phone = ANY($1::text[])",
-      [uniquePhones]
-    );
-    const dncSet = new Set(dncRes.rows.filter(r => r.dnc_type === 'dnc' || !r.dnc_type).map((r) => r.phone));
-    const salesSet = new Set(dncRes.rows.filter(r => r.dnc_type === 'sale').map((r) => r.phone));
-
-    const deadCount = uniqueRecords.filter((r) => deadSet.has(r.phone)).length;
-    const dncCount = uniqueRecords.filter((r) => !deadSet.has(r.phone) && dncSet.has(r.phone)).length;
-    const salesCount = uniqueRecords.filter((r) => !deadSet.has(r.phone) && !dncSet.has(r.phone) && salesSet.has(r.phone)).length;
+    const deadCount = deadSet.size;
+    const dncCount = dncSkippedDnc;
+    const salesCount = dncSkippedSale;
+    const sepCount = sepSet.size;
     const existingCount = uniqueRecords.filter(
-      (r) => existingSet.has(r.phone) && !deadSet.has(r.phone) && !dncSet.has(r.phone) && !salesSet.has(r.phone)
+      (r) => existingSet.has(r.phone) && !deadSet.has(r.phone) && !dncSet.has(r.phone) && !sepSet.has(r.phone)
     ).length;
-    const freshCount = uniqueRecords.length - deadCount - dncCount - salesCount - existingCount;
+    const freshCount = uniqueRecords.length - deadCount - dncCount - salesCount - sepCount - existingCount;
 
     let premiumOverlap = 0;
     let refineOverlap = 0;
@@ -311,6 +295,7 @@ const compareJob = async (req, res) => {
       dead_skipped: deadCount,
       dnc_skipped: dncCount,
       sales_skipped: salesCount,
+      separation_skipped: sepCount,
       fresh_count: Math.max(0, freshCount),
       premium_overlap: premiumOverlap,
       refine_overlap: refineOverlap,
