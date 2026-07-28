@@ -3,6 +3,34 @@ const { Parser } = require("json2csv");
 const { areaCodesMap } = require("../utils/areaCodes");
 const { scrubPhones, normalizePhone } = require("../utils/blacklistAlliance");
 
+const scrubPhonesForMixed = async (phoneList, label = "mixed-download", timeoutMs = 25000) => {
+  const safePhones = Array.isArray(phoneList) ? phoneList : [];
+
+  try {
+    return await Promise.race([
+      scrubPhones(safePhones),
+      new Promise((resolve) =>
+        setTimeout(() => {
+          console.warn(`[${label}] BLA scrub timeout after ${timeoutMs}ms. Continuing mixed export without BLA result for ${safePhones.length} phones.`);
+          resolve({
+            bad: [],
+            good: safePhones.map((phone) => ({ phone })),
+            timedOut: true
+          });
+        }, timeoutMs)
+      )
+    ]);
+  } catch (err) {
+    console.error(`[${label}] BLA scrub failed. Continuing mixed export without BLA result:`, err?.message || err);
+    return {
+      bad: [],
+      good: safePhones.map((phone) => ({ phone })),
+      failed: true
+    };
+  }
+};
+
+
 const CSV_GOOD_FIELDS = [
   { label: "First Name", value: "first_name" },
   { label: "Last Name", value: "last_name" },
@@ -133,8 +161,15 @@ function buildFilters(
 
   if (job_ids && Array.isArray(job_ids) && job_ids.length > 0) {
     const placeholders = job_ids.map(() => `$${idx++}`).join(",");
-    const colName = tableName === "van_data" ? "session_id" : "job_id";
-    filters.push(`${colName} IN (${placeholders})`);
+
+    if (tableName === "van_data") {
+      // Van UI may send job IDs, while older logic used session_id.
+      // Allow both so selected Van files work correctly.
+      filters.push(`(job_id IN (${placeholders}) OR session_id IN (${placeholders}))`);
+    } else {
+      filters.push(`job_id IN (${placeholders})`);
+    }
+
     params.push(...job_ids);
   }
 
@@ -142,7 +177,17 @@ function buildFilters(
     const placeholders = data_campaigns.map(() => `$${idx++}`).join(",");
     if (tableName === "van_data") {
       filters.push(
-        `EXISTS (SELECT 1 FROM van_sessions s WHERE s.id = van_data.session_id AND s.campaign_type IN (${placeholders}))`
+        `EXISTS (
+          SELECT 1
+          FROM van_sessions s
+          JOIN van_campaigns vc ON vc.campaign_id::text = s.campaign_type::text
+          WHERE s.id = van_data.session_id
+            AND (
+              vc.name IN (${placeholders})
+              OR vc.campaign_id::text IN (${placeholders})
+              OR s.campaign_type::text IN (${placeholders})
+            )
+        )`
       );
     } else {
       filters.push(`campaign_type IN (${placeholders})`);
@@ -151,9 +196,15 @@ function buildFilters(
   } else if (data_campaign && data_campaign !== "all") {
     if (tableName === "van_data") {
       filters.push(
-        `EXISTS (SELECT 1 FROM van_sessions s WHERE s.id = van_data.session_id AND s.campaign_type = $${idx++})`
+        `EXISTS (
+          SELECT 1
+          FROM van_sessions s
+          JOIN van_campaigns vc ON vc.campaign_id::text = s.campaign_type::text
+          WHERE s.id = van_data.session_id
+            AND (vc.name = $${idx++} OR vc.campaign_id::text = $${idx++} OR s.campaign_type::text = $${idx++})
+        )`
       );
-      params.push(String(data_campaign));
+      params.push(String(data_campaign), String(data_campaign), String(data_campaign));
     } else {
       filters.push(`campaign_type = $${idx++}`);
       params.push(String(data_campaign));
@@ -176,7 +227,7 @@ async function fetchFromTable(client, tableName, qty, filtersConfig) {
   const updateQuery = `
     WITH selected AS (
       SELECT id FROM ${tableName} WHERE ${whereClause}
-      ORDER BY uploaded_at ASC FOR UPDATE SKIP LOCKED LIMIT $${paramIdx}
+      ORDER BY id ASC FOR UPDATE SKIP LOCKED LIMIT $${paramIdx}
     )
     UPDATE ${tableName} d SET status='downloaded', downloaded_at=CURRENT_TIMESTAMP
     FROM selected s WHERE d.id = s.id
@@ -212,6 +263,8 @@ const downloadMixedData = async (req, res) => {
       refine_job_ids,
       premium_job_ids,
     } = req.body;
+
+
 
     if (!quantity || quantity <= 0)
       return res.status(400).json({ message: "Valid quantity is required" });
@@ -298,7 +351,7 @@ const downloadMixedData = async (req, res) => {
     const allPhones = allLeads.map((r) => r.phone);
 
     try {
-      const scrubResult = await scrubPhones(allPhones);
+      const scrubResult = await scrubPhonesForMixed(allPhones, "mixed-direct-download");
 
       for (const item of scrubResult.bad) {
         const typeLower = String(item.type || "").toLowerCase();
@@ -691,6 +744,28 @@ const reviewDownloadRequest = async (req, res) => {
 
     // Accept: fetch data and generate CSV
     await client.query("BEGIN");
+
+    // Accept immediately and send response before campaign lookup/fetch/scrub.
+    // Heavy CSV generation continues after the browser already has a response.
+    if (!res.headersSent) {
+      await client.query(
+        `UPDATE mixed_download_requests SET status = 'accepted', reviewed_at = NOW(), reviewed_by = $1 WHERE id = $2`,
+        [req.user.id, id]
+      );
+      await client.query("COMMIT");
+    
+      res.status(200).json({
+        message: "Request accepted immediately. CSV is being generated in the background.",
+        id: Number(id),
+        status: "accepted",
+        has_csv: false,
+        processing: true
+      });
+    
+      await new Promise((resolve) => setImmediate(resolve));
+      await client.query("BEGIN");
+    }
+
     
     let states = [];
     if (dlReq.states) {
@@ -734,11 +809,16 @@ const reviewDownloadRequest = async (req, res) => {
     const refineRows = await fetchFromTable(client, "refine_data", refine_qty, refineFilters);
     const premiumRows = await fetchFromTable(client, "premium_data", premium_qty, premiumFilters);
 
+
+
     const allRows = [...vanRows, ...refineRows, ...premiumRows];
     if (allRows.length === 0) {
       await client.query("ROLLBACK");
       client.release();
-      return res.status(404).json({ message: "No matching leads found for this request criteria." });
+      if (!res.headersSent) {
+        return res.status(404).json({ message: "No matching leads found for this request criteria." });
+      }
+      return;
     }
 
     // Mark as accepted immediately to prevent double-processing
@@ -751,8 +831,23 @@ const reviewDownloadRequest = async (req, res) => {
     await client.query("COMMIT");
     client.release();
 
+      // Send response immediately, then continue CSV/BLA work in background.
+      if (!res.headersSent) {
+        res.status(200).json({
+          message: "Request approved. CSV is being generated in the background.",
+          id: Number(id),
+          status: "accepted",
+          has_csv: false,
+          processing: true,
+          count: allRows.length
+        });
+      }
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+
     // Send success response to avoid Nginx 502 Bad Gateway timeout on large datasets
-    res.status(200).json({ message: `Request approved. ${allRows.length} leads are being scrubbed and prepared in the background.` });
+    // Response is sent after csv_data is saved to avoid false 502 / premature upstream close.
 
     // --- Background Processing ---
     (async () => {
@@ -764,7 +859,7 @@ const reviewDownloadRequest = async (req, res) => {
     let finalBadRows = [];
     
       // We skip async scrub for this mixed request to keep it simple, or run standard scrub
-      const scrubResult = await scrubPhones(phones);
+      const scrubResult = await scrubPhonesForMixed(phones, `mixed-request-${id}`);
       
       let blacklist = 0, stateDnc = 0, federalDnc = 0, badPhone = 0;
       if (scrubResult.bad.length > 0) {
@@ -849,7 +944,21 @@ const reviewDownloadRequest = async (req, res) => {
       );
 
       await bgClient.query("COMMIT");
-      await createNotification(dlReq.admin_id, "download_request_accepted", "✅ Download Request Approved", `Your mixed download request has been approved and is ready to download.`, id);
+      try {
+        await createNotification(dlReq.admin_id, "download_request_accepted", "✅ Download Request Approved", `Your mixed download request has been approved and is ready to download.`, id);
+      } catch (notifyErr) {
+        console.error("Mixed accepted notification error:", notifyErr?.message || notifyErr);
+      }
+
+      if (!res.headersSent) {
+          return res.status(200).json({
+            message: "Request approved and CSV is ready.",
+            id: Number(id),
+            status: "accepted",
+            has_csv: true,
+            count: allRows.length
+          });
+        }
       
       } catch (bgErr) {
         await bgClient.query("ROLLBACK").catch(() => {});
@@ -868,7 +977,7 @@ const reviewDownloadRequest = async (req, res) => {
     client.release();
     console.error("Review Mixed Request Error:", err);
     if (!res.headersSent) {
-      return res.status(500).json({ message: "Server error reviewing request" });
+      if (!res.headersSent) if (!res.headersSent) if (!res.headersSent) return res.status(500).json({ message: "Server error reviewing request" });
     }
   }
 };

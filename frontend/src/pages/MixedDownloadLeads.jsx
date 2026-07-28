@@ -437,11 +437,17 @@ const MixedDownloadLeads = () => {
         e.preventDefault();
         
         if (!form.quantity || form.quantity <= 0) { setError('Please enter a valid quantity.'); return; }
-        const van = parseInt(form.van_percentage) || 0;
-        const refine = parseInt(form.refine_percentage) || 0;
-        const premium = parseInt(form.premium_percentage) || 0;
+        const van = Number(form.van_percentage || 0);
+        const refine = Number(form.refine_percentage || 0);
+        const premium = Number(form.premium_percentage || 0);
+        const totalPercentage = van + refine + premium;
 
-        if (van + refine + premium !== 100) {
+        if (
+            !Number.isFinite(van) ||
+            !Number.isFinite(refine) ||
+            !Number.isFinite(premium) ||
+            Math.abs(totalPercentage - 100) > 0.001
+        ) {
             setError('Percentages must sum up to exactly 100.');
             return;
         }
@@ -538,7 +544,7 @@ const MixedDownloadLeads = () => {
                                             max="100"
                                             value={form.van_percentage}
                                             disabled={user?.role !== 'super_admin'}
-                                            onChange={e => setForm({ ...form, van_percentage: e.target.value })}
+                                            onChange={e => { setError(''); setForm({ ...form, van_percentage: Number(e.target.value || 0) }); }}
                                             className={`w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 text-white rounded-xl py-3.5 px-4 focus:outline-none focus:border-violet-500/60 transition-all text-sm ${user?.role !== 'super_admin' ? 'opacity-60 cursor-not-allowed' : ''}`}
                                             placeholder="50"
                                         />
@@ -607,7 +613,7 @@ const MixedDownloadLeads = () => {
                                             max="100"
                                             value={form.refine_percentage}
                                             disabled={user?.role !== 'super_admin'}
-                                            onChange={e => setForm({ ...form, refine_percentage: e.target.value })}
+                                            onChange={e => { setError(''); setForm({ ...form, refine_percentage: Number(e.target.value || 0) }); }}
                                             className={`w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 text-white rounded-xl py-3.5 px-4 focus:outline-none focus:border-violet-500/60 transition-all text-sm ${user?.role !== 'super_admin' ? 'opacity-60 cursor-not-allowed' : ''}`}
                                             placeholder="30"
                                         />
@@ -676,7 +682,7 @@ const MixedDownloadLeads = () => {
                                             max="100"
                                             value={form.premium_percentage}
                                             disabled={user?.role !== 'super_admin'}
-                                            onChange={e => setForm({ ...form, premium_percentage: e.target.value })}
+                                            onChange={e => { setError(''); setForm({ ...form, premium_percentage: Number(e.target.value || 0) }); }}
                                             className={`w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 text-white rounded-xl py-3.5 px-4 focus:outline-none focus:border-violet-500/60 transition-all text-sm ${user?.role !== 'super_admin' ? 'opacity-60 cursor-not-allowed' : ''}`}
                                             placeholder="20"
                                         />

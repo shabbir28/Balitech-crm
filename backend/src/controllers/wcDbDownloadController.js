@@ -3,6 +3,34 @@ const { Parser } = require("json2csv");
 const { areaCodesMap } = require("../utils/areaCodes");
 const { scrubPhones, normalizePhone } = require("../utils/blacklistAlliance");
 
+const normalizeTextArray = (value) => {
+  if (!value) return [];
+
+  if (Array.isArray(value)) {
+    return value.map((v) => String(v).trim()).filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map((v) => String(v).trim()).filter(Boolean);
+      }
+    } catch (_) {}
+
+    return trimmed
+      .split(",")
+      .map((v) => v.replace(/^\[|\]$/g, "").replace(/^"|"$/g, "").trim())
+      .filter(Boolean);
+  }
+
+  return [];
+};
+
+
 const CSV_GOOD_FIELDS = [
   { label: "First Name", value: "firstname" },
   { label: "Middle Name", value: "middlename" },
@@ -123,11 +151,12 @@ const downloadWcDbData = async (req, res) => {
   const client = await db.getClient();
   try {
     const { vendor_id, quantity, states, min_age, max_age, include_downloaded, job_id } = req.body;
+    const normalizedStates = normalizeTextArray(states);
     if (!quantity || quantity <= 0)
       return res.status(400).json({ message: "Valid quantity is required" });
 
     const { filters, params, paramIdx } = buildFilters({
-      vendor_id, states, min_age, max_age, include_downloaded, job_id,
+      vendor_id, states: normalizedStates, min_age, max_age, include_downloaded, job_id,
     });
     const whereClause = filters.join(" AND ");
 
@@ -223,7 +252,7 @@ const downloadWcDbData = async (req, res) => {
     const logRes = await db.query(
       `INSERT INTO wc_db_download_logs (user_id, vendor_id, quantity, states, min_age, max_age)
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-      [req.user.id, vendor_id && vendor_id !== "all" ? vendor_id : null, rowsWithState.length, states && states.length > 0 ? JSON.stringify(states) : null, min_age || null, max_age || null]
+      [req.user.id, vendor_id && vendor_id !== "all" ? vendor_id : null, rowsWithState.length, normalizedStates.length > 0 ? normalizedStates : null, min_age || null, max_age || null]
     );
     const logId = logRes.rows[0]?.id;
 
