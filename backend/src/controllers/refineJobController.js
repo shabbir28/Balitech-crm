@@ -5,6 +5,7 @@ const { parsePhone } = require("../utils/phoneParser");
 const { cleanupFile } = require("../middleware/upload");
 const {
   lookupDncPhones,
+  lookupExistingLeads,
   withSessionUploadLock,
   isRetryableDbError,
 } = require("../utils/refineDbHelpers");

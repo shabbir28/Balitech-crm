@@ -27,7 +27,7 @@ router.post('/', auth, authorizeRole(['super_admin']), downloadLeads);
 router.post('/request', auth, authorizeRole(['admin', 'data_entry', 'dialer_agent']), createDownloadRequest);
 
 // ── Admin: view own requests ──────────────────────────────────
-router.get('/requests/mine', auth, authorizeRole(['admin', 'data_entry', 'dialer_agent']), getMyDownloadRequests);
+router.get('/requests/mine', auth, authorizeRole(['super_admin', 'admin', 'data_entry', 'dialer_agent']), getMyDownloadRequests);
 
 // ── SuperAdmin: view ALL requests ────────────────────────────
 router.get('/requests', auth, authorizeRole(['super_admin']), getDownloadRequests);
