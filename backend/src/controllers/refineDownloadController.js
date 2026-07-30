@@ -247,6 +247,7 @@ async function buildFilters(
     quality,
     min_duration,
     max_duration,
+    disposition,
   },
 ) {
   const includeAllVendorLeads =
@@ -381,6 +382,12 @@ async function buildFilters(
     params.push(quality);
   }
 
+  if (disposition && Array.isArray(disposition) && disposition.length > 0) {
+    const placeholders = disposition.map(() => `$${paramIdx++}`).join(",");
+    filters.push(`disposition IN (${placeholders})`);
+    params.push(...disposition);
+  }
+
   return { filters, params, paramIdx };
 }
 
@@ -398,11 +405,14 @@ async function executeDownload(
     approved_by_id,
     min_age,
     max_age,
+    min_duration,
+    max_duration,
     force_scrub = false,
     async_scrub = false,
     job_id,
     include_downloaded = false,
     quality,
+    disposition,
   },
 ) {
   const { filters, params, paramIdx } = await buildFilters(client, {
@@ -411,9 +421,12 @@ async function executeDownload(
     states,
     min_age,
     max_age,
+    min_duration,
+    max_duration,
     job_id,
     include_downloaded,
     quality,
+    disposition,
   });
   const includeAllVendorLeads =
     include_downloaded === true || include_downloaded === "true";
@@ -672,6 +685,7 @@ const downloadLeads = async (req, res) => {
       job_id,
       include_downloaded,
       quality,
+      disposition,
     } = req.body;
     if (!quantity || quantity <= 0) {
       return res.status(400).json({ message: "Valid quantity is required" });
@@ -708,6 +722,7 @@ const downloadLeads = async (req, res) => {
         job_id,
         include_downloaded,
         quality,
+        disposition,
       });
     // executeDownload now commits internally; outer rollback is a no-op afterwards.
 
@@ -792,6 +807,8 @@ const createDownloadRequest = async (req, res) => {
       max_duration,
       job_id,
       include_downloaded,
+      quality,
+      disposition,
     } = req.body;
 
     if (!vendor_id) {
@@ -825,7 +842,7 @@ const createDownloadRequest = async (req, res) => {
         max_age || null,
         min_duration || null,
         max_duration || null,
-        job_id || null,
+        job_id && job_id.length > 0 ? job_id : undefined,
         include_downloaded === true || include_downloaded === "true",
       ],
     );
@@ -1544,6 +1561,7 @@ const getStateCounts = async (req, res) => {
       job_id,
       include_downloaded,
       quality,
+      disposition,
     } = req.body;
     const client = await db.getClient();
     try {
@@ -1558,6 +1576,7 @@ const getStateCounts = async (req, res) => {
         job_id,
         include_downloaded,
         quality,
+        disposition,
       });
       const whereClause = filters.length > 0 ? filters.join(" AND ") : "1=1";
 

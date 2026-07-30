@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { uploadLeads, getLeads } = require('../controllers/refineLeadController');
+const { uploadLeads, getLeads, getDispositions } = require('../controllers/refineLeadController');
 const upload = require('../middleware/upload');
 const auth = require('../middleware/auth');
 const authorizeRole = require('../middleware/role');
@@ -10,5 +10,8 @@ router.post('/upload', auth, authorizeRole(['super_admin', 'admin', 'data_entry'
 
 // super_admin and admin can view all leads
 router.get('/', auth, authorizeRole(['super_admin', 'admin']), getLeads);
+
+// get distinct dispositions
+router.get('/dispositions', auth, authorizeRole(['super_admin', 'admin', 'data_entry', 'dialer_agent']), getDispositions);
 
 module.exports = router;

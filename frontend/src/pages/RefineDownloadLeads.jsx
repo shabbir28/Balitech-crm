@@ -55,8 +55,9 @@ const Field = ({ label, required, hint, children }) => (
     </div>
 );
 
-const FileMultiSelect = ({ options, value, onChange, disabled, placeholder }) => {
+const FileMultiSelect = ({ options, value, onChange, disabled, placeholder, itemLabel = "file", searchable = false }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
     const containerRef = useRef(null);
 
     useEffect(() => {
@@ -77,6 +78,14 @@ const FileMultiSelect = ({ options, value, onChange, disabled, placeholder }) =>
         }
     };
 
+    useEffect(() => {
+        if (!isOpen) setSearchQuery('');
+    }, [isOpen]);
+
+    const filteredOptions = searchable 
+        ? options.filter(opt => opt.label.toLowerCase().includes(searchQuery.toLowerCase()))
+        : options;
+
     return (
         <div className="relative" ref={containerRef}>
             <button
@@ -86,17 +95,28 @@ const FileMultiSelect = ({ options, value, onChange, disabled, placeholder }) =>
                 className={`w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 text-left rounded-xl py-3.5 px-4 flex justify-between items-center transition-all text-sm group shadow-inner ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#0a0c14]/80 hover:border-brand-500/30'}`}
             >
                 <span className={value.length === 0 ? 'text-slate-500' : 'text-white font-medium truncate pr-4'}>
-                    {value.length === 0 ? placeholder : `${value.length} file${value.length > 1 ? 's' : ''} selected`}
+                    {value.length === 0 ? placeholder : `${value.length} ${itemLabel}${value.length > 1 ? 's' : ''} selected`}
                 </span>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${isOpen ? 'rotate-180 text-brand-400' : 'group-hover:text-brand-400'}`} />
             </button>
             {isOpen && (
-                <div className="absolute z-50 w-full mt-1.5 bg-[#16192a] border border-white/10 rounded-xl shadow-2xl max-h-60 overflow-auto">
-                    <div className="p-1.5 space-y-0.5">
-                        {options.length === 0 ? (
-                            <div className="p-3 text-center text-slate-500 text-xs">No files available</div>
+                <div className="absolute z-50 w-full mt-1.5 bg-[#16192a] border border-white/10 rounded-xl shadow-2xl max-h-72 flex flex-col">
+                    {searchable && (
+                        <div className="p-2 border-b border-white/10 shrink-0">
+                            <input
+                                type="text"
+                                placeholder="Search..."
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-brand-500/50"
+                            />
+                        </div>
+                    )}
+                    <div className="p-1.5 space-y-0.5 overflow-y-auto">
+                        {filteredOptions.length === 0 ? (
+                            <div className="p-3 text-center text-slate-500 text-xs">No {itemLabel}s available</div>
                         ) : (
-                            options.map(opt => (
+                            filteredOptions.map(opt => (
                                 <label key={opt.value} className="flex items-center gap-3 p-2.5 hover:bg-brand-500/10 rounded-lg cursor-pointer transition-colors group">
                                     <input
                                         type="checkbox"
@@ -484,6 +504,7 @@ const RefineDownloadLeads = () => {
     const isSuperAdmin = user?.role === 'super_admin';
     const isAdmin      = user?.role === 'admin';
     const [filters, setFilters]         = useState([]);
+    const [dispositions, setDispositions] = useState([]);
     const [loadingFilters, setLoadingFilters] = useState(true);
     const [selectedFilterId, setSelectedFilterId] = useState("");
 
@@ -500,6 +521,7 @@ const RefineDownloadLeads = () => {
         min_age: '',
         max_age: '',
         quality: 'Good',
+        dispositions: [],
         include_downloaded: false,
     });
     const [submitting, setSubmitting]   = useState(false);
@@ -526,11 +548,12 @@ const RefineDownloadLeads = () => {
     const [fileStats, setFileStats] = useState(null);
 
     useEffect(() => {
-        Promise.all([api.get('/refine-vendors?counts=true'), api.get('/refine-campaigns'), api.get('/filters')])
-            .then(([v, c, f]) => { 
+        Promise.all([api.get('/refine-vendors?counts=true'), api.get('/refine-campaigns'), api.get('/filters'), api.get('/refine-data/dispositions')])
+            .then(([v, c, f, d]) => { 
                 setVendors(v.data); 
                 setCampaigns(c.data.filter(x => x.status === 'Active')); 
                 setFilters(f?.data || []);
+                setDispositions(d?.data || []);
             })
             .catch(() => {})
             .finally(() => { setLoadingV(false); setLoadingC(false); setLoadingFilters(false); });
@@ -594,6 +617,7 @@ const RefineDownloadLeads = () => {
                     job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined,
                     include_downloaded: form.include_downloaded,
                     quality: form.quality,
+                    disposition: form.dispositions,
                 })
                 .then(res => setStateCounts(res.data))
                 .catch(err => console.error('Failed to fetch state counts', err))
@@ -604,7 +628,7 @@ const RefineDownloadLeads = () => {
             const timeoutId = setTimeout(() => setStateCounts({}), 0);
             return () => clearTimeout(timeoutId);
         }
-    }, [form.vendor_id, form.campaign_id, form.states, form.min_age, form.max_age, form.min_duration, form.max_duration, selectedFileIds, form.include_downloaded, form.quality]);
+    }, [form.vendor_id, form.campaign_id, form.states, form.min_age, form.max_age, form.min_duration, form.max_duration, selectedFileIds, form.include_downloaded, form.quality, form.dispositions]);
 
     // Fetch vendor uploaded files whenever vendor changes
     useEffect(() => {
@@ -683,7 +707,12 @@ const RefineDownloadLeads = () => {
         try {
             if (isSuperAdmin) {
                 const useAsyncScrub = Number(form.quantity) >= 50000;
-                const body = { ...form, async_scrub: useAsyncScrub, job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined };
+                const body = { 
+                    ...form, 
+                    disposition: form.dispositions,
+                    async_scrub: useAsyncScrub, 
+                    job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined 
+                };
                 const timeoutMs = useAsyncScrub ? 8 * 60 * 1000 : 30 * 60 * 1000;
                 const res = await api.post('/refine-download', body, { timeout: timeoutMs });
                 setScrubSummaryData(res.data);
@@ -699,7 +728,11 @@ const RefineDownloadLeads = () => {
 
                 api.get('/refine-vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
             } else {
-                const body = { ...form, job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined };
+                const body = { 
+                    ...form, 
+                    disposition: form.dispositions,
+                    job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined 
+                };
                 await api.post('/refine-download/request', body);
                 setSuccessMsg('Request submitted! SuperAdmin will review it shortly.');
                 setForm({
@@ -713,6 +746,7 @@ const RefineDownloadLeads = () => {
                     max_duration: '',
                     include_downloaded: false,
                     quality: 'All',
+                    dispositions: [],
                 });
                 setSelectedFileIds([]);
                 fetchMyReqs();
@@ -1028,18 +1062,31 @@ const RefineDownloadLeads = () => {
                                 </SelectInput>
                             </Field>
                             
-                            {/* Quality Filter */}
-                            <Field label="Quality Filter" required hint="Select which data quality to export">
-                                <SelectInput
-                                    value={form.quality}
-                                    onChange={e => setForm({ ...form, quality: e.target.value })}
-                                    required
-                                >
-                                    <option value="All">All Data</option>
-                                    <option value="Good">Good Data Only</option>
-                                    <option value="Bad">Bad Data Only</option>
-                                </SelectInput>
-                            </Field>
+                            {/* Quality & Disposition Filter */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <Field label="Quality Filter" required hint="Select which data quality to export">
+                                    <SelectInput
+                                        value={form.quality}
+                                        onChange={e => setForm({ ...form, quality: e.target.value })}
+                                        required
+                                    >
+                                        <option value="All">All Data</option>
+                                        <option value="Good">Good Data Only</option>
+                                        <option value="Bad">Bad Data Only</option>
+                                    </SelectInput>
+                                </Field>
+
+                                <Field label="Disposition" hint="Filter by specific dispositions">
+                                    <FileMultiSelect
+                                        options={dispositions.map(d => ({ value: d, label: d || 'Unknown' }))}
+                                        value={form.dispositions}
+                                        onChange={val => setForm({ ...form, dispositions: val })}
+                                        placeholder="Any disposition..."
+                                        itemLabel="disposition"
+                                        searchable
+                                    />
+                                </Field>
+                            </div>
 
                             {/* Quantity */}
                             <Field label="Quantity" required hint="Max 100,000 per request recommended">

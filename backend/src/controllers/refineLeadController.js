@@ -211,7 +211,21 @@ const getLeads = async (req, res) => {
   }
 };
 
+// GET /api/refine_data/dispositions
+const getDispositions = async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT DISTINCT disposition FROM refine_data WHERE disposition IS NOT NULL AND disposition != '' ORDER BY disposition`
+    );
+    res.json(result.rows.map(r => r.disposition));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error fetching dispositions" });
+  }
+};
+
 module.exports = {
   uploadLeads,
   getLeads,
+  getDispositions,
 };
