@@ -426,7 +426,7 @@ async function executeDownload(
             SELECT id 
             FROM premium_data 
             WHERE ${whereClause}
-            ORDER BY uploaded_at ASC
+            ORDER BY id ASC
             FOR UPDATE SKIP LOCKED
             LIMIT $${currentParamIdx}
         )

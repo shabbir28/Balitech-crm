@@ -154,7 +154,7 @@ const downloadVanData = async (req, res) => {
     const updateQuery = `
       WITH selected AS (
         SELECT id FROM van_data WHERE ${whereClause}
-        ORDER BY uploaded_at ASC FOR UPDATE SKIP LOCKED LIMIT $${paramIdx}
+        ORDER BY id ASC FOR UPDATE SKIP LOCKED LIMIT $${paramIdx}
       )
       UPDATE van_data d SET status='downloaded', downloaded_at=CURRENT_TIMESTAMP
       FROM selected s WHERE d.id = s.id
@@ -704,7 +704,7 @@ const reviewDownloadRequest = async (req, res) => {
     const updateQuery = `
       WITH selected AS (
         SELECT id FROM van_data WHERE ${whereClause}
-        ORDER BY uploaded_at ASC FOR UPDATE SKIP LOCKED LIMIT $${paramIdx}
+        ORDER BY id ASC FOR UPDATE SKIP LOCKED LIMIT $${paramIdx}
       )
       UPDATE van_data d SET status='downloaded', downloaded_at=CURRENT_TIMESTAMP
       FROM selected s WHERE d.id = s.id

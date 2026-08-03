@@ -20,25 +20,22 @@ const getVendors = async (req, res) => {
     let query;
     if (includeCounts) {
       query = `
-        WITH vendor_stats AS (
-          SELECT d.vendor_id,
-                 COUNT(d.id)::int as total_leads,
-                 COUNT(CASE WHEN d.status = 'available' THEN 1 END)::int as available_leads,
-                 COUNT(CASE WHEN d.status = 'downloaded' THEN 1 END)::int as downloaded_leads
-          FROM van_data d
-          GROUP BY d.vendor_id
-        )
-        SELECT v.*,
-               COALESCE(vs.total_leads, 0) as total_leads,
-               COALESCE(vs.available_leads, 0) as available_leads,
-               COALESCE(vs.downloaded_leads, 0) as downloaded_leads
+        SELECT
+          v.*,
+          COALESCE(vc.total_leads, 0)::bigint AS total_leads,
+          COALESCE(vc.available_leads, 0)::bigint AS available_leads,
+          COALESCE(vc.downloaded_leads, 0)::bigint AS downloaded_leads,
+          vc.updated_at AS counts_updated_at
         FROM van_vendors v
-        LEFT JOIN vendor_stats vs ON v.vendor_id = vs.vendor_id
+        LEFT JOIN vendor_counts_cache vc
+          ON vc.module = 'van'
+         AND vc.vendor_id = v.vendor_id::text
         ORDER BY v.created_at DESC
       `;
     } else {
       query = "SELECT * FROM van_vendors ORDER BY created_at DESC";
     }
+
     const result = await db.query(query);
     res.json(result.rows);
   } catch (err) {
