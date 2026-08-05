@@ -7,6 +7,7 @@ const authorizeRole = require("../middleware/role");
 // For super_admin to execute direct download
 router.post("/", verifyToken, authorizeRole(["super_admin"]), mixedDownloadController.downloadMixedData);
 
+router.post("/preview-scrub", verifyToken, authorizeRole(["admin", "data_entry", "dialer_agent"]), mixedDownloadController.previewScrub);
 router.post("/request", verifyToken, authorizeRole(["admin", "data_entry", "dialer_agent"]), mixedDownloadController.createMixedDownloadRequest);
 router.get("/requests", verifyToken, authorizeRole(["super_admin"]), mixedDownloadController.getDownloadRequests);
 router.get("/requests/mine", verifyToken, authorizeRole(["admin", "data_entry", "dialer_agent"]), mixedDownloadController.getMyDownloadRequests);

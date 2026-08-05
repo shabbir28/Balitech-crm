@@ -609,12 +609,91 @@ const getDownloadFile = async (req, res) => {
 
 
 
+const previewScrub = async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const {
+      quantity, van_percentage = 50, refine_percentage = 30, premium_percentage = 20,
+      states, min_age, max_age, include_downloaded,
+      van_vendor, refine_vendor, premium_vendor, quality,
+      van_campaign, refine_campaign, premium_campaign,
+      van_job_ids, refine_job_ids, premium_job_ids,
+    } = req.body;
+
+    if (!quantity || quantity <= 0) return res.status(400).json({ message: "Valid quantity is required" });
+    if (van_percentage + refine_percentage + premium_percentage !== 100) return res.status(400).json({ message: "Percentages must sum up to 100." });
+
+    const van_qty = Math.floor(quantity * (van_percentage / 100));
+    const refine_qty = Math.floor(quantity * (refine_percentage / 100));
+    const premium_qty = quantity - van_qty - refine_qty;
+
+    const vanFilters = buildFilters("van_data", { data_campaign: van_campaign, states, min_age, max_age, include_downloaded, vendor_id: van_vendor, quality, job_ids: van_job_ids });
+    const refineFilters = buildFilters("refine_data", { data_campaign: refine_campaign, states, min_age, max_age, include_downloaded, vendor_id: refine_vendor, quality, job_ids: refine_job_ids });
+    const premiumFilters = buildFilters("premium_data", { data_campaign: premium_campaign, states, min_age, max_age, include_downloaded, vendor_id: premium_vendor, quality, job_ids: premium_job_ids });
+
+    const fetchPhonesForPreview = async (tableName, qty, filtersConfig) => {
+      if (qty <= 0) return [];
+      const { filters, params, paramIdx } = filtersConfig;
+      const whereClause = filters.join(" AND ");
+      const result = await client.query(`SELECT phone FROM ${tableName} WHERE ${whereClause} ORDER BY id ASC LIMIT $${paramIdx}`, [...params, qty]);
+      return result.rows.map(r => r.phone);
+    };
+
+    const vanPhones = await fetchPhonesForPreview("van_data", van_qty, vanFilters);
+    const refinePhones = await fetchPhonesForPreview("refine_data", refine_qty, refineFilters);
+    const premiumPhones = await fetchPhonesForPreview("premium_data", premium_qty, premiumFilters);
+
+    client.release();
+
+    const allPhones = [...vanPhones, ...refinePhones, ...premiumPhones].filter(Boolean);
+    if (allPhones.length === 0) return res.status(404).json({ message: "No available leads found matching your criteria." });
+
+    let blacklist = 0, stateDnc = 0, federalDnc = 0, badPhone = 0, good = allPhones.length;
+    let scrubRan = false;
+    const MAX_API_SCRUB_PHONES = parseInt(process.env.MAX_API_SCRUB_PHONES || '5000');
+
+    if (MAX_API_SCRUB_PHONES > 0 && allPhones.length <= MAX_API_SCRUB_PHONES) {
+      try {
+        const scrubResult = await scrubPhonesForMixed(allPhones, "mixed-preview-scrub");
+        if (!scrubResult.failed && !scrubResult.timedOut) {
+          for (const item of scrubResult.bad) {
+            const typeLower = String(item.type || '').toLowerCase();
+            if (typeLower.includes('federal')) federalDnc++;
+            else if (typeLower.includes('state')) stateDnc++;
+            else if (typeLower.includes('invalid') || typeLower.includes('bad')) badPhone++;
+            else blacklist++;
+          }
+          good = allPhones.length - scrubResult.bad.length;
+          scrubRan = true;
+        }
+      } catch (scrubErr) {
+        console.error('[Mixed Preview Scrub] BLA failed:', scrubErr.message);
+      }
+    }
+
+    return res.status(200).json({
+      summary: {
+        total: allPhones.length, good, blacklist, stateDnc, federalDnc, badPhone,
+        suppress: 0, wireless: 0, landline: 0, errors: 0,
+        scrubPending: false, scrubCompleted: scrubRan,
+        scrubDate: new Date().toLocaleString(),
+        fileName: `mixed_preview_${Date.now()}.csv`,
+        blaSkipped: !scrubRan,
+      }
+    });
+  } catch (err) {
+    client.release();
+    console.error('[Mixed Preview Scrub] Error:', err.message);
+    return res.status(500).json({ message: 'Server error running preview scrub.' });
+  }
+};
+
 const { createNotification } = require('./notificationController');
 
 // Added for request handling
 const createMixedDownloadRequest = async (req, res) => {
   try {
-    const { global_campaign, quantity, states, min_age, max_age, min_duration, max_duration, include_downloaded, van_percentage, refine_percentage, premium_percentage, van_job_ids, refine_job_ids, premium_job_ids } = req.body;
+    const { global_campaign, quantity, states, min_age, max_age, min_duration, max_duration, include_downloaded, van_percentage, refine_percentage, premium_percentage, van_job_ids, refine_job_ids, premium_job_ids, bla_summary, disposition } = req.body;
 
     if (!quantity || quantity <= 0) {
       return res.status(400).json({ message: "Valid quantity is required." });
@@ -630,10 +709,10 @@ const createMixedDownloadRequest = async (req, res) => {
 
     const result = await db.query(
       `INSERT INTO mixed_download_requests
-               (admin_id, campaign_id, quantity, van_percentage, refine_percentage, premium_percentage, states, min_age, max_age, min_duration, max_duration, include_downloaded, van_job_ids, refine_job_ids, premium_job_ids)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+               (admin_id, campaign_id, quantity, van_percentage, refine_percentage, premium_percentage, states, min_age, max_age, min_duration, max_duration, include_downloaded, van_job_ids, refine_job_ids, premium_job_ids, bla_summary, disposition)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
        RETURNING *`,
-      [req.user.id, actual_campaign_id, quantity, van_percentage || 0, refine_percentage || 0, premium_percentage || 0, states && states.length > 0 ? JSON.stringify(states) : null, min_age || null, max_age || null, min_duration || null, max_duration || null, include_downloaded === true || include_downloaded === "true", van_job_ids ? JSON.stringify(van_job_ids) : null, refine_job_ids ? JSON.stringify(refine_job_ids) : null, premium_job_ids ? JSON.stringify(premium_job_ids) : null],
+      [req.user.id, actual_campaign_id, quantity, van_percentage || 0, refine_percentage || 0, premium_percentage || 0, states && states.length > 0 ? JSON.stringify(states) : null, min_age || null, max_age || null, min_duration || null, max_duration || null, include_downloaded === true || include_downloaded === "true", van_job_ids ? JSON.stringify(van_job_ids) : null, refine_job_ids ? JSON.stringify(refine_job_ids) : null, premium_job_ids ? JSON.stringify(premium_job_ids) : null, bla_summary ? JSON.stringify(bla_summary) : null, disposition && disposition.length > 0 ? disposition : null],
     );
 
     const newRequest = result.rows[0];
@@ -649,7 +728,7 @@ const createMixedDownloadRequest = async (req, res) => {
         sa.id,
         "download_request_new",
         "📥 New Mixed Download Request",
-        `${adminDisplayName} has requested to download ${quantity.toLocaleString()} mixed leads.`,
+        `${adminDisplayName} has requested to download ${quantity.toLocaleString()} mixed leads.` + (bla_summary ? ` BLA Preview: ${(bla_summary.good || 0).toLocaleString()} good / ${(bla_summary.total || quantity).toLocaleString()} total.` : ''),
         newRequest.id,
       );
     }
@@ -1007,6 +1086,7 @@ const executeApprovedDownload = async (req, res) => {
 };
 
 module.exports = {
+  previewScrub,
   downloadMixedData,
   getAlreadyDownloaded,
   getDownloadFile,

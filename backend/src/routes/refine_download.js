@@ -16,12 +16,16 @@ const {
     getStateCounts,
     downloadJobFile,
     getJobStats,
+    previewScrub,
 } = require('../controllers/refineDownloadController');
 const auth = require('../middleware/auth');
 const authorizeRole = require('../middleware/role');
 
 // ── SuperAdmin direct download (existing) ────────────────────
 router.post('/', auth, authorizeRole(['super_admin']), downloadLeads);
+
+// ── BLA Preview Scrub (dialer_agent, admin, data_entry) ──────────────────
+router.post('/preview-scrub', auth, authorizeRole(['admin', 'data_entry', 'dialer_agent']), previewScrub);
 
 // ── Admin: submit a download request ─────────────────────────
 router.post('/request', auth, authorizeRole(['admin', 'data_entry', 'dialer_agent']), createDownloadRequest);

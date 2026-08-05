@@ -290,7 +290,7 @@ const ScrubSummaryModal = ({ data, onClose }) => {
 };
 
 // â”€â”€ Scrub Summary Inline Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
+const ScrubSummaryInline = ({ data, onClose, scrubPolling, onConfirmRequest, onCancelPreview }) => {
     if (!data) return null;
 
     const { summary, badCsv } = data;
@@ -454,6 +454,27 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
                         )}
                     </div>
 
+                    {onConfirmRequest && onCancelPreview && (
+                        <div className="flex flex-col gap-2 mt-2">
+                            <button
+                                type="button"
+                                onClick={onConfirmRequest}
+                                className="w-full flex items-center justify-center gap-2 py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm rounded-xl transition-all shadow-[0_4px_14px_rgba(16,185,129,0.3)] hover:shadow-[0_6px_20px_rgba(16,185,129,0.4)] active:scale-[0.98]"
+                            >
+                                <Sparkles className="h-4.5 w-4.5 shrink-0" />
+                                Request Good Data Download&nbsp;&nbsp;<span className="bg-black/20 px-2 py-0.5 rounded-full font-mono font-black">{summary.good?.toLocaleString() || summary.total?.toLocaleString() || 0}</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={onCancelPreview}
+                                className="w-full flex items-center justify-center gap-2 py-3 bg-white/5 hover:bg-white/10 text-white font-medium text-xs rounded-xl transition-all"
+                            >
+                                <XCircle className="h-4 w-4 shrink-0" />
+                                ← Go Back & Edit Filters
+                            </button>
+                        </div>
+                    )}
+
                     {/* Note */}
                     <div className="flex items-start gap-2 bg-blue-500/5 border border-blue-500/10 rounded-xl p-3 text-[11px] text-slate-400 leading-relaxed mt-1">
                         <Info className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
@@ -497,6 +518,9 @@ const VanDownloadLeads = () => {
     const [submitting, setSubmitting]   = useState(false);
     const [error, setError]             = useState('');
     const [successMsg, setSuccessMsg]   = useState('');
+
+    const [previewMode, setPreviewMode] = useState(false);
+    const [previewSummary, setPreviewSummary] = useState(null);
 
     const [stateOpen, setStateOpen]     = useState(false);
     const stateRef = useRef(null);
@@ -691,26 +715,11 @@ const VanDownloadLeads = () => {
 
                 api.get('/Van-vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
             } else {
+                // Dialer Agent / Admin -> Step 1: Preview BLA Scrub
                 const body = { ...form, job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined };
-                await api.post('/Van-download/request', body);
-                setSuccessMsg('Request submitted! SuperAdmin will review it shortly.');
-                setForm({
-                    states: [],
-                    campaign_id: '',
-                    vendor_id: '',
-                    quantity: 1000,
-                    min_age: '',
-                    max_age: '',
-                    min_duration: '',
-                    max_duration: '',
-                    include_downloaded: false,
-                    quality: 'All',
-                });
-                setSelectedFileIds([]);
-                fetchMyReqs();
-                
-                // Refetch vendors to update stats (though usually won't change until approved)
-                api.get('/Van-vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
+                const res = await api.post('/Van-download/preview-scrub', body, { timeout: 30000 });
+                setPreviewSummary(res.data.summary);
+                setPreviewMode(true);
             }
         } catch (err) {
             const status = err.response?.status;
@@ -721,6 +730,41 @@ const VanDownloadLeads = () => {
             } else {
                 setError(err.response?.data?.message || 'Request failed.');
             }
+        } finally { setSubmitting(false); }
+    };
+
+    const handleConfirmRequest = async () => {
+        setSubmitting(true); setError(''); setSuccessMsg('');
+        try {
+            const body = { 
+                ...form, 
+                job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined,
+                bla_summary: previewSummary,
+                disposition: form.dispositions
+            };
+            await api.post('/Van-download/request', body);
+            setSuccessMsg('Request submitted! SuperAdmin will review it shortly.');
+            setForm({
+                states: [],
+                campaign_id: '',
+                vendor_id: '',
+                quantity: 1000,
+                min_age: '',
+                max_age: '',
+                min_duration: '',
+                max_duration: '',
+                include_downloaded: false,
+                quality: 'Good',
+            });
+            setSelectedFileIds([]);
+            setPreviewMode(false);
+            setPreviewSummary(null);
+            fetchMyReqs();
+            
+            // Refetch vendors to update stats
+            api.get('/Van-vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to submit request.');
         } finally { setSubmitting(false); }
     };
 
@@ -812,7 +856,19 @@ const VanDownloadLeads = () => {
                             <span className="font-bold text-white text-sm">Configure Download Parameters</span>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                        {previewMode ? (
+                            <div className="p-6">
+                                <ScrubSummaryInline 
+                                    data={{ summary: previewSummary }}
+                                    onConfirmRequest={handleConfirmRequest}
+                                    onCancelPreview={() => {
+                                        setPreviewMode(false);
+                                        setPreviewSummary(null);
+                                    }}
+                                />
+                            </div>
+                        ) : (
+                            <form onSubmit={handleSubmit} className="p-6 space-y-5">
 
                             {/* Vendor */}
                             <Field label="Vendor Source" required hint="Select the vendor whose data you want to export">
@@ -1091,10 +1147,11 @@ const VanDownloadLeads = () => {
                                 ) : isSuperAdmin ? (
                                     <><Download className="h-5 w-5" />Export to CSV<ArrowRight className="h-4 w-4 ml-1" /></>
                                 ) : (
-                                    <><Send className="h-5 w-5" />Send Download Request<ArrowRight className="h-4 w-4 ml-1" /></>
+                                    <><Sparkles className="h-5 w-5" />Preview BLA & Scrub Results<ArrowRight className="h-4 w-4 ml-1" /></>
                                 )}
                             </button>
                         </form>
+                        )}
                     </div>
 
                     {/* Inline Scrub Summary */}

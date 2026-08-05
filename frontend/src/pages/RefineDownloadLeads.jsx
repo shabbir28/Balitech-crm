@@ -310,7 +310,7 @@ const ScrubSummaryModal = ({ data, onClose }) => {
 };
 
 // ── Scrub Summary Inline Component ─────────────────────────────
-const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
+const ScrubSummaryInline = ({ data, onClose, scrubPolling, previewMode = false, onConfirmRequest, onCancelPreview, submittingRequest = false }) => {
     if (!data) return null;
 
     const { summary, badCsv } = data;
@@ -339,28 +339,41 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
     }
 
     return (
-        <div className="mt-6 bg-[#13151f]/80 backdrop-blur-xl border border-white/[0.07] rounded-2xl p-6 shadow-2xl relative animate-fade-in">
+        <div className={`mt-6 backdrop-blur-xl border rounded-2xl p-6 shadow-2xl relative animate-fade-in ${previewMode ? 'bg-[#0d1520]/90 border-brand-500/20 ring-1 ring-brand-500/10' : 'bg-[#13151f]/80 border-white/[0.07]'}`}>
+            {/* Preview Mode Banner */}
+            {previewMode && (
+                <div className="mb-5 flex items-start gap-3 p-4 rounded-xl bg-brand-500/10 border border-brand-500/20">
+                    <Sparkles className="h-5 w-5 text-brand-400 shrink-0 mt-0.5" />
+                    <div>
+                        <p className="text-sm font-bold text-brand-200">BLA Scrub Preview — Review Before Requesting</p>
+                        <p className="text-[11px] text-brand-100/70 mt-1 leading-relaxed">
+                            This is a <strong>preview only</strong> — no data has been marked as downloaded yet. Review the numbers below, then click <strong>Request Good Data Download</strong> to send this to your SuperAdmin for approval.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
+                    <div className={`h-9 w-9 rounded-xl flex items-center justify-center shadow-lg shrink-0 ${previewMode ? 'bg-gradient-to-br from-brand-500 to-violet-600 shadow-brand-500/20' : 'bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/20'}`}>
                         <Sparkles className="h-4.5 w-4.5 text-white animate-pulse" />
                     </div>
                     <div>
-                        <h3 className="font-bold text-white text-sm">Last Export Scrub Summary</h3>
+                        <h3 className="font-bold text-white text-sm">{previewMode ? 'BLA Preview Summary' : 'Last Export Scrub Summary'}</h3>
                         <p className="text-[11px] text-slate-500">Blacklist Alliance TCPA & DNC results</p>
                     </div>
                 </div>
                 <button
-                    onClick={onClose}
+                    onClick={previewMode ? onCancelPreview : onClose}
                     className="text-slate-550 hover:text-white hover:bg-white/5 p-1.5 rounded-lg transition-colors shrink-0"
-                    title="Clear Summary"
+                    title={previewMode ? "Go Back" : "Clear Summary"}
                 >
                     <XCircle className="h-5 w-5" />
                 </button>
             </div>
 
-            {isPending && (
+            {isPending && !previewMode && (
                 <div className="mb-5 flex items-start gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/25">
                     <RefreshCw className="h-5 w-5 text-amber-400 shrink-0 animate-spin mt-0.5" />
                     <div>
@@ -380,7 +393,7 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
                 </div>
                 <div className="flex items-center gap-2 text-slate-400 min-w-0">
                     <Building2 className="h-3.5 w-3.5 text-slate-600 shrink-0" />
-                    <span className="font-semibold text-brand-400 truncate" title={summary.fileName}>{summary.fileName || 'leads_scrubbed.csv'}</span>
+                    <span className="font-semibold text-brand-400 truncate" title={summary.fileName}>{previewMode ? 'Preview (not downloaded yet)' : (summary.fileName || 'leads_scrubbed.csv')}</span>
                 </div>
             </div>
 
@@ -420,8 +433,41 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
                 </div>
             </div>
 
-            {/* Bottom Section — Download Choices */}
-            {!isPending && (
+            {/* ── Preview Mode: Confirm/Cancel buttons ── */}
+            {previewMode && (
+                <div className="flex flex-col gap-3">
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Next Step</p>
+                    <button
+                        type="button"
+                        onClick={onConfirmRequest}
+                        disabled={submittingRequest}
+                        className="w-full flex items-center justify-center gap-2 py-3.5 bg-gradient-to-r from-brand-500 to-violet-600 hover:from-brand-400 hover:to-violet-500 text-white font-bold text-sm rounded-xl transition-all shadow-[0_8px_24px_rgba(59,130,246,0.35)] hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:translate-y-0"
+                    >
+                        {submittingRequest ? (
+                            <><div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Submitting Request...</>
+                        ) : (
+                            <><Send className="h-4 w-4 shrink-0" />Request Good Data Download&nbsp;&nbsp;<span className="bg-white/20 px-2 py-0.5 rounded-full font-mono text-xs">{(summary.good || 0).toLocaleString()} leads</span></>
+                        )}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onCancelPreview}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 bg-white/5 hover:bg-white/8 border border-white/8 text-slate-400 hover:text-white font-bold text-xs rounded-xl transition-all"
+                    >
+                        ← Go Back & Edit Filters
+                    </button>
+                    <div className="flex items-start gap-2 bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-3 text-[11px] text-slate-400 leading-relaxed">
+                        <Info className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                        <div>
+                            <span className="font-bold text-white block mb-0.5">Preview Only — No data moved yet</span>
+                            BLA scrub ran in read-only mode. Clicking "Request" will send this to SuperAdmin — on approval, your CSV will be ready instantly.
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Normal Mode: Download Choices ── */}
+            {!isPending && !previewMode && (
                 <div className="flex flex-col gap-3">
                     {/* Divider label */}
                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Choose Download</p>
@@ -488,7 +534,7 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
                 </div>
             )}
 
-            {isPending && (
+            {isPending && !previewMode && (
                 <div className="flex items-start gap-2 bg-amber-500/5 border border-amber-500/10 rounded-xl p-3 text-[11px] text-slate-400">
                     <Info className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
                     <span>Download options will appear once BLA scrubbing completes…</span>
@@ -520,6 +566,8 @@ const RefineDownloadLeads = () => {
         quantity: 1000,
         min_age: '',
         max_age: '',
+        min_duration: '',
+        max_duration: '',
         quality: 'Good',
         dispositions: [],
         include_downloaded: false,
@@ -537,6 +585,9 @@ const RefineDownloadLeads = () => {
     const [scrubSummaryData, setScrubSummaryData] = useState(null);
     const [scrubPolling, setScrubPolling] = useState(false);
     const scrubPollCancelRef = useRef(false);
+    const [previewMode, setPreviewMode] = useState(false); // true = showing BLA preview before request
+    const [previewFormSnapshot, setPreviewFormSnapshot] = useState(null); // saved form for after preview
+    const [submittingRequest, setSubmittingRequest] = useState(false); // submitting the actual request after preview
 
     const [stateCounts, setStateCounts] = useState({});
     const [loadingCounts, setLoadingCounts] = useState(false);
@@ -728,31 +779,18 @@ const RefineDownloadLeads = () => {
 
                 api.get('/refine-vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
             } else {
+                // ── Dialer/Admin: Step 1 — run BLA preview scrub first ────────────────
                 const body = { 
                     ...form, 
                     disposition: form.dispositions,
                     job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined 
                 };
-                await api.post('/refine-download/request', body);
-                setSuccessMsg('Request submitted! SuperAdmin will review it shortly.');
-                setForm({
-                    states: [],
-                    campaign_id: '',
-                    vendor_id: '',
-                    quantity: 1000,
-                    min_age: '',
-                    max_age: '',
-                    min_duration: '',
-                    max_duration: '',
-                    include_downloaded: false,
-                    quality: 'All',
-                    dispositions: [],
-                });
-                setSelectedFileIds([]);
-                fetchMyReqs();
-                
-                // Refetch vendors to update stats (though usually won't change until approved)
-                api.get('/refine-vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
+                const res = await api.post('/refine-download/preview-scrub', body, { timeout: 10 * 60 * 1000 });
+                // Show the BLA summary — agent must confirm before request is sent
+                setScrubSummaryData({ summary: res.data.summary, goodCsv: null, badCsv: null });
+                setPreviewMode(true);
+                setPreviewFormSnapshot({ ...form, dispositions: [...form.dispositions], selectedFileIds: [...selectedFileIds] });
+                setSuccessMsg('');
             }
         } catch (err) {
             const status = err.response?.status;
@@ -764,6 +802,52 @@ const RefineDownloadLeads = () => {
                 setError(err.response?.data?.message || 'Request failed.');
             }
         } finally { setSubmitting(false); }
+    };
+
+    // ── Step 2 (Dialer): after seeing BLA preview, send real download request ─
+    const handleConfirmRequest = async () => {
+        if (!previewFormSnapshot) return;
+        setSubmittingRequest(true); setError(''); setSuccessMsg('');
+        try {
+            const { selectedFileIds: snapFileIds, dispositions: snapDispositions, ...snapForm } = previewFormSnapshot;
+            const body = {
+                ...snapForm,
+                disposition: snapDispositions,
+                job_id: snapFileIds.length > 0 ? snapFileIds : undefined,
+                bla_summary: scrubSummaryData?.summary || null,
+            };
+            await api.post('/refine-download/request', body);
+            setSuccessMsg('✅ Request submitted! SuperAdmin will review it shortly.');
+            setScrubSummaryData(null);
+            setPreviewMode(false);
+            setPreviewFormSnapshot(null);
+            setForm({
+                states: [],
+                campaign_id: '',
+                vendor_id: '',
+                quantity: 1000,
+                min_age: '',
+                max_age: '',
+                min_duration: '',
+                max_duration: '',
+                include_downloaded: false,
+                quality: 'All',
+                dispositions: [],
+            });
+            setSelectedFileIds([]);
+            fetchMyReqs();
+            api.get('/refine-vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to submit request.');
+        } finally {
+            setSubmittingRequest(false);
+        }
+    };
+
+    const handleCancelPreview = () => {
+        setScrubSummaryData(null);
+        setPreviewMode(false);
+        setPreviewFormSnapshot(null);
     };
 
     const handleDownloadCSV = async (req) => {
@@ -1132,11 +1216,11 @@ const RefineDownloadLeads = () => {
                                 }`}
                             >
                                 {submitting ? (
-                                    <><div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Processing...</>
+                                    <><div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Running BLA Preview...</>
                                 ) : isSuperAdmin ? (
                                     <><Download className="h-5 w-5" />Export to CSV<ArrowRight className="h-4 w-4 ml-1" /></>
                                 ) : (
-                                    <><Send className="h-5 w-5" />Send Download Request<ArrowRight className="h-4 w-4 ml-1" /></>
+                                    <><Sparkles className="h-5 w-5" />Preview BLA & Scrub Results<ArrowRight className="h-4 w-4 ml-1" /></>
                                 )}
                             </button>
                         </form>
@@ -1146,6 +1230,10 @@ const RefineDownloadLeads = () => {
                     <ScrubSummaryInline
                         data={scrubSummaryData}
                         scrubPolling={scrubPolling}
+                        previewMode={previewMode}
+                        onConfirmRequest={handleConfirmRequest}
+                        onCancelPreview={handleCancelPreview}
+                        submittingRequest={submittingRequest}
                         onClose={() => {
                             scrubPollCancelRef.current = true;
                             setScrubSummaryData(null);
@@ -1166,10 +1254,10 @@ const RefineDownloadLeads = () => {
                         {isAdmin ? (
                             <div className="space-y-4">
                                 {[
-                                    { step: '1', label: 'Configure Filters', desc: 'Select vendor, quantity and targeted demographics' },
-                                    { step: '2', label: 'Submit Request', desc: 'Your export request is sent for SuperAdmin review' },
-                                    { step: '3', label: 'Processing', desc: 'Leads are automatically scrubbed against DNC lists' },
-                                    { step: '4', label: 'Download CSV', desc: 'Securely download your clean data file' },
+                                    { step: '1', label: 'Configure Filters', desc: 'Select vendor, quantity and targeted demographics', color: 'brand' },
+                                    { step: '2', label: 'Run BLA Preview', desc: 'See Blacklist Alliance scrub results before requesting — no data is moved yet', color: 'violet' },
+                                    { step: '3', label: 'Request Download', desc: 'Click "Request Good Data Download" to send to SuperAdmin for approval', color: 'amber' },
+                                    { step: '4', label: 'Instant CSV', desc: 'On approval, your clean CSV file is ready immediately — no waiting!', color: 'emerald' },
                                 ].map(s => (
                                     <div key={s.step} className="flex items-start gap-3.5 group">
                                         <div className="h-7 w-7 rounded-xl bg-brand-500/10 border border-brand-500/20 text-brand-400 text-xs font-black flex items-center justify-center shrink-0 group-hover:bg-brand-500 group-hover:text-white transition-all shadow-sm shadow-brand-500/10">{s.step}</div>
@@ -1180,6 +1268,7 @@ const RefineDownloadLeads = () => {
                                     </div>
                                 ))}
                             </div>
+
                         ) : (
                             <div className="space-y-3 text-[13px] text-slate-400 leading-relaxed">
                                 <p>As <strong className="text-white">SuperAdmin</strong>, your downloads are <strong className="text-orange-400">instant</strong> — no approval needed.</p>

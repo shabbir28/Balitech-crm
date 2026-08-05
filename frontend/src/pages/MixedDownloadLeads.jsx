@@ -95,7 +95,7 @@ const downloadBlob = (content, filename) => {
     document.body.removeChild(link);
 };
 
-const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
+const ScrubSummaryInline = ({ data, onClose, scrubPolling, onConfirmRequest, onCancelPreview }) => {
     if (!data) return null;
 
     const { summary, badCsv } = data;
@@ -237,6 +237,26 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
                             </button>
                         )}
 
+                        {onConfirmRequest && onCancelPreview && (
+                            <div className="flex flex-col gap-2 mt-2">
+                                <button
+                                    type="button"
+                                    onClick={onConfirmRequest}
+                                    className="w-full flex items-center justify-center gap-2 py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm rounded-xl transition-all shadow-[0_4px_14px_rgba(16,185,129,0.3)] hover:shadow-[0_6px_20px_rgba(16,185,129,0.4)] active:scale-[0.98]"
+                                >
+                                    <Sparkles className="h-4.5 w-4.5 shrink-0" />
+                                    Request Good Data Download&nbsp;&nbsp;<span className="bg-black/20 px-2 py-0.5 rounded-full font-mono font-black">{summary.good?.toLocaleString() || summary.total?.toLocaleString() || 0}</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={onCancelPreview}
+                                    className="w-full flex items-center justify-center gap-2 py-3 bg-white/5 hover:bg-white/10 text-white font-medium text-xs rounded-xl transition-all"
+                                >
+                                    <XCircle className="h-4 w-4 shrink-0" />
+                                    ← Go Back & Edit Filters
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -295,6 +315,9 @@ const MixedDownloadLeads = () => {
     const [submitting, setSubmitting]   = useState(false);
     const [error, setError]             = useState('');
     const [successMsg, setSuccessMsg]   = useState('');
+    
+    const [previewMode, setPreviewMode] = useState(false);
+    const [previewSummaryData, setPreviewSummaryData] = useState(null);
 
     const [stateOpen, setStateOpen]     = useState(false);
     const stateRef = useRef(null);
@@ -466,9 +489,9 @@ const MixedDownloadLeads = () => {
                 setScrubSummaryData(res.data);
                 setSuccessMsg('Export complete! Choose what to download from the summary below.');
             } else {
-                const res = await api.post('/mixed-download/request', payload);
-                setSuccessMsg(res.data.message || 'Request submitted successfully to Super Admin.');
-                await fetchMyReqs();
+                const res = await api.post('/mixed-download/preview-scrub', payload, { timeout: timeoutMs });
+                setPreviewSummaryData(res.data);
+                setPreviewMode(true);
             }
         } catch (err) {
             const status = err.response?.status;
@@ -480,6 +503,31 @@ const MixedDownloadLeads = () => {
                 setError(err.response?.data?.message || 'Request failed.');
             }
         } finally { setSubmitting(false); }
+    };
+
+    const handleConfirmRequest = async () => {
+        setSubmitting(true);
+        setError('');
+        setSuccessMsg('');
+        try {
+            const payload = {
+                ...form,
+                van_job_ids: selectedVanFiles.length > 0 ? selectedVanFiles : undefined,
+                refine_job_ids: selectedRefineFiles.length > 0 ? selectedRefineFiles : undefined,
+                premium_job_ids: selectedPremiumFiles.length > 0 ? selectedPremiumFiles : undefined,
+                bla_summary: previewSummaryData?.summary,
+                disposition: previewSummaryData?.badCsv ? previewSummaryData.badCsv.split('\n').slice(1).map(line => line.split(',')[0]) : null
+            };
+            const res = await api.post('/mixed-download/request', payload);
+            setSuccessMsg(res.data.message || 'Request submitted successfully to Super Admin.');
+            setPreviewMode(false);
+            setPreviewSummaryData(null);
+            await fetchMyReqs();
+        } catch (err) {
+            setError(err.response?.data?.message || 'Request failed.');
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     return (
@@ -943,11 +991,21 @@ const MixedDownloadLeads = () => {
                         </form>
                     </div>
 
-                    <ScrubSummaryInline 
-                        data={scrubSummaryData} 
-                        onClose={() => setScrubSummaryData(null)} 
-                        scrubPolling={scrubPolling}
-                    />
+                    {(previewMode && previewSummaryData) ? (
+                        <ScrubSummaryInline
+                            data={previewSummaryData}
+                            onClose={() => { setPreviewMode(false); setPreviewSummaryData(null); }}
+                            scrubPolling={false}
+                            onConfirmRequest={handleConfirmRequest}
+                            onCancelPreview={() => { setPreviewMode(false); setPreviewSummaryData(null); }}
+                        />
+                    ) : (
+                        <ScrubSummaryInline
+                            data={scrubSummaryData}
+                            onClose={() => setScrubSummaryData(null)}
+                            scrubPolling={scrubPolling}
+                        />
+                    )}
 
                     {/* ── My Requests Panel (for non-super-admin) ─────────────── */}
                     {!isSuperAdmin && (

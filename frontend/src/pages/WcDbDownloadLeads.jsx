@@ -308,7 +308,7 @@ const ScrubSummaryModal = ({ data, onClose }) => {
 };
 
 // ── Scrub Summary Inline Component ─────────────────────────────
-const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
+const ScrubSummaryInline = ({ data, onClose, scrubPolling, onConfirmRequest, onCancelPreview }) => {
     if (!data) return null;
 
     const { summary, badCsv } = data;
@@ -451,6 +451,27 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
                         Download Bad/DNC Leads ({((summary.blacklist || 0) + (summary.stateDnc || 0) + (summary.federalDnc || 0) + (summary.badPhone || 0)).toLocaleString()})
                     </button>
                 )}
+
+                {onConfirmRequest && onCancelPreview && (
+                    <div className="flex flex-col gap-2 mt-2">
+                        <button
+                            type="button"
+                            onClick={onConfirmRequest}
+                            className="w-full flex items-center justify-center gap-2 py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm rounded-xl transition-all shadow-[0_4px_14px_rgba(16,185,129,0.3)] hover:shadow-[0_6px_20px_rgba(16,185,129,0.4)] active:scale-[0.98]"
+                        >
+                            <Sparkles className="h-4.5 w-4.5 shrink-0" />
+                            Request Good Data Download&nbsp;&nbsp;<span className="bg-black/20 px-2 py-0.5 rounded-full font-mono font-black">{summary.good?.toLocaleString() || summary.total?.toLocaleString() || 0}</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onCancelPreview}
+                            className="w-full flex items-center justify-center gap-2 py-3 bg-white/5 hover:bg-white/10 text-white font-medium text-xs rounded-xl transition-all"
+                        >
+                            <XCircle className="h-4 w-4 shrink-0" />
+                            ← Go Back & Edit Filters
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -482,6 +503,9 @@ const WcDbDownloadLeads = () => {
     const [submitting, setSubmitting]   = useState(false);
     const [error, setError]             = useState('');
     const [successMsg, setSuccessMsg]   = useState('');
+
+    const [previewMode, setPreviewMode] = useState(false);
+    const [previewSummaryData, setPreviewSummaryData] = useState(null);
 
     const [stateOpen, setStateOpen]     = useState(false);
     const stateRef = useRef(null);
@@ -677,22 +701,9 @@ const WcDbDownloadLeads = () => {
                 api.get('/wc-db-vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
             } else {
                 const body = { ...form, job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined };
-                await api.post('/wc-db-download/request', body);
-                setSuccessMsg('Request submitted! SuperAdmin will review it shortly.');
-                setForm({
-                    states: [],
-                    campaign_id: '',
-                    vendor_id: '',
-                    quantity: 1000,
-                    min_age: '',
-                    max_age: '',
-                    include_downloaded: false,
-                });
-                setSelectedFileIds([]);
-                fetchMyReqs();
-                
-                // Refetch vendors to update stats (though usually won't change until approved)
-                api.get('/wc-db-vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
+                const res = await api.post('/wc-db-download/preview-scrub', body, { timeout: 30 * 60 * 1000 });
+                setPreviewSummaryData(res.data);
+                setPreviewMode(true);
             }
         } catch (err) {
             const status = err.response?.status;
@@ -704,6 +715,38 @@ const WcDbDownloadLeads = () => {
                 setError(err.response?.data?.message || 'Request failed.');
             }
         } finally { setSubmitting(false); }
+    };
+
+    const handleConfirmRequest = async () => {
+        setSubmitting(true); setError(''); setSuccessMsg('');
+        try {
+            const body = { 
+                ...form, 
+                job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined,
+                bla_summary: previewSummaryData?.summary,
+                disposition: previewSummaryData?.badCsv ? previewSummaryData.badCsv.split('\n').slice(1).map(line => line.split(',')[0]) : null
+            };
+            await api.post('/wc-db-download/request', body);
+            setSuccessMsg('Request submitted! SuperAdmin will review it shortly.');
+            setForm({
+                states: [],
+                campaign_id: '',
+                vendor_id: '',
+                quantity: 1000,
+                min_age: '',
+                max_age: '',
+                include_downloaded: false,
+            });
+            setSelectedFileIds([]);
+            setPreviewMode(false);
+            setPreviewSummaryData(null);
+            fetchMyReqs();
+            api.get('/wc-db-vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
+        } catch (err) {
+            setError(err.response?.data?.message || 'Download request error occurred.');
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     const handleDownloadCSV = async (req) => {
@@ -1047,15 +1090,31 @@ const WcDbDownloadLeads = () => {
                     </div>
 
                     {/* Inline Scrub Summary */}
-                    <ScrubSummaryInline
-                        data={scrubSummaryData}
-                        scrubPolling={scrubPolling}
-                        onClose={() => {
-                            scrubPollCancelRef.current = true;
-                            setScrubSummaryData(null);
-                            setScrubPolling(false);
-                        }}
-                    />
+                    {previewMode && previewSummaryData ? (
+                        <ScrubSummaryInline
+                            data={previewSummaryData}
+                            scrubPolling={false}
+                            onClose={() => {
+                                setPreviewMode(false);
+                                setPreviewSummaryData(null);
+                            }}
+                            onConfirmRequest={handleConfirmRequest}
+                            onCancelPreview={() => {
+                                setPreviewMode(false);
+                                setPreviewSummaryData(null);
+                            }}
+                        />
+                    ) : (
+                        <ScrubSummaryInline
+                            data={scrubSummaryData}
+                            scrubPolling={scrubPolling}
+                            onClose={() => {
+                                scrubPollCancelRef.current = true;
+                                setScrubSummaryData(null);
+                                setScrubPolling(false);
+                            }}
+                        />
+                    )}
                 </div>
 
                 {/* ── RIGHT: Info / Summary ────────────────────── */}

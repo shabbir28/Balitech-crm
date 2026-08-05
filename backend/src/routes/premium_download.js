@@ -16,6 +16,7 @@ const {
     getStateCounts,
     downloadJobFile,
     getJobStats,
+    previewScrub,
 } = require('../controllers/premiumDownloadController');
 const auth = require('../middleware/auth');
 const authorizeRole = require('../middleware/role');
@@ -24,6 +25,7 @@ const authorizeRole = require('../middleware/role');
 router.post('/', auth, authorizeRole(['super_admin']), downloadLeads);
 
 // ── Admin & Data Entry: submit a download request ─────────────────────────
+router.post('/preview-scrub', auth, authorizeRole(['admin', 'data_entry', 'dialer_agent']), previewScrub);
 router.post('/request', auth, authorizeRole(['admin', 'data_entry', 'dialer_agent']), createDownloadRequest);
 
 // ── Admin & Data Entry: view own requests ──────────────────────────────────

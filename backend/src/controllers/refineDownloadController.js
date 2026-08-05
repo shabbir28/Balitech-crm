@@ -791,6 +791,116 @@ const downloadLeads = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────
+// POST /api/refine-download/preview-scrub
+// Dialer Agent → run BLA scrub PREVIEW without marking data as downloaded.
+// Returns scrub summary so agent can review before submitting a real request.
+// ─────────────────────────────────────────────────────────────
+const previewScrub = async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const {
+      vendor_id, quantity, states, campaign_id,
+      min_age, max_age, min_duration, max_duration,
+      job_id, include_downloaded, quality, disposition,
+    } = req.body;
+
+    if (!vendor_id) return res.status(400).json({ message: 'Please select a vendor.' });
+    if (!quantity || quantity <= 0) return res.status(400).json({ message: 'Valid quantity is required.' });
+
+    await client.query('BEGIN');
+
+    const { filters, params, paramIdx } = await buildFilters(client, {
+      vendor_id: vendor_id && vendor_id !== 'all' ? vendor_id : null,
+      campaign_id: campaign_id && campaign_id !== 'all' ? campaign_id : null,
+      states, min_age, max_age, min_duration, max_duration,
+      job_id, include_downloaded, quality, disposition,
+    });
+
+    let currentParamIdx = paramIdx;
+    const whereParts = [...filters];
+    whereParts.push(
+      `NOT EXISTS (SELECT 1 FROM dnc_numbers d WHERE d.phone = refine_data.phone)`,
+      `NOT EXISTS (SELECT 1 FROM refine_dnc_numbers d WHERE d.phone = refine_data.phone)`,
+      `NOT EXISTS (SELECT 1 FROM premium_dnc_numbers d WHERE d.phone = refine_data.phone)`,
+      `NOT EXISTS (SELECT 1 FROM dead_numbers d WHERE d.phone = refine_data.phone)`,
+      `NOT EXISTS (SELECT 1 FROM separation_data sd WHERE sd.phone = refine_data.phone)`
+    );
+    const whereClause = whereParts.length > 0 ? whereParts.join(' AND ') : '1=1';
+
+    // SELECT only — no UPDATE, no marking downloaded
+    const selectQuery = `
+      SELECT phone, area_code
+      FROM refine_data
+      WHERE ${whereClause}
+      ORDER BY uploaded_at ASC
+      LIMIT $${currentParamIdx}
+    `;
+    params.push(quantity);
+
+    await client.query("SET local work_mem = '256MB'");
+    const result = await client.query(selectQuery, params);
+    await client.query('COMMIT');
+    client.release();
+
+    const rows = result.rows;
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'No available leads found matching your criteria.' });
+    }
+
+    // Run BLA scrub (preview, read-only — no DB writes)
+    const allPhones = rows.map(r => normalizePhone(r.phone)).filter(p => p.length === 10);
+
+    let blacklist = 0, stateDnc = 0, federalDnc = 0, badPhone = 0, good = rows.length;
+    let scrubRan = false;
+
+    if (MAX_API_SCRUB_PHONES > 0 && allPhones.length <= MAX_API_SCRUB_PHONES) {
+      try {
+        const scrubResult = await scrubPhones(allPhones);
+        if (!(allPhones.length >= 200 && scrubResult.bad.length === allPhones.length)) {
+          for (const item of scrubResult.bad) {
+            const typeLower = String(item.type || '').toLowerCase();
+            if (typeLower.includes('federal')) federalDnc++;
+            else if (typeLower.includes('state')) stateDnc++;
+            else if (typeLower.includes('invalid') || typeLower.includes('bad')) badPhone++;
+            else blacklist++;
+          }
+          good = rows.length - scrubResult.bad.length;
+          scrubRan = true;
+        }
+      } catch (scrubErr) {
+        console.error('[Preview Scrub] BLA failed:', scrubErr.message);
+        // Return summary without BLA breakdown — still useful for the agent
+      }
+    }
+
+    const summary = {
+      total: rows.length,
+      good,
+      blacklist,
+      stateDnc,
+      federalDnc,
+      badPhone,
+      suppress: 0,
+      wireless: 0,
+      landline: 0,
+      errors: 0,
+      scrubPending: false,
+      scrubCompleted: scrubRan,
+      scrubDate: new Date().toLocaleString(),
+      fileName: `preview_${Date.now()}.csv`,
+      blaSkipped: !scrubRan,
+    };
+
+    return res.status(200).json({ summary });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    client.release();
+    console.error('[Preview Scrub] Error:', err.message);
+    return res.status(500).json({ message: 'Server error running preview scrub.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
 // POST /api/download/request
 // Admin submits a download request → stored as "pending"
 // ─────────────────────────────────────────────────────────────
@@ -827,10 +937,12 @@ const createDownloadRequest = async (req, res) => {
       });
     }
 
+    const blaSummary = req.body.bla_summary || null;
+
     const result = await db.query(
       `INSERT INTO refine_download_requests
-               (admin_id, vendor_id, campaign_id, quantity, states, min_age, max_age, min_duration, max_duration, job_id, include_downloaded)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+               (admin_id, vendor_id, campaign_id, requested_quantity, quantity, states, min_age, max_age, min_duration, max_duration, job_id, include_downloaded, quality, disposition, bla_summary)
+             VALUES ($1, $2, $3, $4, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
              RETURNING *`,
       [
         req.user.id,
@@ -842,8 +954,11 @@ const createDownloadRequest = async (req, res) => {
         max_age || null,
         min_duration || null,
         max_duration || null,
-        job_id && job_id.length > 0 ? job_id : undefined,
+        job_id && job_id.length > 0 ? job_id : null,
         include_downloaded === true || include_downloaded === "true",
+        quality || 'All',
+        disposition && disposition.length > 0 ? disposition : null,
+        blaSummary ? JSON.stringify(blaSummary) : null,
       ],
     );
 
@@ -857,12 +972,18 @@ const createDownloadRequest = async (req, res) => {
       ? `${req.user.first_name} ${req.user.last_name || ""}`.trim()
       : req.user.username;
 
+    // Build notification message with BLA preview info if available
+    let notifMsg = `${adminDisplayName} has requested to download ${Number(quantity).toLocaleString()} refine leads.`;
+    if (blaSummary) {
+      notifMsg += ` BLA Preview: ${(blaSummary.good || 0).toLocaleString()} good / ${(blaSummary.total || quantity).toLocaleString()} total.`;
+    }
+
     for (const sa of superAdmins.rows) {
       await createNotification(
         sa.id,
         "download_request_new",
         "📥 New Download Request",
-        `${adminDisplayName} has requested to download ${quantity.toLocaleString()} refine_data from vendor data.`,
+        notifMsg,
         newRequest.id,
       );
     }
@@ -1063,7 +1184,7 @@ const reviewDownloadRequest = async (req, res) => {
       lead_count: goodRows.length,
     });
 
-    // ── Background: BLA scrub + CSV serialization ──────────────────────────
+    // ── Background: CSV serialization (BLA already previewed if bla_summary set) ─
     (async () => {
       const bgClient = await db.getClient();
       try {
@@ -1071,34 +1192,43 @@ const reviewDownloadRequest = async (req, res) => {
         let finalGood = goodRows;
         let finalBad = badRows;
 
-        try {
-          const scrubResult = await scrubPhones(allRows.map(r => r.phone));
-          if (scrubResult.bad.length > 0) {
-            const badPhoneSet = new Set(scrubResult.bad.map(b => b.phone));
-            const scrubInfoByPhone = new Map(scrubResult.bad.map(b => [b.phone, b]));
-            const isBad = r => badPhoneSet.has(normalizePhone(r.phone));
+        // If the request came with a bla_summary (preview flow), BLA already ran.
+        // Just build the CSV immediately — no second BLA call needed.
+        const hasBlaPreview = !!dlReq.bla_summary;
 
-            await bgClient.query('BEGIN');
-            await bgClient.query(
-              `UPDATE refine_data SET status='DNC', downloaded_at=null WHERE phone=ANY($1::text[])`,
-              [scrubResult.bad.map(b => b.phone)],
-            );
-            await upsertDncNumbersBatched({
-              queryFn: bgClient.query.bind(bgClient),
-              badItems: scrubResult.bad,
-              campaignId: dlReq.campaign_id || null,
-              vendorId: dlReq.vendor_id || null,
-            });
-            await bgClient.query('COMMIT');
+        if (!hasBlaPreview) {
+          // Legacy flow (no preview): run BLA now in background
+          try {
+            const scrubResult = await scrubPhones(allRows.map(r => r.phone));
+            if (scrubResult.bad.length > 0) {
+              const badPhoneSet = new Set(scrubResult.bad.map(b => b.phone));
+              const scrubInfoByPhone = new Map(scrubResult.bad.map(b => [b.phone, b]));
+              const isBad = r => badPhoneSet.has(normalizePhone(r.phone));
 
-            finalBad = [...finalBad, ...allRows.filter(isBad).map(r => {
-              const info = scrubInfoByPhone.get(normalizePhone(r.phone)) || {};
-              return { ...r, dnc_type: info.type || 'DNC', reason: info.reason || 'BLA Match' };
-            })];
-            finalGood = allRows.filter(r => !isBad(r));
+              await bgClient.query('BEGIN');
+              await bgClient.query(
+                `UPDATE refine_data SET status='available', downloaded_at=null, disposition='DNC' WHERE phone=ANY($1::text[])`,
+                [scrubResult.bad.map(b => b.phone)],
+              );
+              await upsertDncNumbersBatched({
+                queryFn: bgClient.query.bind(bgClient),
+                badItems: scrubResult.bad,
+                campaignId: dlReq.campaign_id || null,
+                vendorId: dlReq.vendor_id || null,
+              });
+              await bgClient.query('COMMIT');
+
+              finalBad = [...finalBad, ...allRows.filter(isBad).map(r => {
+                const info = scrubInfoByPhone.get(normalizePhone(r.phone)) || {};
+                return { ...r, dnc_type: info.type || 'DNC', reason: info.reason || 'BLA Match' };
+              })];
+              finalGood = allRows.filter(r => !isBad(r));
+            }
+          } catch (scrubErr) {
+            console.error('[BG Scrub refine] scrub failed, using unfiltered rows:', scrubErr.message);
           }
-        } catch (scrubErr) {
-          console.error('[BG Scrub refine] scrub failed, using unfiltered rows:', scrubErr.message);
+        } else {
+          console.log(`[Approval] bla_summary present for request ${id} — skipping BLA re-scrub, building CSV immediately.`);
         }
 
         const serializedData = serializeDownloadPayload(
@@ -1116,7 +1246,7 @@ const reviewDownloadRequest = async (req, res) => {
             dlReq.admin_id,
             dlReq.vendor_id,
             dlReq.campaign_id,
-            goodRows.length,
+            finalGood.length,
             dlReq.states,
             dlReq.min_age,
             dlReq.max_age,
@@ -1128,7 +1258,7 @@ const reviewDownloadRequest = async (req, res) => {
           dlReq.admin_id,
           'download_request_accepted',
           '✅ Download Request Approved!',
-          `Your download request for ${finalGood.length.toLocaleString()} refine_data has been approved. You can now download your CSV file.`,
+          `Your download request for ${finalGood.length.toLocaleString()} good leads has been approved. Your CSV file is ready to download now!`,
           dlReq.id,
         );
       } catch (bgErr) {
@@ -1790,4 +1920,5 @@ module.exports = {
   getStateCounts,
   downloadJobFile,
   getJobStats,
+  previewScrub,
 };
