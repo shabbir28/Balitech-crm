@@ -1,12 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { createSession, getSessions, getSession } = require('../controllers/vanSessionController');
+const { createSession, getSessions, getSession, deleteSession } = require('../controllers/vanSessionController');
 const auth = require('../middleware/auth');
 const authorizeRole = require('../middleware/role');
 
 router.use(auth);
 router.get('/', authorizeRole(['super_admin', 'admin']), getSessions);
 router.get('/:id', authorizeRole(['super_admin', 'admin', 'data_entry', 'dialer_agent']), getSession);
+router.delete('/:id', authorizeRole(['super_admin', 'admin']), deleteSession);
 router.post('/', authorizeRole(['super_admin', 'admin', 'data_entry', 'dialer_agent']), createSession);
 
 module.exports = router;

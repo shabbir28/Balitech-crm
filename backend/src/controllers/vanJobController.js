@@ -197,6 +197,7 @@ const getJobStatus = async (req, res) => {
 const compareJob = async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+
     const { session_id } = req.body;
     if (!session_id) return res.status(400).json({ message: 'Session ID is required' });
 
@@ -207,34 +208,41 @@ const compareJob = async (req, res) => {
     const uniqueRecords = dedupeRecords(validRecords);
     const uniquePhones = uniqueRecords.map(r => r.phone);
 
-    // 1. Check existing in van_data
-    const existingRes = await db.query('SELECT phone FROM van_data WHERE phone = ANY($1::text[])', [uniquePhones]);
-    const existingSet = new Set(existingRes.rows.map(r => r.phone));
-
-    // 2. Check exclusions
+    // Exclusions first — same logic as final uploadFresh
     const { dncSet, dncSkippedDnc, dncSkippedSale } = await lookupDncPhones(db, uniquePhones);
     const deadSet = await lookupDeadPhones(db, uniquePhones);
     const sepSet = await lookupSeparationPhones(db, uniquePhones);
 
-    // 3. Check main leads
-    const mainLeadsRes = await db.query('SELECT phone FROM leads WHERE phone = ANY($1::text[])', [uniquePhones]);
+    // Fresh numbers should come AFTER DNC, dead, and separation are removed
+    const cleanRecords = uniqueRecords.filter(
+      r => !dncSet.has(r.phone) && !deadSet.has(r.phone) && !sepSet.has(r.phone)
+    );
+    const cleanPhones = cleanRecords.map(r => r.phone);
+
+    // Existing check only from clean uploadable numbers
+    const existingRes = cleanPhones.length
+      ? await db.query('SELECT phone FROM van_data WHERE phone = ANY($1::text[])', [cleanPhones])
+      : { rows: [] };
+
+    const existingSet = new Set(existingRes.rows.map(r => r.phone));
+    const existingCount = existingSet.size;
+
+    const freshPhones = cleanPhones.filter(p => !existingSet.has(p));
+    const freshCount = freshPhones.length;
+
+    // Main leads overlap only from actually fresh candidates
+    const mainLeadsRes = freshPhones.length
+      ? await db.query('SELECT phone FROM leads WHERE phone = ANY($1::text[])', [freshPhones])
+      : { rows: [] };
+
     const mainLeadsCount = mainLeadsRes.rows.length;
-
-    let existingCount = existingSet.size;
-    let deadSkipped = 0;
-    
-    for (const p of deadSet) {
-      if (!existingSet.has(p)) deadSkipped++;
-    }
-
-    const freshCount = uniqueRecords.length - existingCount - deadSkipped;
 
     res.json({
       total_processed: validRecords.length,
       total_unique_phones: uniqueRecords.length,
       duplicates_in_file: validRecords.length - uniqueRecords.length,
       existing_count: existingCount,
-      dead_skipped: deadSkipped,
+      dead_skipped: deadSet.size,
       fresh_count: Math.max(0, freshCount),
       dnc_skipped: dncSet.size,
       separation_skipped: sepSet.size,

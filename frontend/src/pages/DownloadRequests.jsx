@@ -7,11 +7,19 @@ import {
 } from 'lucide-react';
 
 const fmtDate = (d) => d
-    ? new Date(d).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
+    ? parseDbTime(d).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
     : '—';
 
+
+const parseDbTime = (value) => {
+    if (!value) return null;
+    const raw = String(value).trim();
+    const isoLike = raw.includes("T") ? raw : raw.replace(" ", "T");
+    return new Date(/[zZ]|[+-]\d{2}:\d{2}$/.test(isoLike) ? isoLike : `${isoLike}Z`);
+};
+
 const fmtTimeAgo = (d) => {
-    const diff = (Date.now() - new Date(d).getTime()) / 1000;
+    const diff = (Date.now() - parseDbTime(d).getTime()) / 1000;
     if (diff < 60) return 'Just now';
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
@@ -239,7 +247,7 @@ const DownloadRequests = () => {
         .filter(r => filterStatus === 'all' || r.status === filterStatus)
         .sort((a, b) => {
             const d = sortDir === 'desc' ? -1 : 1;
-            return d * (new Date(a.requested_at) - new Date(b.requested_at));
+            return d * (parseDbTime(a.requested_at) - parseDbTime(b.requested_at));
         });
 
     const counts = {

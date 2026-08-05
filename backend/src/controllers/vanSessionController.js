@@ -127,4 +127,52 @@ const getSession = async (req, res) => {
   }
 };
 
-module.exports = { createSession, getSessions, getSession };
+
+const deleteSession = async (req, res) => {
+  const { id } = req.params;
+  const client = await db.getClient();
+
+  try {
+    await client.query("BEGIN");
+
+    const sessionRes = await client.query(
+      "SELECT id FROM van_sessions WHERE id = $1",
+      [id]
+    );
+
+    if (sessionRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Session not found" });
+    }
+
+    // Keep uploaded data safe. Only detach rows from this upload session.
+    await client.query(
+      "UPDATE van_data SET session_id = NULL WHERE session_id = $1",
+      [id]
+    );
+
+    // Remove job/history rows for this session card.
+    await client.query(
+      "DELETE FROM van_jobs WHERE session_id = $1",
+      [id]
+    );
+
+    await client.query(
+      "DELETE FROM van_sessions WHERE id = $1",
+      [id]
+    );
+
+    await client.query("COMMIT");
+
+    return res.json({ message: "Van session deleted successfully" });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("Delete Van Session Error:", err);
+    return res.status(500).json({ message: "Server error deleting van session" });
+  } finally {
+    client.release();
+  }
+};
+
+
+module.exports = { createSession, getSessions, getSession, deleteSession };
