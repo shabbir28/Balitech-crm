@@ -2,7 +2,7 @@ import React, { useContext, useState } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Lock, User, ArrowRight, ShieldCheck } from 'lucide-react';
-// import ReCAPTCHA from 'react-google-recaptcha'; // CAPTCHA disabled temporarily
+import ReCAPTCHA from 'react-google-recaptcha'; // CAPTCHA disabled temporarily
 
 const Login = () => {
     const { login } = useContext(AuthContext);
@@ -10,27 +10,27 @@ const Login = () => {
     const [formData, setFormData] = useState({ username: '', password: '' });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    // const [captchaToken, setCaptchaToken] = useState(null); // CAPTCHA disabled temporarily
-    // const recaptchaRef = React.useRef(null); // CAPTCHA disabled temporarily
+    const [captchaToken, setCaptchaToken] = useState(null); // CAPTCHA disabled temporarily
+    const recaptchaRef = React.useRef(null); // CAPTCHA disabled temporarily
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
         // CAPTCHA disabled temporarily
-        // if (!captchaToken) {
-        //     setError('Please complete the reCAPTCHA');
-        //     return;
-        // }
+        if (!captchaToken) {
+            setError('Please complete the reCAPTCHA');
+            return;
+        }
 
         setLoading(true);
         setError('');
         try {
-            await login(formData.username, formData.password, null);
+            await login(formData.username, formData.password, captchaToken);
             navigate('/');
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to login');
-            // recaptchaRef.current?.reset(); // CAPTCHA disabled temporarily
-            // setCaptchaToken(null); // CAPTCHA disabled temporarily
+            recaptchaRef.current?.reset(); // CAPTCHA disabled temporarily
+            setCaptchaToken(null); // CAPTCHA disabled temporarily
         } finally {
             setLoading(false);
         }
@@ -110,7 +110,7 @@ const Login = () => {
                             </div>
 
                             {/* CAPTCHA disabled temporarily */}
-                            {/* <div className="pt-2 flex justify-center">
+                            <div className="pt-2 flex justify-center">
                                 <ReCAPTCHA
                                     ref={recaptchaRef}
                                     sitekey="6LeLzwctAAAAAIRVXWG_PUJcMegb1k1B-o_s4q1w"
@@ -118,7 +118,7 @@ const Login = () => {
                                     theme="dark"
                                     className="transform scale-95 origin-left"
                                 />
-                            </div> */}
+                            </div>
 
                             <div className="pt-2">
                                 <button
