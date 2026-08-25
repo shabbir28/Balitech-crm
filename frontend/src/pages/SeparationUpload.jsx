@@ -12,6 +12,27 @@ const downloadBlob = (content, filename) => {
     URL.revokeObjectURL(url);
 };
 
+
+const AREA_CODES_MAP = {"201":"NJ","202":"DC","203":"CT","205":"AL","206":"WA","207":"ME","208":"ID","209":"CA","210":"TX","212":"NY","213":"CA","214":"TX","215":"PA","216":"OH","217":"IL","218":"MN","219":"IN","220":"OH","223":"PA","224":"IL","225":"LA","228":"MS","229":"GA","231":"MI","234":"OH","239":"FL","240":"MD","248":"MI","251":"AL","252":"NC","253":"WA","254":"TX","256":"AL","260":"IN","262":"WI","267":"PA","269":"MI","270":"KY","272":"PA","276":"VA","281":"TX","301":"MD","302":"DE","303":"CO","304":"WV","305":"FL","307":"WY","308":"NE","309":"IL","310":"CA","312":"IL","313":"MI","314":"MO","315":"NY","316":"KS","317":"IN","318":"LA","319":"IA","320":"MN","321":"FL","323":"CA","330":"OH","331":"IL","334":"AL","336":"NC","337":"LA","339":"MA","346":"TX","347":"NY","351":"MA","352":"FL","360":"WA","361":"TX","364":"KY","385":"UT","386":"FL","401":"RI","402":"NE","404":"GA","405":"OK","406":"MT","407":"FL","408":"CA","409":"TX","410":"MD","412":"PA","413":"MA","414":"WI","415":"CA","417":"MO","419":"OH","423":"TN","424":"CA","425":"WA","430":"TX","432":"TX","434":"VA","435":"UT","440":"OH","442":"CA","443":"MD","458":"OR","463":"IN","469":"TX","470":"GA","475":"CT","478":"GA","479":"AR","480":"AZ","484":"PA","501":"AR","502":"KY","503":"OR","504":"LA","505":"NM","507":"MN","508":"MA","509":"WA","510":"CA","512":"TX","513":"OH","515":"IA","516":"NY","517":"MI","518":"NY","520":"AZ","530":"CA","531":"NE","534":"WI","539":"OK","540":"VA","541":"OR","551":"NJ","559":"CA","561":"FL","562":"CA","563":"IA","564":"WA","567":"OH","570":"PA","571":"VA","573":"MO","574":"IN","580":"OK","585":"NY","586":"MI","601":"MS","602":"AZ","603":"NH","605":"SD","606":"KY","607":"NY","608":"WI","609":"NJ","610":"PA","612":"MN","614":"OH","615":"TN","616":"MI","617":"MA","618":"IL","619":"CA","620":"KS","623":"AZ","626":"CA","628":"CA","630":"IL","631":"NY","636":"MO","641":"IA","646":"NY","650":"CA","651":"MN","657":"CA","660":"MO","661":"CA","662":"MS","667":"MD","669":"CA","678":"GA","682":"TX","689":"FL","701":"ND","702":"NV","703":"VA","704":"NC","706":"GA","707":"CA","708":"IL","712":"IA","713":"TX","714":"CA","715":"WI","716":"NY","717":"PA","718":"NY","719":"CO","720":"CO","724":"PA","725":"NV","727":"FL","731":"TN","732":"NJ","734":"MI","740":"OH","743":"NC","747":"CA","754":"FL","757":"VA","760":"CA","763":"MN","765":"IN","769":"MS","770":"GA","772":"FL","773":"IL","774":"MA","775":"NV","779":"IL","781":"MA","785":"KS","786":"FL","787":"PR","801":"UT","802":"VT","803":"SC","804":"VA","805":"CA","806":"TX","808":"HI","810":"MI","812":"IN","813":"FL","814":"PA","815":"IL","816":"MO","817":"TX","818":"CA","828":"NC","830":"TX","831":"CA","832":"TX","838":"NY","843":"SC","845":"NY","847":"IL","848":"NJ","850":"FL","856":"NJ","857":"MA","858":"CA","859":"KY","860":"CT","862":"NJ","863":"FL","864":"SC","865":"TN","870":"AR","878":"PA","901":"TN","903":"TX","904":"FL","906":"MI","907":"AK","908":"NJ","909":"CA","910":"NC","912":"GA","913":"KS","914":"NY","915":"TX","916":"CA","917":"NY","918":"OK","919":"NC","920":"WI","925":"CA","928":"AZ","929":"NY","930":"CA","931":"TN","934":"NY","936":"TX","937":"OH","938":"AL","940":"TX","941":"FL","947":"MI","949":"CA","951":"CA","952":"MN","954":"FL","956":"TX","959":"CT","970":"CO","971":"OR","972":"TX","973":"NJ","978":"MA","979":"TX","980":"NC","984":"NC","985":"LA","989":"MI"};
+
+const getSepAreaCodeFromPhone = (phone) => {
+    const clean = String(phone || '').replace(/\D/g, '');
+    if (clean.length >= 11 && clean.startsWith('1')) return clean.substring(1, 4);
+    if (clean.length >= 10) return clean.substring(0, 3);
+    return '';
+};
+
+const getSepStateFromPhone = (phone) => {
+    const code = getSepAreaCodeFromPhone(phone);
+    return code ? (AREA_CODES_MAP[code] || 'Unknown') : 'Unknown';
+};
+
+const US_STATES = [
+    'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD',
+    'MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC',
+    'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC'
+];
+
 const SeparationUpload = () => {
     const [search, setSearch] = useState('');
     const [rows, setRows] = useState([]);
@@ -20,6 +41,9 @@ const SeparationUpload = () => {
     const [importFile, setImportFile] = useState(null);
     const [campaigns, setCampaigns] = useState([]);
     const [clients, setClients] = useState([]);
+    const [filters, setFilters] = useState([]);
+    const [loadingFilters, setLoadingFilters] = useState(true);
+    const [selectedPreset, setSelectedPreset] = useState('');
     const [selectedCampaign, setSelectedCampaign] = useState('');
     const [selectedClient, setSelectedClient] = useState('');
 
@@ -28,12 +52,47 @@ const SeparationUpload = () => {
 
     const [downloadCampaign, setDownloadCampaign] = useState('');
     const [downloadClient, setDownloadClient] = useState('');
+    const [downloadState, setDownloadState] = useState('');
+    const [downloadAreaCode, setDownloadAreaCode] = useState('');
+    const [stateDropdownOpen, setStateDropdownOpen] = useState(false);
+    const [includePreviouslyDownloaded, setIncludePreviouslyDownloaded] = useState(false);
+
+    const selectedDownloadStates = String(downloadState || '')
+        .split(',')
+        .map(st => st.trim().toUpperCase())
+        .filter(Boolean);
+
+    const setDownloadStatesList = (statesList) => {
+        const clean = [...new Set(
+            statesList
+                .map(st => String(st || '').trim().toUpperCase())
+                .filter(Boolean)
+        )];
+
+        setDownloadState(clean.join(','));
+        setDownloadAreaCode('');
+    };
+
+    const toggleDownloadState = (stateCode) => {
+        const st = String(stateCode || '').trim().toUpperCase();
+        if (!st) return;
+
+        const exists = selectedDownloadStates.includes(st);
+        const next = exists
+            ? selectedDownloadStates.filter(x => x !== st)
+            : [...selectedDownloadStates, st];
+
+        setSelectedPreset('');
+        setDownloadStatesList(next);
+    };
+
     const [downloadQty, setDownloadQty] = useState(1000);
     const [exportCount, setExportCount] = useState(null);
     const [loadingExportCount, setLoadingExportCount] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [downloadError, setDownloadError] = useState('');
     const [downloadSuccess, setDownloadSuccess] = useState('');
+    const [separationPreview, setSeparationPreview] = useState(null);
     
     const [uploading, setUploading] = useState(false);
 
@@ -66,17 +125,30 @@ const SeparationUpload = () => {
         api.get('/clients')
             .then(res => setClients(res.data.clients || []))
             .catch(e => console.error('Failed to load clients', e));
+
+        api.get('/filters')
+            .then(res => setFilters(Array.isArray(res.data) ? res.data : (res.data?.data || [])))
+            .catch(e => console.error('Failed to load filters', e))
+            .finally(() => setLoadingFilters(false));
     }, []);
 
     useEffect(() => {
-        if (!downloadCampaign && !downloadClient) {
+        if (!downloadCampaign && !downloadClient && !downloadState) {
             setExportCount(null);
             return;
         }
         const timer = setTimeout(() => {
             setLoadingExportCount(true);
             setDownloadError('');
-            api.get(`/separation/export-count?campaign_id=${encodeURIComponent(downloadCampaign)}&client_id=${encodeURIComponent(downloadClient)}`)
+
+            const params = new URLSearchParams();
+            if (downloadCampaign) params.set('campaign_id', downloadCampaign);
+            if (downloadClient) params.set('client_id', downloadClient);
+            if (downloadState) params.set('state', downloadState);
+            if (downloadAreaCode) params.set('area_code', downloadAreaCode);
+            params.set('include_downloaded', includePreviouslyDownloaded ? 'true' : 'false');
+
+            api.get(`/separation/export-count?${params.toString()}`)
                 .then(res => {
                     const count = res.data.count || 0;
                     setExportCount(count);
@@ -87,45 +159,70 @@ const SeparationUpload = () => {
                 .catch(() => setExportCount(0))
                 .finally(() => setLoadingExportCount(false));
         }, 400);
-        return () => clearTimeout(timer);
+    
+
+    return () => clearTimeout(timer);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [downloadCampaign, downloadClient]);
+    }, [downloadCampaign, downloadClient, downloadState, downloadAreaCode, includePreviouslyDownloaded]);
 
     const handleDownload = async () => {
-        if (!downloadCampaign && !downloadClient) {
-            setDownloadError('Please select a campaign or client.');
+        if (!downloadCampaign && !downloadClient && !downloadState) {
+            setDownloadError('Please select a campaign, client, or state.');
             return;
         }
+
         if (exportCount === 0) {
             setDownloadError('No records to export for this selection.');
             return;
         }
+
         const qty = parseInt(downloadQty, 10);
         if (!qty || qty <= 0) {
             setDownloadError('Enter a valid quantity.');
             return;
         }
+
         if (exportCount != null && qty > exportCount) {
             setDownloadError(`Quantity cannot exceed available (${exportCount.toLocaleString()}).`);
             return;
         }
+
         setDownloading(true);
         setDownloadError('');
         setDownloadSuccess('');
+        setSeparationPreview(null);
+
         try {
             const res = await api.post('/separation/download', {
                 campaign_id: downloadCampaign,
                 client_id: downloadClient,
+                state: downloadState,
                 quantity: qty,
+                include_downloaded: includePreviouslyDownloaded,
+            }, { timeout: 30 * 60 * 1000 });
+
+            setSeparationPreview({
+                csv: res.data.csv,
+                fileName: res.data.fileName || `separation_clean_bla_${Date.now()}.csv`,
+                count: res.data.count || 0,
+                summary: res.data.summary || {},
             });
-            downloadBlob(res.data.csv, res.data.fileName || `separation_export_${Date.now()}.csv`);
-            setDownloadSuccess(`Downloaded ${res.data.count?.toLocaleString()} record(s).`);
+
+            if (!includePreviouslyDownloaded) {
+                const downloadedNow = Number(res.data.count || 0);
+
+                setExportCount(prev => {
+                    if (prev == null) return prev;
+                    return Math.max(0, Number(prev) - downloadedNow);
+                });
+            }
         } catch (err) {
-            setDownloadError(err.response?.data?.message || 'Download failed.');
+            setDownloadError(err.response?.data?.message || 'BLA check/download failed.');
         } finally {
             setDownloading(false);
         }
     };
+
 
     const handleUpload = async () => {
         if (!importFile || !selectedCampaign || !selectedClient) return;
@@ -212,7 +309,7 @@ const SeparationUpload = () => {
             {/* Download Section */}
             <div className="bg-[#1e1e2d] rounded-2xl border border-blue-500/20 p-6 shadow-xl relative mb-8">
                 <div className="absolute top-0 right-0 w-40 h-40 bg-blue-500/10 rounded-full blur-[60px] pointer-events-none overflow-hidden rounded-2xl" />
-                <div className="relative z-10 min-w-0">
+                <div className="relative z-40 min-w-0 overflow-visible">
                     <h2 className="text-lg font-bold text-white flex items-center gap-2 mb-1">
                         <FolderDown className="w-5 h-5 text-blue-400 shrink-0" /> Download Separation Data
                     </h2>
@@ -220,86 +317,223 @@ const SeparationUpload = () => {
                         Export separated data by campaign or client.
                     </p>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_120px_minmax(140px,auto)] gap-4 items-end">
-                        <div className="min-w-0">
-                            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 min-h-[18px] leading-tight">
-                                Campaign
-                            </label>
-                            <select
-                                value={downloadCampaign}
-                                onChange={(e) => setDownloadCampaign(e.target.value)}
-                                className="bg-[#0a0a0f] border border-white/10 rounded-xl px-4 py-0 text-white text-[13px] w-full h-11 box-border outline-none focus:border-blue-500/50"
-                            >
-                                <option value="">Select campaign…</option>
-                                <option value="all">All Campaigns</option>
-                                {campaigns.map(c => (
-                                    <option key={c.campaign_id} value={c.campaign_id}>{c.name}</option>
-                                ))}
-                            </select>
-                        </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_120px_160px] gap-4 items-end">
+                          <div className="min-w-0">
+                              <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 min-h-[18px] leading-tight">
+                                  Campaign
+                              </label>
+                              <select
+                                  value={downloadCampaign}
+                                  onChange={(e) => setDownloadCampaign(e.target.value)}
+                                  className="bg-[#0a0a0f] border border-white/10 rounded-xl px-4 py-0 text-white text-[13px] w-full h-11 box-border outline-none focus:border-blue-500/50"
+                              >
+                                  <option value="">Select campaign…</option>
+                                  <option value="all">All Campaigns</option>
+                                  {campaigns.map(c => (
+                                      <option key={c.campaign_id} value={c.campaign_id}>{c.name}</option>
+                                  ))}
+                              </select>
+                          </div>
 
-                        <div className="min-w-0">
-                            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 min-h-[18px] leading-tight">
-                                Client
-                            </label>
-                            <select
-                                value={downloadClient}
-                                onChange={(e) => setDownloadClient(e.target.value)}
-                                className="bg-[#0a0a0f] border border-white/10 rounded-xl px-4 py-0 text-white text-[13px] w-full h-11 box-border outline-none focus:border-blue-500/50"
-                            >
-                                <option value="">Select client…</option>
-                                <option value="all">All Clients</option>
-                                {clients.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
-                            </select>
-                        </div>
+                          <div className="min-w-0">
+                              <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 min-h-[18px] leading-tight">
+                                  Client
+                              </label>
+                              <select
+                                  value={downloadClient}
+                                  onChange={(e) => setDownloadClient(e.target.value)}
+                                  className="bg-[#0a0a0f] border border-white/10 rounded-xl px-4 py-0 text-white text-[13px] w-full h-11 box-border outline-none focus:border-blue-500/50"
+                              >
+                                  <option value="">Select client…</option>
+                                  <option value="all">All Clients</option>
+                                  {clients.map(c => (
+                                      <option key={c.id} value={c.id}>{c.name}</option>
+                                  ))}
+                              </select>
+                          </div>
 
-                        <div className="min-w-0 md:max-w-none xl:max-w-[140px]">
-                            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 min-h-[18px] leading-tight">
-                                Quantity <span className="text-blue-500">*</span>
-                            </label>
-                            <div className="relative h-11">
-                                <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
-                                <input
-                                    type="number"
-                                    min={1}
-                                    max={exportCount ?? 500000}
-                                    value={downloadQty}
-                                    onChange={(e) => {
-                                        const v = e.target.value;
-                                        setDownloadQty(v === '' ? '' : parseInt(v, 10));
-                                    }}
-                                    className="w-full h-11 bg-[#0a0a0f] border border-white/10 rounded-xl py-0 pl-10 pr-4 text-white text-[13px] font-mono box-border outline-none focus:border-blue-500/50"
-                                />
-                            </div>
-                        </div>
+                          <div className="min-w-0">
+                              <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 min-h-[18px] leading-tight">
+                                  Data Filter Preset
+                              </label>
+                              <select
+                                  value={selectedPreset}
+                                  onChange={(e) => {
+                                      const filterId = e.target.value;
+                                      setSelectedPreset(filterId);
 
-                        <div className="min-w-0 sm:col-span-2 xl:col-span-1">
-                            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 min-h-[18px] leading-tight invisible" aria-hidden="true">
-                                Export
-                            </label>
-                            <button
-                                type="button"
-                                onClick={handleDownload}
-                                disabled={downloading || (!downloadCampaign && !downloadClient) || loadingExportCount || exportCount === 0}
-                                title={exportCount === 0 ? 'No records available for this selection' : undefined}
-                                className="w-full flex items-center justify-center gap-2 h-11 px-4 rounded-xl text-[13px] font-bold bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-blue-500 hover:to-indigo-500 transition-all"
-                            >
-                                {downloading ? (
-                                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" />
-                                ) : (
-                                    <FolderDown className="w-4 h-4 shrink-0" />
-                                )}
-                                <span className="truncate">{downloading ? 'Exporting…' : 'Download CSV'}</span>
-                            </button>
-                        </div>
-                    </div>
+                                      if (!filterId) {
+                                          setDownloadStatesList([]);
+                                          return;
+                                      }
 
-                    {(downloadCampaign || downloadClient) && (
+                                      const selectedFilter = filters.find(f => String(f.id) === String(filterId));
+                                      const rawStates = selectedFilter?.states || selectedFilter?.state || [];
+                                      const presetStates = Array.isArray(rawStates)
+                                          ? rawStates
+                                          : String(rawStates || '').split(',');
+
+                                      const cleanStates = presetStates
+                                          .map(st => String(st || '').trim().toUpperCase())
+                                          .filter(Boolean);
+
+                                      setDownloadStatesList(cleanStates);
+                                      setStateDropdownOpen(false);
+                                  }}
+                                  disabled={loadingFilters}
+                                  className="bg-[#0a0a0f] border border-white/10 rounded-xl px-4 py-0 text-white text-[13px] w-full h-11 box-border outline-none focus:border-blue-500/50"
+                              >
+                                  <option value="">{loadingFilters ? 'Loading filters...' : 'Choose preset...'}</option>
+                                  {filters.map(f => (
+                                      <option key={f.id} value={f.id}>
+                                          {f.name || f.filter_name || f.preset_name || `Preset ${f.id}`}
+                                      </option>
+                                  ))}
+                              </select>
+                          </div>
+
+                          <div className="min-w-0 relative">
+                              <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 min-h-[18px] leading-tight">
+                                  States
+                              </label>
+
+                              <button
+                                  type="button"
+                                  onClick={() => setStateDropdownOpen(v => !v)}
+                                  className="bg-[#0a0a0f] border border-white/10 rounded-xl px-4 py-0 text-white text-[13px] w-full h-11 box-border outline-none focus:border-blue-500/50 text-left flex items-center justify-between gap-2"
+                              >
+                                  <span className="truncate">
+                                      {selectedDownloadStates.length === 0
+                                          ? 'All States'
+                                          : selectedDownloadStates.length === 1
+                                              ? selectedDownloadStates[0]
+                                              : `${selectedDownloadStates.length} States Selected`}
+                                  </span>
+                                  <span className="text-slate-500">▾</span>
+                              </button>
+
+                              {stateDropdownOpen && (
+                                  <div className="absolute left-0 top-full z-[100] mt-2 w-full max-h-72 overflow-y-auto overscroll-contain rounded-xl border border-white/10 bg-[#0a0a0f] shadow-2xl p-3">
+                                      <div className="flex items-center justify-between gap-2 mb-2 border-b border-white/10 pb-2">
+                                          <button
+                                              type="button"
+                                              onClick={() => {
+                                                  setSelectedPreset('');
+                                                  setDownloadStatesList(US_STATES);
+                                              }}
+                                              className="text-[11px] font-bold text-blue-300 hover:text-blue-200"
+                                          >
+                                              Select All
+                                          </button>
+                                          <button
+                                              type="button"
+                                              onClick={() => {
+                                                  setSelectedPreset('');
+                                                  setDownloadStatesList([]);
+                                              }}
+                                              className="text-[11px] font-bold text-slate-400 hover:text-white"
+                                          >
+                                              Clear
+                                          </button>
+                                      </div>
+
+                                      <div className="grid grid-cols-3 gap-1">
+                                          {US_STATES.map(st => (
+                                              <label
+                                                  key={st}
+                                                  className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer text-[12px] text-slate-300"
+                                              >
+                                                  <input
+                                                      type="checkbox"
+                                                      checked={selectedDownloadStates.includes(st)}
+                                                      onChange={() => toggleDownloadState(st)}
+                                                      className="accent-blue-500"
+                                                  />
+                                                  <span>{st}</span>
+                                              </label>
+                                          ))}
+                                      </div>
+                                  </div>
+                              )}
+                          </div>
+
+                          <div className="min-w-0">
+                              <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 min-h-[18px] leading-tight">
+                                  Quantity <span className="text-blue-500">*</span>
+                              </label>
+                              <div className="relative h-11">
+                                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600 pointer-events-none" />
+                                  <input
+                                      type="number"
+                                      min={1}
+                                      max={exportCount ?? 500000}
+                                      value={downloadQty}
+                                      onChange={(e) => {
+                                          const v = e.target.value;
+                                          setDownloadQty(v === '' ? '' : parseInt(v, 10));
+                                      }}
+                                      className="w-full h-11 bg-[#0a0a0f] border border-white/10 rounded-xl py-0 pl-10 pr-4 text-white text-[13px] font-mono box-border outline-none focus:border-blue-500/50"
+                                  />
+                              </div>
+                          </div>
+
+                          <div className="min-w-0 sm:col-span-2 xl:col-span-1">
+                              <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 min-h-[18px] leading-tight invisible" aria-hidden="true">
+                                  Export
+                              </label>
+                              <button
+                                  type="button"
+                                  onClick={handleDownload}
+                                  disabled={downloading || (!downloadCampaign && !downloadClient && !downloadState) || loadingExportCount || exportCount === 0}
+                                  title={exportCount === 0 ? 'No records available for this selection' : undefined}
+                                  className="w-full flex items-center justify-center gap-2 h-11 px-4 rounded-xl text-[13px] font-bold bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-blue-500 hover:to-indigo-500 transition-all"
+                              >
+                                  {downloading ? (
+                                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" />
+                                  ) : (
+                                      <FolderDown className="w-4 h-4 shrink-0" />
+                                  )}
+                                  <span className="truncate">{downloading ? 'Checking BLA…' : 'Run BLA Check'}</span>
+                              </button>
+                          </div>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                          <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                              <input
+                                  type="checkbox"
+                                  checked={includePreviouslyDownloaded}
+                                  onChange={(e) => {
+                                      setIncludePreviouslyDownloaded(e.target.checked);
+                                      setSeparationPreview(null);
+                                      setDownloadError('');
+                                      setDownloadSuccess('');
+                                  }}
+                                  className="w-4 h-4 accent-blue-500 cursor-pointer"
+                              />
+                              <span className="text-[12px] font-semibold text-slate-300">
+                                  Include Previously Downloaded Numbers
+                              </span>
+                          </label>
+
+                          {!includePreviouslyDownloaded && (
+                              <span className="text-[11px] text-slate-500">
+                                  Previously downloaded numbers are excluded.
+                              </span>
+                          )}
+                      </div>
+
+                      {(downloadCampaign || downloadClient || downloadState) && (
                         <p className="text-[11px] text-slate-500 mt-3">
                             {loadingExportCount ? 'Checking availability…' : (
-                                <>Available for export: <span className="text-blue-400 font-bold">{(exportCount ?? 0).toLocaleString()}</span></>
+                                <>
+                                      Available for export: <span className="text-blue-400 font-bold">{(exportCount ?? 0).toLocaleString()}</span>
+                                      {selectedPreset && downloadState && (
+                                          <span className="ml-2 text-slate-500">
+                                              Preset states: <span className="text-blue-300">{downloadState}</span>
+                                          </span>
+                                      )}
+                                  </>
                             )}
                         </p>
                     )}
@@ -318,6 +552,47 @@ const SeparationUpload = () => {
             </div>
 
             {/* Import Section */}
+
+              {separationPreview && (
+                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5 shadow-xl">
+                      <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                          <div>
+                              <p className="text-emerald-300 text-sm font-bold">
+                                  Blacklist Alliance Scrub Completed
+                              </p>
+                              <p className="text-slate-400 text-xs mt-2 leading-relaxed">
+                                  BLA Checked:
+                                  <span className="text-blue-300 font-bold ml-1">{(separationPreview.summary?.blaChecked || separationPreview.summary?.total || 0).toLocaleString()}</span>
+                                  {' '} | Good Leads:
+                                  <span className="text-emerald-300 font-bold ml-1">{(separationPreview.summary?.good || separationPreview.count || 0).toLocaleString()}</span>
+                                  {' '} | Blacklist:
+                                  <span className="text-red-300 font-bold ml-1">{(separationPreview.summary?.blacklist || 0).toLocaleString()}</span>
+                                  {' '} | State DNC:
+                                  <span className="text-orange-300 font-bold ml-1">{(separationPreview.summary?.stateDnc || 0).toLocaleString()}</span>
+                                  {' '} | Fed DNC:
+                                  <span className="text-orange-300 font-bold ml-1">{(separationPreview.summary?.federalDnc || 0).toLocaleString()}</span>
+                                  {' '} | Bad Phone:
+                                  <span className="text-red-300 font-bold ml-1">{(separationPreview.summary?.badPhone || 0).toLocaleString()}</span>
+                                  {' '} | Errors:
+                                  <span className="text-yellow-300 font-bold ml-1">{(separationPreview.summary?.errors || 0).toLocaleString()}</span>
+                                  <br />
+                                  <span className="text-slate-500 text-[11px]">
+                                      Safety filter applied before BLA: DNC, Sale, and Dead numbers are excluded from the BLA batch and clean CSV.
+                                  </span>                              </p>
+                          </div>
+
+                          <button
+                              type="button"
+                              onClick={() => downloadBlob(separationPreview.csv, separationPreview.fileName)}
+                              className="flex items-center justify-center gap-2 h-10 px-4 rounded-xl text-[13px] font-bold bg-gradient-to-r from-emerald-600 to-green-600 text-white shadow-lg hover:from-emerald-500 hover:to-green-500 transition-all"
+                          >
+                              <FolderDown className="w-4 h-4 shrink-0" />
+                              Download Clean CSV
+                          </button>
+                      </div>
+                  </div>
+              )}
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                 {/* Campaign Selection */}
                 <div className="bg-[#1e1e2d] rounded-2xl border border-white/5 p-6 shadow-xl relative overflow-hidden group">
@@ -403,87 +678,91 @@ const SeparationUpload = () => {
                 </div>
             </div>
 
-            {/* Table Container */}
-            <div className="bg-[#1e1e2d] rounded-[2rem] border border-white/5 overflow-x-auto shadow-2xl relative">
-                {/* Decorative glow */}
-                <div className="absolute bottom-0 right-0 w-full h-1/2 bg-blue-500/5 rounded-full blur-[120px] pointer-events-none z-0"></div>
+                {/* Table Container */}
+              <div className="bg-[#1e1e2d] rounded-[2rem] border border-white/5 overflow-x-auto shadow-2xl relative">
+                  <div className="absolute bottom-0 right-0 w-full h-1/2 bg-blue-500/5 rounded-full blur-[120px] pointer-events-none z-0"></div>
 
-                <div className="min-w-[1000px] relative z-10">
-                    {/* Table Header */}
-                    <div className="grid grid-cols-[150px_150px_200px_minmax(150px,1fr)_150px_150px_120px] p-5 border-b border-white/10 bg-[#0a0a0f]/80 backdrop-blur-md sticky top-0">
-                        {['Phone', 'Name', 'Email', 'Campaign', 'Client', 'Date Added', 'Action'].map((h) => (
-                            <span key={h} className="text-slate-400 text-[11px] font-bold uppercase tracking-widest pl-2">
-                                {h}
-                            </span>
-                        ))}
-                    </div>
+                  <div className="min-w-[1350px] relative z-10">
+                      <div className="grid grid-cols-[140px_90px_100px_150px_220px_minmax(150px,1fr)_150px_170px_120px] p-5 border-b border-white/10 bg-[#0a0a0f]/80 backdrop-blur-md sticky top-0">
+                          {['Phone', 'State', 'Area Code', 'Name', 'Email', 'Campaign', 'Client', 'Date Added', 'Action'].map((h) => (
+                              <span key={h} className="text-slate-400 text-[11px] font-bold uppercase tracking-widest pl-2">
+                                  {h}
+                              </span>
+                          ))}
+                      </div>
 
-                    {/* Table Body */}
-                    <div className="divide-y divide-white/5">
-                        {loading ? (
-                            <div className="p-16 text-center text-blue-400 animate-pulse font-medium tracking-widest uppercase text-sm">Loading records...</div>
-                        ) : rows.length === 0 ? (
-                            <div className="p-16 text-center text-slate-500 flex flex-col items-center">
-                                <Pickaxe className="w-12 h-12 mb-4 opacity-20" strokeWidth={1.5} />
-                                <p className="font-medium text-[15px] mb-1 text-slate-400">No separated records found</p>
-                                <p className="text-xs">Your separation database for this filter is empty.</p>
-                            </div>
-                        ) : (
-                            rows.map((r) => (
-                                <div key={r.id} className="grid grid-cols-[150px_150px_200px_minmax(150px,1fr)_150px_150px_120px] p-4 items-center hover:bg-white/5 transition-colors group">
-                                    
-                                    {/* Phone */}
-                                    <div className="pl-2">
-                                        <span className="text-slate-300 font-mono text-[13px] bg-[#0a0a0f] border border-white/5 px-2 py-1 rounded-lg shadow-sm group-hover:text-white transition-colors">
-                                            {r.phone}
-                                        </span>
-                                    </div>
-                                    
-                                    {/* Name */}
-                                    <div className="text-white font-medium text-[13px] truncate pr-4 pl-2 group-hover:text-blue-300 transition-colors">
-                                        {r.name || '—'}
-                                    </div>
-                                    
-                                    {/* Email */}
-                                    <div className="text-slate-400 text-[13px] pr-4 pl-2 font-medium truncate hover:text-slate-300 transition-colors">
-                                        {r.email || '—'}
-                                    </div>
-                                    
-                                    {/* Campaign */}
-                                    <div className="text-white font-bold text-[13px] truncate pr-4 pl-2 group-hover:text-blue-300 transition-colors">
-                                        {r.campaign_name || '—'}
-                                    </div>
+                      <div className="divide-y divide-white/5">
+                          {loading ? (
+                              <div className="p-16 text-center text-blue-400 animate-pulse font-medium tracking-widest uppercase text-sm">Loading records...</div>
+                          ) : rows.length === 0 ? (
+                              <div className="p-16 text-center text-slate-500 flex flex-col items-center">
+                                  <Pickaxe className="w-12 h-12 mb-4 opacity-20" strokeWidth={1.5} />
+                                  <p className="font-medium text-[15px] mb-1 text-slate-400">No separated records found</p>
+                                  <p className="text-xs">Your separation database for this filter is empty.</p>
+                              </div>
+                          ) : (
+                              rows.map((r) => {
+                                  const areaCode = r.area_code || getSepAreaCodeFromPhone(r.phone);
+                                  const state = r.state || getSepStateFromPhone(r.phone);
 
-                                    {/* Client */}
-                                    <div className="text-white font-bold text-[13px] truncate pr-4 pl-2 group-hover:text-blue-300 transition-colors">
-                                        {r.client_name || '—'}
-                                    </div>
-                                    
-                                    {/* Created At */}
-                                    <div className="text-slate-500 text-[12px] font-mono pl-2">
-                                        {(r.uploaded_at || r.created_at) ? new Date(r.uploaded_at || r.created_at).toLocaleString(undefined, {
-                                            year: 'numeric', month: 'short', day: 'numeric',
-                                            hour: '2-digit', minute: '2-digit'
-                                        }) : '—'}
-                                    </div>
-                                    
-                                    {/* Action */}
-                                    <div className="pl-2">
-                                        <button
-                                            onClick={() => openDeleteConfirm(r.id)}
-                                            className="bg-red-500/5 hover:bg-red-500/20 text-red-400/80 hover:text-red-400 border border-transparent hover:border-red-500/30 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 active:scale-95"
-                                        >
-                                            <Trash2 className="w-3.5 h-3.5" /> Remove
-                                        </button>
-                                    </div>
-                                </div>
-                            ))
-                        )}
-                    </div>
-                </div>
-            </div>
+                                  return (
+                                      <div key={r.id} className="grid grid-cols-[140px_90px_100px_150px_220px_minmax(150px,1fr)_150px_170px_120px] p-4 items-center hover:bg-white/5 transition-colors group">
+                                          <div className="pl-2">
+                                              <span className="text-slate-300 font-mono text-[13px] bg-[#0a0a0f] border border-white/5 px-2 py-1 rounded-lg shadow-sm group-hover:text-white transition-colors">
+                                                  {r.phone}
+                                              </span>
+                                          </div>
 
-            {/* Custom Delete Confirmation Modal */}
+                                          <div className="pl-2">
+                                              <span className="text-blue-300 font-bold text-[12px] bg-blue-500/10 border border-blue-500/10 px-2 py-1 rounded-lg">
+                                                  {state || 'Unknown'}
+                                              </span>
+                                          </div>
+
+                                          <div className="text-slate-300 font-mono text-[13px] pl-2">
+                                              {areaCode || '—'}
+                                          </div>
+
+                                          <div className="text-white font-medium text-[13px] truncate pr-4 pl-2 group-hover:text-blue-300 transition-colors">
+                                              {r.name || '—'}
+                                          </div>
+
+                                          <div className="text-slate-400 text-[13px] pr-4 pl-2 font-medium truncate hover:text-slate-300 transition-colors">
+                                              {r.email || '—'}
+                                          </div>
+
+                                          <div className="text-white font-bold text-[13px] truncate pr-4 pl-2 group-hover:text-blue-300 transition-colors">
+                                              {r.campaign_name || '—'}
+                                          </div>
+
+                                          <div className="text-white font-bold text-[13px] truncate pr-4 pl-2 group-hover:text-blue-300 transition-colors">
+                                              {r.client_name || '—'}
+                                          </div>
+
+                                          <div className="text-slate-500 text-[12px] font-mono pl-2">
+                                              {(r.uploaded_at || r.created_at) ? new Date(r.uploaded_at || r.created_at).toLocaleString(undefined, {
+                                                  year: 'numeric', month: 'short', day: 'numeric',
+                                                  hour: '2-digit', minute: '2-digit'
+                                              }) : '—'}
+                                          </div>
+
+                                          <div className="pl-2">
+                                              <button
+                                                  onClick={() => openDeleteConfirm(r.id)}
+                                                  className="bg-red-500/5 hover:bg-red-500/20 text-red-400/80 hover:text-red-400 border border-transparent hover:border-red-500/30 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 active:scale-95"
+                                              >
+                                                  <Trash2 className="w-3.5 h-3.5" /> Remove
+                                              </button>
+                                          </div>
+                                      </div>
+                                  );
+                              })
+                          )}
+                      </div>
+                  </div>
+              </div>
+
+          {/* Custom Delete Confirmation Modal */}
             {deleteConfirmId && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
                     <div className="bg-[#1e1e2d] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden relative animate-in fade-in zoom-in duration-200">

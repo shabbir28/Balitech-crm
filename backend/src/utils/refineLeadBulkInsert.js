@@ -11,6 +11,70 @@ const getQuality = (disposition) => {
   return badStatuses.has(String(disposition).toUpperCase().trim()) ? 'Bad' : 'Good';
 };
 
+// Normalize VICIdial / Excel call dates before sending them to PostgreSQL.
+// PostgreSQL rejects MySQL zero dates such as "0000-00-00 00:00:00".
+// Excel may also provide serial date/time values such as "46205.7795717593".
+const normalizeCallDate = (value) => {
+  if (value === null || value === undefined) return null;
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return value.toISOString().slice(0, 19).replace('T', ' ');
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  // MySQL/VICIdial zero-date values
+  if (
+    /^0000-00-00(?:[ T]00:00:00(?:\.0+)?)?$/.test(raw) ||
+    /^0000-00-00/.test(raw)
+  ) {
+    return null;
+  }
+
+  // Excel serial date/time.
+  // Excel/LibreOffice compatible epoch: 1899-12-30.
+  if (/^\d+(?:\.\d+)?$/.test(raw)) {
+    const serial = Number(raw);
+
+    // Restrict conversion to a realistic Excel serial range so ordinary
+    // numeric garbage is not accidentally treated as a date.
+    if (Number.isFinite(serial) && serial >= 1 && serial < 100000) {
+      const milliseconds = Math.round((serial - 25569) * 86400000);
+      const d = new Date(milliseconds);
+
+      if (!Number.isNaN(d.getTime())) {
+        return d.toISOString().slice(0, 19).replace('T', ' ');
+      }
+    }
+
+    return null;
+  }
+
+  // Keep normal SQL-style dates unchanged after basic validation.
+  // Examples:
+  // 2026-08-08
+  // 2026-08-08 12:34:56
+  // 2026-08-08T12:34:56
+  if (
+    /^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?)?$/.test(raw)
+  ) {
+    const test = new Date(raw.replace(' ', 'T') + (
+      /^\d{4}-\d{2}-\d{2}$/.test(raw) ? 'T00:00:00Z' : 'Z'
+    ));
+
+    if (!Number.isNaN(test.getTime())) {
+      return raw.replace('T', ' ');
+    }
+
+    return null;
+  }
+
+  // Unknown/unusable date format: do not let one bad value fail the batch.
+  return null;
+};
+
 /**
  * Insert only new refine_data (fresh upload). Each batch is its own statement — no long transaction.
  */
@@ -47,7 +111,7 @@ const insertFreshLeadsBatches = async (
         record.age || null,
         job_id || null,
         getQuality(record.disposition),
-        record.call_date || null,
+        normalizeCallDate(record.call_date),
         record.duration || null,
       );
       paramIndex += 13;
@@ -117,7 +181,7 @@ const insertLeadsUpsertBatches = async (
         record.age || null,
         job_id || null,
         getQuality(record.disposition),
-        record.call_date || null,
+        normalizeCallDate(record.call_date),
         record.duration || null,
       );
       paramIndex += 13;

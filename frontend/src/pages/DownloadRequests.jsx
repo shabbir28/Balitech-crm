@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
+import { fmtDbDateTime, fmtDbTimeAgo, parseDbTime } from '../utils/dbTime';
+
 import {
     ClipboardList, RefreshCw, CheckCircle2, XCircle, Clock,
     AlertCircle, MapPin, CalendarDays, X, Check, ChevronDown, ChevronUp,
@@ -11,12 +13,6 @@ const fmtDate = (d) => d
     : '—';
 
 
-const parseDbTime = (value) => {
-    if (!value) return null;
-    const raw = String(value).trim();
-    const isoLike = raw.includes("T") ? raw : raw.replace(" ", "T");
-    return new Date(/[zZ]|[+-]\d{2}:\d{2}$/.test(isoLike) ? isoLike : `${isoLike}Z`);
-};
 
 const fmtTimeAgo = (d) => {
     const diff = (Date.now() - parseDbTime(d).getTime()) / 1000;
@@ -394,7 +390,7 @@ const DownloadRequests = () => {
                                             </div>
                                             <div>
                                                 <p className="text-white font-bold text-sm truncate">{adminName}</p>
-                                                <p className="text-slate-500 text-xs font-medium mt-0.5">{fmtTimeAgo(req.requested_at)}</p>
+                                                <p className="text-slate-500 text-xs font-medium mt-0.5">{fmtDbTimeAgo(req.requested_at)}</p>
                                             </div>
                                         </div>
 
@@ -472,12 +468,12 @@ const DownloadRequests = () => {
                                                         <div className="bg-[#13151f] p-4 rounded-xl border border-white/5 space-y-3">
                                                             <div className="flex justify-between items-center">
                                                                 <span className="text-xs font-medium text-slate-500">Submitted</span>
-                                                                <span className="text-sm font-bold text-white">{fmtDate(req.requested_at)}</span>
+                                                                <span className="text-sm font-bold text-white">{fmtDbDateTime(req.requested_at)}</span>
                                                             </div>
                                                             {req.status !== 'pending' && (
                                                                 <div className="flex justify-between items-center pt-3 border-t border-white/5">
                                                                     <span className="text-xs font-medium text-slate-500">Reviewed On</span>
-                                                                    <span className="text-sm font-bold text-white">{fmtDate(req.reviewed_at)}</span>
+                                                                    <span className="text-sm font-bold text-white">{fmtDbDateTime(req.reviewed_at)}</span>
                                                                 </div>
                                                             )}
                                                             {req.reviewed_by_username && (

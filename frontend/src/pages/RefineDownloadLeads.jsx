@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../services/api';
 import { AuthContext } from '../context/AuthContext';
+import { fmtDbDateTime, fmtDbTimeAgo, parseDbTime } from '../utils/dbTime';
+
 import {
     Send, Download, AlertCircle, ChevronDown, Check,
     Clock, CheckCircle2, XCircle, RefreshCw, FileDown,
@@ -785,7 +787,7 @@ const RefineDownloadLeads = () => {
                     disposition: form.dispositions,
                     job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined 
                 };
-                const res = await api.post('/refine-download/preview-scrub', body, { timeout: 10 * 60 * 1000 });
+                const res = await api.post('/refine-download/preview-scrub', body, { timeout: 15 * 60 * 1000 });
                 // Show the BLA summary — agent must confirm before request is sent
                 setScrubSummaryData({ summary: res.data.summary, goodCsv: null, badCsv: null });
                 setPreviewMode(true);
@@ -809,9 +811,19 @@ const RefineDownloadLeads = () => {
         if (!previewFormSnapshot) return;
         setSubmittingRequest(true); setError(''); setSuccessMsg('');
         try {
+            const goodQty = Number(scrubSummaryData?.summary?.good || 0);
+
+            if (!goodQty || goodQty <= 0) {
+                setError('No good leads available to request after BLA scrub.');
+                setSubmittingRequest(false);
+                return;
+            }
+
             const { selectedFileIds: snapFileIds, dispositions: snapDispositions, ...snapForm } = previewFormSnapshot;
             const body = {
                 ...snapForm,
+                quantity: goodQty,
+                requested_quantity: goodQty,
                 disposition: snapDispositions,
                 job_id: snapFileIds.length > 0 ? snapFileIds : undefined,
                 bla_summary: scrubSummaryData?.summary || null,
@@ -1480,7 +1492,7 @@ const RefineDownloadLeads = () => {
                                                     <span className="font-semibold text-white">{req.vendor_name || 'All Vendors'}</span>
                                                 </td>
                                                 <td className="px-5 py-4">
-                                                    <span className="font-mono text-orange-400 font-bold">{req.quantity?.toLocaleString()}</span>
+                                                    <span className="font-mono text-orange-400 font-bold">{Number(req.final_good_count ?? req.quantity).toLocaleString()}</span>
                                                 </td>
                                                 <td className="px-5 py-4 text-slate-400 text-xs font-mono whitespace-nowrap">
                                                     {req.min_age || req.max_age 
@@ -1496,7 +1508,7 @@ const RefineDownloadLeads = () => {
                                                 <td className="px-5 py-4 text-slate-500 text-xs whitespace-nowrap">
                                                     <div className="flex items-center gap-1.5">
                                                         <Calendar className="h-3 w-3" />
-                                                        {fmtDate(req.requested_at)}
+                                                        {fmtDbDateTime(req.requested_at)}
                                                     </div>
                                                 </td>
                                                 <td className="px-5 py-4">

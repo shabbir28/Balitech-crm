@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../services/api';
 import { AuthContext } from '../context/AuthContext';
+import { fmtDbDateTime, fmtDbTimeAgo, parseDbTime } from '../utils/dbTime';
+
 import {
     Send, Download, AlertCircle, ChevronDown, Check,
     Clock, CheckCircle2, XCircle, RefreshCw, FileDown,
@@ -1358,7 +1360,7 @@ const WcDbDownloadLeads = () => {
                                                 <td className="px-5 py-4 text-slate-500 text-xs whitespace-nowrap">
                                                     <div className="flex items-center gap-1.5">
                                                         <Calendar className="h-3 w-3" />
-                                                        {fmtDate(req.requested_at)}
+                                                        {fmtDbDateTime(req.requested_at)}
                                                     </div>
                                                 </td>
                                                 <td className="px-5 py-4">

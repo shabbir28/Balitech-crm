@@ -1,4 +1,8 @@
-const { Pool } = require("pg");
+const { Pool, types } = require("pg");
+
+// PostgreSQL timestamp without timezone is stored as UTC in DB.
+// Return raw string so frontend can apply PKT correctly.
+types.setTypeParser(1114, (str) => str);
 require("dotenv").config();
 
 const pool = new Pool({

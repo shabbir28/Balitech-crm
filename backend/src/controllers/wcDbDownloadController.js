@@ -155,6 +155,158 @@ const downloadWcDbData = async (req, res) => {
     if (!quantity || quantity <= 0)
       return res.status(400).json({ message: "Valid quantity is required" });
 
+    const wantsAsyncScrub = req.body.async_scrub === true || req.body.async_scrub === "true";
+
+    if (wantsAsyncScrub) {
+      const fileName = `wc_db_download_${Date.now()}.csv`;
+
+      const pendingSummary = {
+        total: Number(quantity) || 0,
+        fileName,
+        blacklist: 0,
+        suppress: 0,
+        stateDnc: 0,
+        federalDnc: 0,
+        wireless: 0,
+        landline: 0,
+        good: 0,
+        errors: 0,
+        badPhone: 0,
+        scrubPending: true,
+        scrubCompleted: false,
+        scrubFailed: false,
+      };
+
+      const pendingPayload = {
+        fileName,
+        logId: null,
+        count: 0,
+        goodCsv: "",
+        csv: "",
+        badCsv: "",
+        summary: pendingSummary,
+      };
+
+      const logRes = await db.query(
+        `INSERT INTO wc_db_download_logs (user_id, vendor_id, quantity, states, min_age, max_age, csv_payload)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+        [
+          req.user.id,
+          vendor_id && vendor_id !== "all" ? vendor_id : null,
+          Number(quantity) || 0,
+          normalizedStates.length > 0 ? normalizedStates : null,
+          min_age || null,
+          max_age || null,
+          JSON.stringify(pendingPayload),
+        ]
+      );
+
+      const asyncLogId = logRes.rows[0].id;
+      pendingPayload.logId = asyncLogId;
+
+      await db.query(
+        `UPDATE wc_db_download_logs SET csv_payload=$1 WHERE id=$2`,
+        [JSON.stringify(pendingPayload), asyncLogId]
+      );
+
+      setImmediate(async () => {
+        try {
+          const bgReq = {
+            body: {
+              vendor_id,
+              quantity,
+              states: normalizedStates,
+              min_age,
+              max_age,
+              include_downloaded,
+              job_id,
+              async_scrub: false,
+            },
+            user: req.user,
+            params: {},
+            query: {},
+            headers: {},
+          };
+
+          const bgResult = await new Promise((resolve, reject) => {
+            const fakeRes = {
+              statusCode: 200,
+              status(code) { this.statusCode = code; return this; },
+              setHeader() { return this; },
+              header() { return this; },
+              json(data) { resolve({ statusCode: this.statusCode, body: data }); return this; },
+              send(data) { resolve({ statusCode: this.statusCode, body: data }); return this; },
+              end(data) { resolve({ statusCode: this.statusCode, body: data }); return this; },
+            };
+
+            Promise.resolve(downloadWcDbData(bgReq, fakeRes)).catch(reject);
+          });
+
+          if (bgResult.statusCode >= 400) {
+            const failedPayload = {
+              ...pendingPayload,
+              summary: {
+                ...pendingSummary,
+                scrubPending: false,
+                scrubCompleted: false,
+                scrubFailed: true,
+                scrubError: bgResult.body?.message || "Background WC DB export failed",
+              },
+            };
+
+            await db.query(
+              `UPDATE wc_db_download_logs SET csv_payload=$1 WHERE id=$2`,
+              [JSON.stringify(failedPayload), asyncLogId]
+            );
+            return;
+          }
+
+          const finalPayload = bgResult.body || {};
+          const generatedLogId = finalPayload.logId;
+
+          finalPayload.logId = asyncLogId;
+          finalPayload.summary = {
+            ...(finalPayload.summary || {}),
+            scrubPending: false,
+            scrubCompleted: true,
+          };
+
+          const finalCount = finalPayload.count || finalPayload.summary?.good || 0;
+
+          await db.query(
+            `UPDATE wc_db_download_logs SET quantity=$1, csv_payload=$2 WHERE id=$3`,
+            [finalCount, JSON.stringify(finalPayload), asyncLogId]
+          );
+
+          if (generatedLogId && Number(generatedLogId) !== Number(asyncLogId)) {
+            await db.query(`DELETE FROM wc_db_download_logs WHERE id=$1`, [generatedLogId]).catch(() => {});
+          }
+
+          console.log(`[WC DB Async] completed log ${asyncLogId}, good=${finalCount}`);
+        } catch (bgErr) {
+          console.error(`[WC DB Async] failed log ${asyncLogId}:`, bgErr);
+
+          const failedPayload = {
+            ...pendingPayload,
+            summary: {
+              ...pendingSummary,
+              scrubPending: false,
+              scrubCompleted: false,
+              scrubFailed: true,
+              scrubError: bgErr.message || "Background WC DB export failed",
+            },
+          };
+
+          await db.query(
+            `UPDATE wc_db_download_logs SET csv_payload=$1 WHERE id=$2`,
+            [JSON.stringify(failedPayload), asyncLogId]
+          ).catch(() => {});
+        }
+      });
+
+      return res.status(202).json(pendingPayload);
+    }
+
     const { filters, params, paramIdx } = buildFilters({
       vendor_id, states: normalizedStates, min_age, max_age, include_downloaded, job_id,
     });
@@ -293,23 +445,85 @@ const downloadWcDbData = async (req, res) => {
 const getStateCounts = async (req, res) => {
   try {
     const { vendor_id, states, min_age, max_age, include_downloaded, job_id } = req.body;
-    const { filters, params } = buildFilters({ vendor_id, states, min_age, max_age, include_downloaded, job_id });
-    const whereClause = filters.join(" AND ");
+
+    // Specific file/job selected ho to old live logic use hogi,
+    // kyunki current accurate cache vendor/state/area_code/age/status based hai, job_id based nahi.
+    if (job_id && (Array.isArray(job_id) ? job_id.length > 0 : String(job_id).trim() !== "")) {
+      const { filters, params } = buildFilters({ vendor_id, states, min_age, max_age, include_downloaded, job_id });
+      const whereClause = filters.join(" AND ");
+
+      const result = await db.query(
+        `SELECT area_code, COUNT(id)::int as count FROM wc_db_data WHERE ${whereClause} GROUP BY area_code`,
+        params
+      );
+
+      const stateCounts = {};
+      for (const row of result.rows) {
+        const abbr = areaCodesMap[row.area_code] || "Unknown";
+        stateCounts[abbr] = (stateCounts[abbr] || 0) + Number(row.count || 0);
+      }
+
+      if (states && Array.isArray(states) && states.length > 0) {
+        for (const st of states) {
+          if (stateCounts[st] === undefined) stateCounts[st] = 0;
+        }
+      }
+
+      return res.json(stateCounts);
+    }
+
+    const filters = [];
+    const params = [];
+    let idx = 1;
+
+    if (vendor_id && vendor_id !== "all") {
+      filters.push(`vendor_id = $${idx++}::uuid`);
+      params.push(vendor_id);
+    }
+
+    if (states && Array.isArray(states) && states.length > 0) {
+      filters.push(`state = ANY($${idx++}::text[])`);
+      params.push(states);
+    }
+
+    const minAgeNum = Number(min_age);
+    if (Number.isFinite(minAgeNum) && min_age !== "" && min_age !== null && min_age !== undefined) {
+      filters.push(`age_int >= $${idx++}`);
+      params.push(minAgeNum);
+    }
+
+    const maxAgeNum = Number(max_age);
+    if (Number.isFinite(maxAgeNum) && max_age !== "" && max_age !== null && max_age !== undefined) {
+      filters.push(`age_int <= $${idx++}`);
+      params.push(maxAgeNum);
+    }
+
+    if (include_downloaded) {
+      filters.push(`status IN ('available', 'downloaded')`);
+    } else {
+      filters.push(`status = 'available'`);
+    }
+
+    const whereClause = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
 
     const result = await db.query(
-      `SELECT area_code, COUNT(id)::int as count FROM wc_db_data WHERE ${whereClause} GROUP BY area_code`,
+      `
+        SELECT state, COALESCE(SUM(lead_count), 0)::bigint AS count
+        FROM wc_db_website_state_counts_cache
+        ${whereClause}
+        GROUP BY state
+      `,
       params
     );
 
     const stateCounts = {};
     for (const row of result.rows) {
-      const abbr = areaCodesMap[row.area_code] || "Unknown";
-      stateCounts[abbr] = (stateCounts[abbr] || 0) + row.count;
+      stateCounts[row.state || "Unknown"] = Number(row.count || 0);
     }
 
     if (states && Array.isArray(states) && states.length > 0) {
-      for (const s of states) {
-        if (stateCounts[s] === undefined) stateCounts[s] = 0;
+      for (const st of states) {
+        if (stateCounts[st] === undefined) stateCounts[st] = 0;
       }
     }
 
@@ -394,76 +608,154 @@ const getDownloadFile = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 const previewScrub = async (req, res) => {
   const client = await db.getClient();
+
   try {
     const {
-      vendor_id, quantity, states,
-      min_age, max_age, job_id, include_downloaded,
+      vendor_id,
+      quantity,
+      states,
+      min_age,
+      max_age,
+      job_id,
+      include_downloaded,
     } = req.body;
 
-    if (!vendor_id) return res.status(400).json({ message: 'Please select a vendor.' });
-    if (!quantity || quantity <= 0) return res.status(400).json({ message: 'Valid quantity is required.' });
+    if (!vendor_id) {
+      return res.status(400).json({ message: "Please select a vendor." });
+    }
+
+    const requestedQty = parseInt(quantity, 10);
+    if (!requestedQty || requestedQty <= 0) {
+      return res.status(400).json({ message: "Valid quantity is required." });
+    }
 
     const { filters, params, paramIdx } = buildFilters({
-      vendor_id: vendor_id && vendor_id !== 'all' ? vendor_id : null,
-      states, min_age, max_age, job_id, include_downloaded,
+      vendor_id: vendor_id && vendor_id !== "all" ? vendor_id : null,
+      states,
+      min_age,
+      max_age,
+      job_id,
+      include_downloaded,
     });
 
-    const whereClause = filters.length > 0 ? filters.join(' AND ') : '1=1';
+    const whereClause = filters.length > 0 ? filters.join(" AND ") : "1=1";
 
     await client.query("SET local work_mem = '256MB'");
-    const result = await client.query(
-      `SELECT phone FROM wc_db_data WHERE ${whereClause} ORDER BY uploaded_at ASC LIMIT $${paramIdx}`,
-      [...params, quantity]
-    );
 
+    const selectSql =
+      "SELECT id, phone, area_code FROM wc_db_data WHERE " +
+      whereClause +
+      " ORDER BY id ASC LIMIT $" +
+      paramIdx;
+
+    const result = await client.query(selectSql, [...params, requestedQty]);
     const rows = result.rows;
+
     if (rows.length === 0) {
-      client.release();
-      return res.status(404).json({ message: 'No available leads found matching your criteria.' });
+      return res.status(404).json({ message: "No available leads found matching your criteria." });
     }
 
-    const allPhones = rows.map(r => normalizePhone(r.phone)).filter(p => p.length === 10);
-    let blacklist = 0, stateDnc = 0, federalDnc = 0, badPhone = 0, good = rows.length;
-    let scrubRan = false;
+    let finalRows = rows;
+    let blacklist = 0;
+    let stateDnc = 0;
+    let federalDnc = 0;
+    let badPhone = 0;
 
-    const MAX_API_SCRUB_PHONES = parseInt(process.env.MAX_API_SCRUB_PHONES || '5000');
-    if (MAX_API_SCRUB_PHONES > 0 && allPhones.length <= MAX_API_SCRUB_PHONES) {
-      try {
-        const scrubResult = await scrubPhones(allPhones);
-        if (!(allPhones.length >= 200 && scrubResult.bad.length === allPhones.length)) {
-          for (const item of scrubResult.bad) {
-            const typeLower = String(item.type || '').toLowerCase();
-            if (typeLower.includes('federal')) federalDnc++;
-            else if (typeLower.includes('state')) stateDnc++;
-            else if (typeLower.includes('invalid') || typeLower.includes('bad')) badPhone++;
-            else blacklist++;
-          }
-          good = rows.length - scrubResult.bad.length;
-          scrubRan = true;
+    try {
+      const allPhones = rows.map(r => r.phone).filter(Boolean);
+      const scrubResult = await scrubPhones(allPhones);
+
+      if (allPhones.length >= 200 && scrubResult.bad.length === allPhones.length) {
+        throw new Error("Suspicious scrub result: all numbers flagged DNC. Check BLACKLIST_ALLIANCE_API_KEY.");
+      }
+
+      const scrubInfoByPhone = new Map(
+        scrubResult.bad.map(b => [normalizePhone(b.phone), b])
+      );
+
+      const badRows = rows.filter(r =>
+        scrubInfoByPhone.has(normalizePhone(r.phone))
+      );
+
+      for (const r of badRows) {
+        const item = scrubInfoByPhone.get(normalizePhone(r.phone)) || {};
+        const typeLower = String(item.type || "").toLowerCase();
+
+        if (typeLower.includes("federal")) federalDnc++;
+        else if (typeLower.includes("state")) stateDnc++;
+        else if (typeLower.includes("invalid") || typeLower.includes("bad")) badPhone++;
+        else blacklist++;
+      }
+
+      if (badRows.length > 0) {
+        const badPhones = [...new Set(badRows.map(r => r.phone).filter(Boolean))];
+
+        await client.query("BEGIN");
+        try {
+          await client.query(
+            "UPDATE wc_db_data SET status='DNC', downloaded_at=null WHERE phone = ANY($1::text[])",
+            [badPhones]
+          );
+
+          await upsertDeadNumbersBatched({
+            queryFn: client.query.bind(client),
+            badItems: badRows.map(r => {
+              const info = scrubInfoByPhone.get(normalizePhone(r.phone)) || {};
+              return {
+                phone: normalizePhone(r.phone),
+                type: info.type || "DNC",
+                reason: info.reason || "Blacklist Alliance Match",
+              };
+            }),
+          });
+
+          await client.query("COMMIT");
+        } catch (badErr) {
+          await client.query("ROLLBACK").catch(() => {});
+          throw badErr;
         }
-      } catch (scrubErr) {
-        console.error('[WC DB Preview Scrub] BLA failed:', scrubErr.message);
       }
-    }
-    client.release();
 
-    return res.status(200).json({
-      summary: {
-        total: rows.length, good, blacklist, stateDnc, federalDnc, badPhone,
-        suppress: 0, wireless: 0, landline: 0, errors: 0,
-        scrubPending: false, scrubCompleted: scrubRan,
-        scrubDate: new Date().toLocaleString(),
-        fileName: `wc_db_preview_${Date.now()}.csv`,
-        blaSkipped: !scrubRan,
-      }
-    });
+      finalRows = rows.filter(r => !scrubInfoByPhone.has(normalizePhone(r.phone)));
+    } catch (scrubErr) {
+      console.error("[WC DB Preview Scrub] BLA failed:", scrubErr.message);
+      return res.status(502).json({
+        message: "BLA preview failed. Please try again.",
+        error: scrubErr.message,
+      });
+    }
+
+    const summary = {
+      total: rows.length,
+      good: finalRows.length,
+      blacklist,
+      stateDnc,
+      federalDnc,
+      badPhone,
+      suppress: 0,
+      wireless: 0,
+      landline: 0,
+      errors: 0,
+      scrubPending: false,
+      scrubCompleted: true,
+      scrubFailed: false,
+      scrubDate: new Date().toLocaleString(),
+      fileName: "wc_db_preview_" + Date.now() + ".csv",
+      blaSkipped: false,
+    };
+
+    return res.status(200).json({ summary });
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    console.error("[WC DB Preview Scrub] Error:", err.message);
+    return res.status(500).json({
+      message: "Server error running preview scrub.",
+      error: err.message,
+    });
+  } finally {
     client.release();
-    console.error('[WC DB Preview Scrub] Error:', err.message);
-    return res.status(500).json({ message: 'Server error running preview scrub.' });
   }
 };
+
 
 // POST /api/wc-db-download/request
 const createDownloadRequest = async (req, res) => {
@@ -473,7 +765,32 @@ const createDownloadRequest = async (req, res) => {
     if (!vendor_id) return res.status(400).json({ message: "Please select a vendor." });
     if (!quantity || quantity <= 0) return res.status(400).json({ message: "Valid quantity is required." });
 
-    const blaSummary = req.body.bla_summary || null;
+    let blaSummary = req.body.bla_summary || null;
+
+
+    if (typeof blaSummary === "string") {
+
+
+      try { blaSummary = JSON.parse(blaSummary); } catch (_) {}
+
+
+    }
+
+
+
+    if (!blaSummary || blaSummary.scrubCompleted !== true || blaSummary.blaSkipped === true) {
+
+
+      return res.status(400).json({
+
+
+        message: "Please run Preview BLA first. Only scrubbed good data can be requested."
+
+
+      });
+
+
+    }
     const disposition = req.body.disposition || null;
 
     const result = await db.query(
@@ -631,7 +948,7 @@ const reviewDownloadRequest = async (req, res) => {
           const scrubInfoByPhone = new Map(scrubResult.bad.map((b) => [b.phone, b]));
 
           await client.query("BEGIN");
-          await client.query(`UPDATE wc_db_data SET status='available', downloaded_at=null WHERE phone=ANY($1::text[])`, [badPhones]);
+          await client.query(`UPDATE wc_db_data SET status='DNC', downloaded_at=null WHERE phone=ANY($1::text[])`, [badPhones]);
           await upsertDeadNumbersBatched({ queryFn: client.query.bind(client), badItems: scrubResult.bad });
           await client.query("COMMIT");
 
@@ -661,8 +978,8 @@ const reviewDownloadRequest = async (req, res) => {
     const serializedData = JSON.stringify({ isScrubbed: true, goodCsv, badCsv });
 
     await client.query(
-      `UPDATE wc_db_download_requests SET status='accepted', reviewed_at=NOW(), reviewed_by=$1, csv_data=$2 WHERE id=$3`,
-      [req.user.id, serializedData, id]
+      `UPDATE wc_db_download_requests SET status='accepted', reviewed_at=NOW(), reviewed_by=$1, csv_data=$2, quantity=$4 WHERE id=$3`,
+      [req.user.id, serializedData, id, rowsWithState.length]
     );
 
     await db.query(

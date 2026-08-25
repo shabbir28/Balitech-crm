@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../services/api';
 import { AuthContext } from '../context/AuthContext';
+import { fmtDbDateTime, fmtDbTimeAgo, parseDbTime } from '../utils/dbTime';
+
 import {
     Send, Download, AlertCircle, ChevronDown, Check,
     Clock, CheckCircle2, XCircle, RefreshCw, FileDown,
@@ -725,7 +727,7 @@ const PremiumDownloadLeads = () => {
             } else {
                 // Dialer Agent / Admin -> Step 1: Preview BLA Scrub
                 const body = { ...form, job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined };
-                const res = await api.post('/premium-download/preview-scrub', body, { timeout: 30000 });
+                const res = await api.post('/premium-download/preview-scrub', body, { timeout: 15 * 60 * 1000 });
                 setPreviewSummary(res.data.summary);
                 setPreviewMode(true);
             }
@@ -744,8 +746,18 @@ const PremiumDownloadLeads = () => {
     const handleConfirmRequest = async () => {
         setSubmitting(true); setError(''); setSuccessMsg('');
         try {
-            const body = { 
-                ...form, 
+                        const goodQty = Number(previewSummary?.good || 0);
+
+            if (!goodQty || goodQty <= 0) {
+                setError('No good leads available to request after BLA scrub.');
+                setSubmitting(false);
+                return;
+            }
+
+const body = { 
+                ...form,
+                quantity: goodQty,
+                requested_quantity: goodQty, 
                 job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined,
                 bla_summary: previewSummary,
                 disposition: form.dispositions
@@ -1414,7 +1426,7 @@ const PremiumDownloadLeads = () => {
                                                     <span className="font-semibold text-white">{req.vendor_name || 'All Vendors'}</span>
                                                 </td>
                                                 <td className="px-5 py-4">
-                                                    <span className="font-mono text-orange-400 font-bold">{req.quantity?.toLocaleString()}</span>
+                                                    <span className="font-mono text-orange-400 font-bold">{Number(req.final_good_count ?? req.quantity).toLocaleString()}</span>
                                                 </td>
                                                 <td className="px-5 py-4 text-slate-400 text-xs font-mono whitespace-nowrap">
                                                     {req.min_age || req.max_age 
@@ -1430,7 +1442,7 @@ const PremiumDownloadLeads = () => {
                                                 <td className="px-5 py-4 text-slate-500 text-xs whitespace-nowrap">
                                                     <div className="flex items-center gap-1.5">
                                                         <Calendar className="h-3 w-3" />
-                                                        {fmtDate(req.requested_at)}
+                                                        {fmtDbDateTime(req.requested_at)}
                                                     </div>
                                                 </td>
                                                 <td className="px-5 py-4">

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../services/api';
 import { AuthContext } from '../context/AuthContext';
+import { fmtDbDateTime, fmtDbTimeAgo, parseDbTime } from '../utils/dbTime';
+
 import {
     Send, Download, AlertCircle, ChevronDown, Check,
     Clock, CheckCircle2, XCircle, RefreshCw, FileDown,
@@ -717,7 +719,7 @@ const VanDownloadLeads = () => {
             } else {
                 // Dialer Agent / Admin -> Step 1: Preview BLA Scrub
                 const body = { ...form, job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined };
-                const res = await api.post('/Van-download/preview-scrub', body, { timeout: 30000 });
+                const res = await api.post('/Van-download/preview-scrub', body, { timeout: 15 * 60 * 1000 });
                 setPreviewSummary(res.data.summary);
                 setPreviewMode(true);
             }
@@ -726,7 +728,7 @@ const VanDownloadLeads = () => {
             if (status === 502 || status === 504) {
                 setError('Gateway timeout â€” the server is still processing. Try a smaller quantity, or ask SuperAdmin to increase nginx proxy_read_timeout.');
             } else if (err.code === 'ECONNABORTED') {
-                setError('Request timed out on the client side. The download may still finish in the background â€” check Already Downloaded shortly.');
+                setError('BLA preview is still running. Please wait or try a smaller batch if it takes too long.');
             } else {
                 setError(err.response?.data?.message || 'Request failed.');
             }
@@ -736,8 +738,18 @@ const VanDownloadLeads = () => {
     const handleConfirmRequest = async () => {
         setSubmitting(true); setError(''); setSuccessMsg('');
         try {
-            const body = { 
-                ...form, 
+            const goodQty = Number(previewSummary?.good || 0);
+
+            if (!goodQty || goodQty <= 0) {
+                setError('No good leads available to request after BLA scrub.');
+                setSubmitting(false);
+                return;
+            }
+
+            const body = {
+                ...form,
+                quantity: goodQty,
+                requested_quantity: goodQty,
                 job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined,
                 bla_summary: previewSummary,
                 disposition: form.dispositions
@@ -1419,7 +1431,7 @@ const VanDownloadLeads = () => {
                                                 <td className="px-5 py-4 text-slate-500 text-xs whitespace-nowrap">
                                                     <div className="flex items-center gap-1.5">
                                                         <Calendar className="h-3 w-3" />
-                                                        {fmtDate(req.requested_at)}
+                                                        {fmtDbDateTime(req.requested_at)}
                                                     </div>
                                                 </td>
                                                 <td className="px-5 py-4">

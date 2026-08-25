@@ -328,7 +328,17 @@ async function buildFilters(
       [campaign_id],
     );
     if (campRes.rows.length > 0) {
-      filters.push(`campaign_type = $${paramIdx++}`);
+      // campaign_type may contain one or multiple comma-separated campaigns,
+      // e.g. "FE", "ACA, FE", or "Medicare, FE".
+      // Match the selected campaign as an exact individual token.
+      filters.push(`EXISTS (
+        SELECT 1
+        FROM unnest(
+          string_to_array(COALESCE(campaign_type, ''), ',')
+        ) AS campaign_token(value)
+        WHERE LOWER(BTRIM(campaign_token.value)) =
+              LOWER(BTRIM($${paramIdx++}))
+      )`);
       params.push(campRes.rows[0].name);
     } else {
       filters.push(`1 = 0`);
@@ -797,27 +807,48 @@ const downloadLeads = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 const previewScrub = async (req, res) => {
   const client = await db.getClient();
+
   try {
     const {
-      vendor_id, quantity, states, campaign_id,
-      min_age, max_age, min_duration, max_duration,
-      job_id, include_downloaded, quality, disposition,
+      vendor_id,
+      quantity,
+      states,
+      campaign_id,
+      min_age,
+      max_age,
+      min_duration,
+      max_duration,
+      job_id,
+      include_downloaded,
+      quality,
+      disposition,
     } = req.body;
 
-    if (!vendor_id) return res.status(400).json({ message: 'Please select a vendor.' });
-    if (!quantity || quantity <= 0) return res.status(400).json({ message: 'Valid quantity is required.' });
+    if (!vendor_id) {
+      return res.status(400).json({ message: "Please select a vendor." });
+    }
 
-    await client.query('BEGIN');
+    const requestedQty = parseInt(quantity, 10);
+    if (!requestedQty || requestedQty <= 0) {
+      return res.status(400).json({ message: "Valid quantity is required." });
+    }
 
     const { filters, params, paramIdx } = await buildFilters(client, {
-      vendor_id: vendor_id && vendor_id !== 'all' ? vendor_id : null,
-      campaign_id: campaign_id && campaign_id !== 'all' ? campaign_id : null,
-      states, min_age, max_age, min_duration, max_duration,
-      job_id, include_downloaded, quality, disposition,
+      vendor_id: vendor_id && vendor_id !== "all" ? vendor_id : null,
+      campaign_id: campaign_id && campaign_id !== "all" ? campaign_id : null,
+      states,
+      min_age,
+      max_age,
+      min_duration,
+      max_duration,
+      include_downloaded,
+      job_id,
+      quality,
+      disposition,
     });
 
-    let currentParamIdx = paramIdx;
     const whereParts = [...filters];
+
     whereParts.push(
       `NOT EXISTS (SELECT 1 FROM dnc_numbers d WHERE d.phone = refine_data.phone)`,
       `NOT EXISTS (SELECT 1 FROM refine_dnc_numbers d WHERE d.phone = refine_data.phone)`,
@@ -825,57 +856,106 @@ const previewScrub = async (req, res) => {
       `NOT EXISTS (SELECT 1 FROM dead_numbers d WHERE d.phone = refine_data.phone)`,
       `NOT EXISTS (SELECT 1 FROM separation_data sd WHERE sd.phone = refine_data.phone)`
     );
-    const whereClause = whereParts.length > 0 ? whereParts.join(' AND ') : '1=1';
 
-    // SELECT only — no UPDATE, no marking downloaded
-    const selectQuery = `
-      SELECT phone, area_code
-      FROM refine_data
-      WHERE ${whereClause}
-      ORDER BY uploaded_at ASC
-      LIMIT $${currentParamIdx}
-    `;
-    params.push(quantity);
+    const whereClause = whereParts.length > 0 ? whereParts.join(" AND ") : "1=1";
 
     await client.query("SET local work_mem = '256MB'");
-    const result = await client.query(selectQuery, params);
-    await client.query('COMMIT');
-    client.release();
+
+    // Same selection style as SuperAdmin direct download, but do NOT mark downloaded here.
+    const result = await client.query(
+      `SELECT id, name, phone, email, country_code, area_code, disposition, age
+       FROM refine_data
+       WHERE ${whereClause}
+       ORDER BY id ASC
+       LIMIT $${paramIdx}`,
+      [...params, requestedQty]
+    );
 
     const rows = result.rows;
+
     if (rows.length === 0) {
-      return res.status(404).json({ message: 'No available leads found matching your criteria.' });
+      return res.status(404).json({ message: "No available leads found matching your criteria." });
     }
 
-    // Run BLA scrub (preview, read-only — no DB writes)
-    const allPhones = rows.map(r => normalizePhone(r.phone)).filter(p => p.length === 10);
+    let finalRows = rows;
+    let blacklist = 0;
+    let stateDnc = 0;
+    let federalDnc = 0;
+    let badPhone = 0;
 
-    let blacklist = 0, stateDnc = 0, federalDnc = 0, badPhone = 0, good = rows.length;
-    let scrubRan = false;
+    try {
+      const allPhones = rows.map(r => r.phone).filter(Boolean);
+      const scrubResult = await scrubPhones(allPhones);
 
-    if (MAX_API_SCRUB_PHONES > 0 && allPhones.length <= MAX_API_SCRUB_PHONES) {
-      try {
-        const scrubResult = await scrubPhones(allPhones);
-        if (!(allPhones.length >= 200 && scrubResult.bad.length === allPhones.length)) {
-          for (const item of scrubResult.bad) {
-            const typeLower = String(item.type || '').toLowerCase();
-            if (typeLower.includes('federal')) federalDnc++;
-            else if (typeLower.includes('state')) stateDnc++;
-            else if (typeLower.includes('invalid') || typeLower.includes('bad')) badPhone++;
-            else blacklist++;
-          }
-          good = rows.length - scrubResult.bad.length;
-          scrubRan = true;
-        }
-      } catch (scrubErr) {
-        console.error('[Preview Scrub] BLA failed:', scrubErr.message);
-        // Return summary without BLA breakdown — still useful for the agent
+      if (allPhones.length >= 200 && scrubResult.bad.length === allPhones.length) {
+        throw new Error("Suspicious scrub result: all numbers flagged DNC. Check BLACKLIST_ALLIANCE_API_KEY.");
       }
+
+      const scrubInfoByPhone = new Map(
+        scrubResult.bad.map(b => [normalizePhone(b.phone), b])
+      );
+
+      const badRows = rows.filter(r =>
+        scrubInfoByPhone.has(normalizePhone(r.phone))
+      );
+
+      for (const r of badRows) {
+        const item = scrubInfoByPhone.get(normalizePhone(r.phone)) || {};
+        const typeLower = String(item.type || "").toLowerCase();
+
+        if (typeLower.includes("federal")) federalDnc++;
+        else if (typeLower.includes("state")) stateDnc++;
+        else if (typeLower.includes("invalid") || typeLower.includes("bad")) badPhone++;
+        else blacklist++;
+      }
+
+      if (badRows.length > 0) {
+        const badPhones = [...new Set(badRows.map(r => r.phone).filter(Boolean))];
+
+        await client.query("BEGIN");
+        try {
+          await client.query(
+            `UPDATE refine_data
+             SET status='available',
+                 downloaded_at=null,
+                 disposition='DNC'
+             WHERE phone = ANY($1::text[])`,
+            [badPhones]
+          );
+
+          await upsertDncNumbersBatched({
+            queryFn: client.query.bind(client),
+            badItems: badRows.map(r => {
+              const info = scrubInfoByPhone.get(normalizePhone(r.phone)) || {};
+              return {
+                phone: normalizePhone(r.phone),
+                type: info.type || "DNC",
+                reason: info.reason || "Blacklist Alliance Match",
+              };
+            }),
+            campaignId: campaign_id && campaign_id !== "all" ? campaign_id : null,
+            vendorId: vendor_id && vendor_id !== "all" ? vendor_id : null,
+          });
+
+          await client.query("COMMIT");
+        } catch (badErr) {
+          await client.query("ROLLBACK").catch(() => {});
+          throw badErr;
+        }
+      }
+
+      finalRows = rows.filter(r => !scrubInfoByPhone.has(normalizePhone(r.phone)));
+    } catch (scrubErr) {
+      console.error("[Refine Preview Scrub] BLA failed:", scrubErr.message);
+      return res.status(502).json({
+        message: "BLA preview failed. Please try again.",
+        error: scrubErr.message,
+      });
     }
 
     const summary = {
       total: rows.length,
-      good,
+      good: finalRows.length,
       blacklist,
       stateDnc,
       federalDnc,
@@ -885,18 +965,22 @@ const previewScrub = async (req, res) => {
       landline: 0,
       errors: 0,
       scrubPending: false,
-      scrubCompleted: scrubRan,
+      scrubCompleted: true,
+      scrubFailed: false,
       scrubDate: new Date().toLocaleString(),
       fileName: `preview_${Date.now()}.csv`,
-      blaSkipped: !scrubRan,
+      blaSkipped: false,
     };
 
     return res.status(200).json({ summary });
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    console.error("[Refine Preview Scrub] Error:", err.message);
+    return res.status(500).json({
+      message: "Server error running preview scrub.",
+      error: err.message,
+    });
+  } finally {
     client.release();
-    console.error('[Preview Scrub] Error:', err.message);
-    return res.status(500).json({ message: 'Server error running preview scrub.' });
   }
 };
 
@@ -937,7 +1021,32 @@ const createDownloadRequest = async (req, res) => {
       });
     }
 
-    const blaSummary = req.body.bla_summary || null;
+    let blaSummary = req.body.bla_summary || null;
+
+
+    if (typeof blaSummary === "string") {
+
+
+      try { blaSummary = JSON.parse(blaSummary); } catch (_) {}
+
+
+    }
+
+
+
+    if (!blaSummary || blaSummary.scrubCompleted !== true || blaSummary.blaSkipped === true) {
+
+
+      return res.status(400).json({
+
+
+        message: "Please run Preview BLA first. Only scrubbed good data can be requested."
+
+
+      });
+
+
+    }
 
     const result = await db.query(
       `INSERT INTO refine_download_requests
@@ -1237,7 +1346,7 @@ const reviewDownloadRequest = async (req, res) => {
           `approved_leads_${id}.csv`,
         );
 
-        await db.query(`UPDATE refine_download_requests SET csv_data=$1 WHERE id=$2`, [serializedData, id]);
+        await db.query(`UPDATE refine_download_requests SET csv_data=$1, quantity=$3 WHERE id=$2`, [serializedData, id, finalGood.length]);
         
         await db.query(
           `INSERT INTO refine_download_logs (user_id, vendor_id, campaign_id, quantity, states, min_age, max_age, csv_payload, download_date)
@@ -1713,7 +1822,32 @@ const getStateCounts = async (req, res) => {
       let currentParamIdx = params.length + 1;
       let dncFilter = `NOT EXISTS (SELECT 1 FROM refine_dnc_numbers d WHERE d.phone = refine_data.phone)`;
       if (campaign_id && campaign_id !== "all") {
-        dncFilter += ` AND NOT EXISTS (SELECT 1 FROM separation_data sd WHERE sd.phone = refine_data.phone AND sd.campaign_id = $${currentParamIdx++})`;
+        const campaignRes = await db.query(
+          "SELECT name FROM refine_campaigns WHERE campaign_id = $1",
+          [campaign_id]
+        );
+        const selectedCampaignName = campaignRes.rows[0]?.name || null;
+
+        if (selectedCampaignName) {
+          dncFilter += ` AND EXISTS (
+            SELECT 1
+            FROM refine_jobs j
+            JOIN refine_sessions s ON s.id = j.session_id
+            CROSS JOIN LATERAL unnest(
+              string_to_array(COALESCE(s.campaign_type, ''), ',')
+            ) AS campaign_token(value)
+            WHERE j.id = refine_data.job_id
+              AND LOWER(BTRIM(campaign_token.value)) = LOWER(BTRIM($${currentParamIdx++}))
+          )`;
+          params.push(selectedCampaignName);
+        }
+
+        dncFilter += ` AND NOT EXISTS (
+          SELECT 1
+          FROM separation_data sd
+          WHERE sd.phone = refine_data.phone
+            AND sd.campaign_id = $${currentParamIdx++}
+        )`;
         params.push(campaign_id);
       }
 

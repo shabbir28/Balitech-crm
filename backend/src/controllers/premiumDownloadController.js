@@ -773,76 +773,165 @@ const downloadLeads = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 const previewScrub = async (req, res) => {
   const client = await db.getClient();
+
   try {
     const {
-      vendor_id, quantity, states, campaign_id,
-      min_age, max_age, min_duration, max_duration,
-      job_id, include_downloaded,
+      vendor_id,
+      quantity,
+      states,
+      campaign_id,
+      min_age,
+      max_age,
+      min_duration,
+      max_duration,
+      job_id,
+      include_downloaded,
     } = req.body;
 
-    if (!vendor_id) return res.status(400).json({ message: 'Please select a vendor.' });
-    if (!quantity || quantity <= 0) return res.status(400).json({ message: 'Valid quantity is required.' });
+    if (!vendor_id) {
+      return res.status(400).json({ message: "Please select a vendor." });
+    }
+
+    const requestedQty = parseInt(quantity, 10);
+    if (!requestedQty || requestedQty <= 0) {
+      return res.status(400).json({ message: "Valid quantity is required." });
+    }
 
     const { filters, params, paramIdx } = await buildFilters(client, {
-      vendor_id: vendor_id && vendor_id !== 'all' ? vendor_id : null,
-      campaign_id: campaign_id && campaign_id !== 'all' ? campaign_id : null,
-      states, min_age, max_age, min_duration, max_duration, job_id, include_downloaded,
+      vendor_id: vendor_id && vendor_id !== "all" ? vendor_id : null,
+      campaign_id: campaign_id && campaign_id !== "all" ? campaign_id : null,
+      states,
+      min_age,
+      max_age,
+      min_duration,
+      max_duration,
+      include_downloaded,
+      job_id,
     });
 
-    const whereClause = filters.length > 0 ? filters.join(' AND ') : '1=1';
+    const whereClause = filters.length > 0 ? filters.join(" AND ") : "1=1";
 
     await client.query("SET local work_mem = '256MB'");
+
     const result = await client.query(
-      `SELECT phone FROM premium_data WHERE ${whereClause} ORDER BY uploaded_at ASC LIMIT $${paramIdx}`,
-      [...params, quantity]
+      `SELECT id, name, phone, email, country_code, area_code, disposition, age, dob, zipcode,
+              jornaya_lead_id, state, COALESCE(NULLIF(TRIM(caller_id), ''), phone, '') AS caller_id, duration
+       FROM premium_data
+       WHERE ${whereClause}
+       ORDER BY id ASC
+       LIMIT $${paramIdx}`,
+      [...params, requestedQty]
     );
 
     const rows = result.rows;
+
     if (rows.length === 0) {
-      client.release();
-      return res.status(404).json({ message: 'No available leads found matching your criteria.' });
+      return res.status(404).json({ message: "No available leads found matching your criteria." });
     }
 
-    const allPhones = rows.map(r => normalizePhone(r.phone)).filter(p => p.length === 10);
-    let blacklist = 0, stateDnc = 0, federalDnc = 0, badPhone = 0, good = rows.length;
-    let scrubRan = false;
+    let finalRows = rows;
+    let blacklist = 0;
+    let stateDnc = 0;
+    let federalDnc = 0;
+    let badPhone = 0;
 
-    const MAX_API_SCRUB_PHONES = parseInt(process.env.MAX_API_SCRUB_PHONES || '5000');
-    if (MAX_API_SCRUB_PHONES > 0 && allPhones.length <= MAX_API_SCRUB_PHONES) {
-      try {
-        const scrubResult = await scrubPhones(allPhones);
-        if (!(allPhones.length >= 200 && scrubResult.bad.length === allPhones.length)) {
-          for (const item of scrubResult.bad) {
-            const typeLower = String(item.type || '').toLowerCase();
-            if (typeLower.includes('federal')) federalDnc++;
-            else if (typeLower.includes('state')) stateDnc++;
-            else if (typeLower.includes('invalid') || typeLower.includes('bad')) badPhone++;
-            else blacklist++;
-          }
-          good = rows.length - scrubResult.bad.length;
-          scrubRan = true;
+    try {
+      const allPhones = rows.map(r => r.phone).filter(Boolean);
+      const scrubResult = await scrubPhones(allPhones);
+
+      if (allPhones.length >= 200 && scrubResult.bad.length === allPhones.length) {
+        throw new Error("Suspicious scrub result: all numbers flagged DNC. Check BLACKLIST_ALLIANCE_API_KEY.");
+      }
+
+      const scrubInfoByPhone = new Map(
+        scrubResult.bad.map(b => [normalizePhone(b.phone), b])
+      );
+
+      const badRows = rows.filter(r =>
+        scrubInfoByPhone.has(normalizePhone(r.phone))
+      );
+
+      for (const r of badRows) {
+        const item = scrubInfoByPhone.get(normalizePhone(r.phone)) || {};
+        const typeLower = String(item.type || "").toLowerCase();
+
+        if (typeLower.includes("federal")) federalDnc++;
+        else if (typeLower.includes("state")) stateDnc++;
+        else if (typeLower.includes("invalid") || typeLower.includes("bad")) badPhone++;
+        else blacklist++;
+      }
+
+      if (badRows.length > 0) {
+        const badPhones = [...new Set(badRows.map(r => r.phone).filter(Boolean))];
+
+        await client.query("BEGIN");
+        try {
+          await client.query(
+            `UPDATE premium_data
+             SET status='available',
+                 downloaded_at=null,
+                 disposition='DNC'
+             WHERE phone = ANY($1::text[])`,
+            [badPhones]
+          );
+
+          await upsertDncNumbersBatched({
+            queryFn: client.query.bind(client),
+            badItems: badRows.map(r => {
+              const info = scrubInfoByPhone.get(normalizePhone(r.phone)) || {};
+              return {
+                phone: normalizePhone(r.phone),
+                type: info.type || "DNC",
+                reason: info.reason || "Blacklist Alliance Match",
+              };
+            }),
+            campaignId: campaign_id && campaign_id !== "all" ? campaign_id : null,
+          });
+
+          await client.query("COMMIT");
+        } catch (badErr) {
+          await client.query("ROLLBACK").catch(() => {});
+          throw badErr;
         }
-      } catch (scrubErr) {
-        console.error('[Premium Preview Scrub] BLA failed:', scrubErr.message);
       }
-    }
-    client.release();
 
-    return res.status(200).json({
-      summary: {
-        total: rows.length, good, blacklist, stateDnc, federalDnc, badPhone,
-        suppress: 0, wireless: 0, landline: 0, errors: 0,
-        scrubPending: false, scrubCompleted: scrubRan,
-        scrubDate: new Date().toLocaleString(),
-        fileName: `premium_preview_${Date.now()}.csv`,
-        blaSkipped: !scrubRan,
-      }
-    });
+      finalRows = rows.filter(r => !scrubInfoByPhone.has(normalizePhone(r.phone)));
+    } catch (scrubErr) {
+      console.error("[Premium Preview Scrub] BLA failed:", scrubErr.message);
+      return res.status(502).json({
+        message: "BLA preview failed. Please try again.",
+        error: scrubErr.message,
+      });
+    }
+
+    const summary = {
+      total: rows.length,
+      good: finalRows.length,
+      blacklist,
+      suppress: 0,
+      stateDnc,
+      federalDnc,
+      wireless: 0,
+      landline: 0,
+      badPhone,
+      errors: 0,
+      scrubPending: false,
+      scrubCompleted: true,
+      scrubFailed: false,
+      scrubDate: new Date().toLocaleString(),
+      fileName: `premium_preview_${Date.now()}.csv`,
+      blaSkipped: false,
+    };
+
+    return res.status(200).json({ summary });
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    console.error("[Premium Preview Scrub] Error:", err.message);
+    return res.status(500).json({
+      message: "Server error running preview scrub.",
+      error: err.message,
+    });
+  } finally {
     client.release();
-    console.error('[Premium Preview Scrub] Error:', err.message);
-    return res.status(500).json({ message: 'Server error running preview scrub.' });
   }
 };
 
@@ -877,7 +966,32 @@ const createDownloadRequest = async (req, res) => {
       });
     }
 
-    const blaSummary = req.body.bla_summary || null;
+    let blaSummary = req.body.bla_summary || null;
+
+
+    if (typeof blaSummary === "string") {
+
+
+      try { blaSummary = JSON.parse(blaSummary); } catch (_) {}
+
+
+    }
+
+
+
+    if (!blaSummary || blaSummary.scrubCompleted !== true || blaSummary.blaSkipped === true) {
+
+
+      return res.status(400).json({
+
+
+        message: "Please run Preview BLA first. Only scrubbed good data can be requested."
+
+
+      });
+
+
+    }
     const disposition = req.body.disposition || null;
 
     const result = await db.query(
@@ -1141,7 +1255,7 @@ const reviewDownloadRequest = async (req, res) => {
 
               await bgClient.query('BEGIN');
               await bgClient.query(
-                `UPDATE premium_data SET status='available', downloaded_at=null WHERE phone=ANY($1::text[])`,
+                `UPDATE premium_data SET status='available', downloaded_at=null, disposition='DNC' WHERE phone=ANY($1::text[])`,
                 [scrubResult.bad.map(b => b.phone)],
               );
               await upsertDncNumbersBatched({

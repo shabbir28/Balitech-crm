@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { AuthContext } from '../context/AuthContext';
 
+import { fmtDbDateTime, fmtDbTimeAgo, parseDbTime } from '../utils/dbTime';
+
 const SCRUB_POLL_INTERVAL_MS = 5000;
 const SCRUB_POLL_MAX_MS = 60 * 60 * 1000;
 
@@ -322,6 +324,18 @@ const MixedDownloadLeads = () => {
     const [stateOpen, setStateOpen]     = useState(false);
     const stateRef = useRef(null);
 
+    const toggleMixedState = (abbr) => {
+        setError('');
+        setForm(prev => {
+            const currentStates = Array.isArray(prev.states) ? prev.states : [];
+            const nextStates = currentStates.includes(abbr)
+                ? currentStates.filter(x => x !== abbr)
+                : [...currentStates, abbr];
+
+            return { ...prev, states: nextStates };
+        });
+    };
+
     const [scrubSummaryData, setScrubSummaryData] = useState(null);
     const [scrubPolling] = useState(false);
     const scrubPollCancelRef = useRef(false);
@@ -510,8 +524,18 @@ const MixedDownloadLeads = () => {
         setError('');
         setSuccessMsg('');
         try {
+            const goodQty = Number(previewSummaryData?.summary?.good || 0);
+
+            if (!goodQty || goodQty <= 0) {
+                setError('No good leads available to request after BLA scrub.');
+                setSubmitting(false);
+                return;
+            }
+
             const payload = {
                 ...form,
+                quantity: goodQty,
+                requested_quantity: goodQty,
                 van_job_ids: selectedVanFiles.length > 0 ? selectedVanFiles : undefined,
                 refine_job_ids: selectedRefineFiles.length > 0 ? selectedRefineFiles : undefined,
                 premium_job_ids: selectedPremiumFiles.length > 0 ? selectedPremiumFiles : undefined,
@@ -867,7 +891,7 @@ const MixedDownloadLeads = () => {
                                     <div className="relative" ref={stateRef}>
                                         <button
                                             type="button"
-                                            onClick={() => setStateOpen(!stateOpen)}
+                                            onClick={() => setStateOpen(prev => !prev)}
                                             className="w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 text-left rounded-xl py-3.5 px-4 flex justify-between items-center transition-all text-sm group shadow-inner hover:bg-[#0a0c14]/80 hover:border-violet-500/30"
                                         >
                                             <span className={form.states.length === 0 ? "text-slate-500" : "text-white font-medium"}>
@@ -886,14 +910,14 @@ const MixedDownloadLeads = () => {
                                                     <div className="flex gap-2">
                                                         <button
                                                             type="button"
-                                                            onClick={() => setForm(p => ({ ...p, states: US_STATES.map(s => s.abbr) }))}
+                                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setForm(p => ({ ...p, states: US_STATES.map(s => s.abbr) })); }}
                                                             className="flex-1 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-[10px] font-bold py-1.5 rounded-lg transition-colors border border-white/5"
                                                         >
                                                             Select All
                                                         </button>
                                                         <button
                                                             type="button"
-                                                            onClick={() => setForm(p => ({ ...p, states: [] }))}
+                                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setForm(p => ({ ...p, states: [] })); }}
                                                             className="flex-1 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-[10px] font-bold py-1.5 rounded-lg transition-colors border border-white/5"
                                                         >
                                                             Clear
@@ -905,7 +929,17 @@ const MixedDownloadLeads = () => {
                                                         {US_STATES.map((s) => {
                                                             const checked = form.states.includes(s.abbr);
                                                             return (
-                                                                <label key={s.abbr} className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all border ${checked ? 'bg-violet-500/10 border-violet-500/30' : 'border-transparent hover:bg-white/5 hover:border-white/10'}`}>
+                                                                <label
+                                                                    key={s.abbr}
+                                                                    role="checkbox"
+                                                                    aria-checked={checked}
+                                                                    onClick={(e) => {
+                                                                        e.preventDefault();
+                                                                        e.stopPropagation();
+                                                                        toggleMixedState(s.abbr);
+                                                                    }}
+                                                                    className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all border ${checked ? 'bg-violet-500/10 border-violet-500/30' : 'border-transparent hover:bg-white/5 hover:border-white/10'}`}
+                                                                >
                                                                     <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${checked ? 'bg-violet-500 border-violet-400' : 'border-white/20 bg-black/20'}`}>
                                                                         {checked && <Check className="h-3 w-3 text-white" />}
                                                                     </div>
@@ -1055,7 +1089,7 @@ const MixedDownloadLeads = () => {
                                                         )}
                                                     </div>
                                                     <p className="text-xs text-slate-400 truncate">
-                                                        <span className="font-bold text-white">{Number(req.quantity).toLocaleString()}</span> leads &bull; {new Date(req.requested_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+                                                        <span className="font-bold text-white">{Number(req.final_good_count ?? req.quantity).toLocaleString()}</span> leads &bull; {fmtDbDateTime(req.requested_at)}
                                                     </p>
                                                     {isRejected && req.rejection_reason && (
                                                         <p className="text-[10px] text-red-400 mt-0.5 truncate">Reason: {req.rejection_reason}</p>

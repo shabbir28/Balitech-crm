@@ -3,7 +3,7 @@ const { Parser } = require("json2csv");
 const { areaCodesMap } = require("../utils/areaCodes");
 const { scrubPhones, normalizePhone } = require("../utils/blacklistAlliance");
 
-const scrubPhonesForMixed = async (phoneList, label = "mixed-download", timeoutMs = 25000) => {
+const scrubPhonesForMixed = async (phoneList, label = "mixed-download", timeoutMs = 15 * 60 * 1000) => {
   const safePhones = Array.isArray(phoneList) ? phoneList : [];
 
   try {
@@ -650,9 +650,8 @@ const previewScrub = async (req, res) => {
 
     let blacklist = 0, stateDnc = 0, federalDnc = 0, badPhone = 0, good = allPhones.length;
     let scrubRan = false;
-    const MAX_API_SCRUB_PHONES = parseInt(process.env.MAX_API_SCRUB_PHONES || '5000');
-
-    if (MAX_API_SCRUB_PHONES > 0 && allPhones.length <= MAX_API_SCRUB_PHONES) {
+      // Always run BLA preview for Mixed. Do not skip large batches.
+      if (allPhones.length > 0) {
       try {
         const scrubResult = await scrubPhonesForMixed(allPhones, "mixed-preview-scrub");
         if (!scrubResult.failed && !scrubResult.timedOut) {
@@ -663,11 +662,17 @@ const previewScrub = async (req, res) => {
             else if (typeLower.includes('invalid') || typeLower.includes('bad')) badPhone++;
             else blacklist++;
           }
-          good = allPhones.length - scrubResult.bad.length;
+          const badPhoneSet = new Set(scrubResult.bad.map(b => normalizePhone(b.phone)));
+          const matchedBadCount = allPhones.filter(p => badPhoneSet.has(normalizePhone(p))).length;
+          good = allPhones.length - matchedBadCount;
           scrubRan = true;
         }
       } catch (scrubErr) {
         console.error('[Mixed Preview Scrub] BLA failed:', scrubErr.message);
+        return res.status(502).json({
+          message: "BLA preview failed. Please try again.",
+          error: scrubErr.message,
+        });
       }
     }
 
@@ -1005,8 +1010,8 @@ const reviewDownloadRequest = async (req, res) => {
 
       await bgClient.query("BEGIN");
       await bgClient.query(
-        `UPDATE mixed_download_requests SET status = 'accepted', reviewed_at = NOW(), reviewed_by = $1, csv_data = $2 WHERE id = $3`,
-        [req.user.id, csvDataString, id]
+        `UPDATE mixed_download_requests SET status = 'accepted', reviewed_at = NOW(), reviewed_by = $1, csv_data = $2, quantity = $4 WHERE id = $3`,
+        [req.user.id, csvDataString, id, finalGoodRows.length]
       );
 
       // Save download log
