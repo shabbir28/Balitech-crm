@@ -88,6 +88,7 @@ const SeparationUpload = () => {
 
     const [downloadQty, setDownloadQty] = useState(1000);
     const [exportCount, setExportCount] = useState(null);
+    const [downloadedCount, setDownloadedCount] = useState(null);
     const [loadingExportCount, setLoadingExportCount] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [downloadError, setDownloadError] = useState('');
@@ -135,6 +136,7 @@ const SeparationUpload = () => {
     useEffect(() => {
         if (!downloadCampaign && !downloadClient && !downloadState) {
             setExportCount(null);
+            setDownloadedCount(null);
             return;
         }
         const timer = setTimeout(() => {
@@ -151,12 +153,17 @@ const SeparationUpload = () => {
             api.get(`/separation/export-count?${params.toString()}`)
                 .then(res => {
                     const count = res.data.count || 0;
+                    const dCount = res.data.downloadedCount || 0;
                     setExportCount(count);
+                    setDownloadedCount(dCount);
                     if (downloadQty > count && count > 0) {
                         setDownloadQty(count);
                     }
                 })
-                .catch(() => setExportCount(0))
+                .catch(() => {
+                    setExportCount(0);
+                    setDownloadedCount(0);
+                })
                 .finally(() => setLoadingExportCount(false));
         }, 400);
     
@@ -528,8 +535,13 @@ const SeparationUpload = () => {
                             {loadingExportCount ? 'Checking availability…' : (
                                 <>
                                       Available for export: <span className="text-blue-400 font-bold">{(exportCount ?? 0).toLocaleString()}</span>
+                                      {downloadedCount != null && downloadedCount > 0 && (
+                                          <span className="ml-3 text-slate-500">
+                                              Already Downloaded: <span className="text-orange-400 font-bold">{downloadedCount.toLocaleString()}</span>
+                                          </span>
+                                      )}
                                       {selectedPreset && downloadState && (
-                                          <span className="ml-2 text-slate-500">
+                                          <span className="ml-3 text-slate-500 border-l border-slate-600 pl-3">
                                               Preset states: <span className="text-blue-300">{downloadState}</span>
                                           </span>
                                       )}

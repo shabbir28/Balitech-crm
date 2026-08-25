@@ -332,42 +332,52 @@ exports.deleteData = async (req, res) => {
 exports.getExportCount = async (req, res) => {
     try {
         const { campaign_id, client_id, state, states, area_code, area_codes, include_downloaded } = req.query;
-        let query = 'SELECT COUNT(*) as count FROM separation_data sd WHERE 1=1';
+        let baseQuery = 'FROM separation_data sd WHERE 1=1';
         const params = [];
+
+        if (campaign_id && campaign_id !== 'all') {
+            params.push(campaign_id);
+            baseQuery += ` AND sd.campaign_id = $${params.length}`;
+        } else if (campaign_id === 'unassigned') {
+            baseQuery += ' AND sd.campaign_id IS NULL';
+        }
+
+        if (client_id && client_id !== 'all') {
+            params.push(client_id);
+            baseQuery += ` AND sd.client_id = $${params.length}`;
+        } else if (client_id === 'unassigned') {
+            baseQuery += ' AND sd.client_id IS NULL';
+        }
+
+        baseQuery = sepAppendLocationFilter(baseQuery, params, { state, states, area_code, area_codes }, 'sd');
+
+        const query = `
+            SELECT 
+                SUM(CASE WHEN NOT EXISTS (
+                    SELECT 1 FROM separation_data downloaded_sd
+                    WHERE downloaded_sd.phone = sd.phone AND downloaded_sd.downloaded_at IS NOT NULL
+                ) THEN 1 ELSE 0 END) as count,
+                SUM(CASE WHEN EXISTS (
+                    SELECT 1 FROM separation_data downloaded_sd
+                    WHERE downloaded_sd.phone = sd.phone AND downloaded_sd.downloaded_at IS NOT NULL
+                ) THEN 1 ELSE 0 END) as downloaded_count
+            ${baseQuery}
+        `;
+
+        const result = await db.query(query, params);
+        
+        let count = parseInt(result.rows[0].count, 10) || 0;
+        const downloadedCount = parseInt(result.rows[0].downloaded_count, 10) || 0;
 
         const includeDownloaded =
             include_downloaded === true ||
             String(include_downloaded || '').toLowerCase() === 'true';
 
-        if (!includeDownloaded) {
-            query += `
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM separation_data downloaded_sd
-                    WHERE downloaded_sd.phone = sd.phone
-                      AND downloaded_sd.downloaded_at IS NOT NULL
-                )
-            `;
+        if (includeDownloaded) {
+            count = count + downloadedCount;
         }
 
-        if (campaign_id && campaign_id !== 'all') {
-            params.push(campaign_id);
-            query += ` AND sd.campaign_id = $${params.length}`;
-        } else if (campaign_id === 'unassigned') {
-            query += ' AND sd.campaign_id IS NULL';
-        }
-
-        if (client_id && client_id !== 'all') {
-            params.push(client_id);
-            query += ` AND sd.client_id = $${params.length}`;
-        } else if (client_id === 'unassigned') {
-            query += ' AND sd.client_id IS NULL';
-        }
-
-        query = sepAppendLocationFilter(query, params, { state, states, area_code, area_codes }, 'sd');
-
-        const result = await db.query(query, params);
-        res.json({ count: parseInt(result.rows[0].count, 10) });
+        res.json({ count, downloadedCount });
     } catch (err) {
         console.error('Error fetching export count:', err);
         res.status(500).json({ message: 'Error fetching export count' });
