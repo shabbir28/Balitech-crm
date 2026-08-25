@@ -1,13 +1,13 @@
 const db = require('../config/db');
-const { scrubPhones, normalizePhone: blaNormalizePhone } = require('../utils/blacklistAlliance');
+const { scrubPhones, normalizePhone } = require('../utils/blacklistAlliance');
 const { areaCodesMap } = require('../utils/areaCodes');
 const { processFileBuffer } = require("../utils/fileProcessor");
 const { cleanupFile } = require("../middleware/upload");
 const { lookupDncPhones, lookupDeadPhones } = require("../utils/dbHelpers");
 
 const sepCleanPhoneForChecks = (phone) => {
-    const clean = typeof blaNormalizePhone === 'function'
-        ? blaNormalizePhone(phone)
+    const clean = typeof normalizePhone === 'function'
+        ? normalizePhone(phone)
         : String(phone || '').replace(/\D/g, '');
 
     if (!clean) return '';
@@ -49,8 +49,6 @@ const sepUpsertDeadNumbersFromBla = async (badItems) => {
         );
     }
 };
-
-
 
 const sepAreaCodeFromPhone = (phone) => {
     const clean = String(phone || '').replace(/\D/g, '');
@@ -119,80 +117,6 @@ const sepAppendLocationFilter = (query, params, filters, alias = 'sd') => {
     }
     return query;
 };
-
-
-
-const getAreaCodeFromPhone = (phone) => {
-    const clean = String(phone || '').replace(/\D/g, '');
-    if (clean.length >= 11 && clean.startsWith('1')) return clean.substring(1, 4);
-    if (clean.length >= 10) return clean.substring(0, 3);
-    return null;
-};
-
-const attachAreaCodeState = (row) => {
-    const area_code = getAreaCodeFromPhone(row.phone);
-    return {
-        ...row,
-        area_code: area_code || '',
-        state: area_code ? (areaCodesMap[area_code] || 'Unknown') : 'Unknown',
-    };
-};
-
-const normalizeTextArray = (value) => {
-    if (!value) return [];
-    const arr = Array.isArray(value) ? value : String(value).split(',');
-    return arr.map(v => String(v || '').trim()).filter(Boolean);
-};
-
-const areaCodeSql = (alias = 'sd') => `
-    CASE
-      WHEN LENGTH(REGEXP_REPLACE(${alias}.phone, '[^0-9]', '', 'g')) >= 11
-           AND REGEXP_REPLACE(${alias}.phone, '[^0-9]', '', 'g') LIKE '1%'
-        THEN SUBSTRING(REGEXP_REPLACE(${alias}.phone, '[^0-9]', '', 'g') FROM 2 FOR 3)
-      WHEN LENGTH(REGEXP_REPLACE(${alias}.phone, '[^0-9]', '', 'g')) >= 10
-        THEN SUBSTRING(REGEXP_REPLACE(${alias}.phone, '[^0-9]', '', 'g') FROM 1 FOR 3)
-      ELSE NULL
-    END
-`;
-
-const getAreaCodesForFilters = ({ state, states, area_code, area_codes }) => {
-    const manualAreaCodes = [
-        ...normalizeTextArray(area_code),
-        ...normalizeTextArray(area_codes),
-    ]
-        .map(v => v.replace(/\D/g, ''))
-        .filter(v => v.length === 3);
-
-    if (manualAreaCodes.length > 0) {
-        return [...new Set(manualAreaCodes)];
-    }
-
-    const selectedStates = [
-        ...normalizeTextArray(state),
-        ...normalizeTextArray(states),
-    ]
-        .map(v => v.toUpperCase())
-        .filter(v => v && v !== 'ALL');
-
-    if (selectedStates.length === 0) return [];
-
-    return [...new Set(
-        Object.entries(areaCodesMap)
-            .filter(([, st]) => selectedStates.includes(String(st || '').toUpperCase()))
-            .map(([code]) => code)
-    )];
-};
-
-const appendLocationFilter = (query, params, locationFilters, alias = 'sd') => {
-    const areaCodes = getAreaCodesForFilters(locationFilters);
-    if (areaCodes.length > 0) {
-        params.push(areaCodes);
-        query += ` AND (${areaCodeSql(alias)}) = ANY($${params.length}::text[])`;
-    }
-    return query;
-};
-
-
 
 exports.createSession = async (req, res) => {
     try {
@@ -281,7 +205,9 @@ exports.uploadFile = async (req, res) => {
                     req.file.mimetype,
                     req.file.originalname
                 );
-                const validRecords = records.filter((r) => r.phone);
+                const validRecords = records
+                    .map(r => ({ ...r, phone: normalizePhone(r.phone) }))
+                    .filter(r => r.phone && r.phone.length === 10);
                 cleanupFile(req.file.path);
 
                 if (validRecords.length === 0) {
