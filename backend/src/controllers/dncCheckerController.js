@@ -260,9 +260,134 @@ const getSingleChecks = async (req, res) => {
         const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
         const offset   = (pageNum - 1) * limitNum;
 
+        const baseConditions = [];
+        const baseParams     = [];
+        let   p              = 1;
+
+        if (search && search.trim()) {
+            baseConditions.push(`phone_number ILIKE $${p}`);
+            baseParams.push(`%${search.trim()}%`);
+            p++;
+        }
+        if (status && status.trim()) {
+            baseConditions.push(`dnc_status = $${p}`);
+            baseParams.push(status.trim());
+            p++;
+        }
+        if (startDate) {
+            baseConditions.push(`checked_at >= $${p}`);
+            baseParams.push(new Date(startDate));
+            p++;
+        }
+        if (endDate) {
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            baseConditions.push(`checked_at <= $${p}`);
+            baseParams.push(end);
+            p++;
+        }
+
+        const baseWhere = baseConditions.length ? `WHERE ${baseConditions.join(' AND ')}` : '';
+
+        // Query overall summary stats for KPI cards (based on search & date filters)
+        const statsResult = await db.query(
+            `SELECT 
+                COUNT(*) AS total,
+                COALESCE(SUM(CASE WHEN is_already_present = true THEN 1 ELSE 0 END), 0) AS already_present_count,
+                COALESCE(SUM(CASE WHEN is_already_present = false THEN 1 ELSE 0 END), 0) AS fresh_count,
+                COALESCE(SUM(CASE WHEN is_downloaded = true THEN 1 ELSE 0 END), 0) AS already_downloaded_count
+             FROM dnc_single_checks ${baseWhere}`,
+            baseParams
+        );
+
+        const totalOverall    = parseInt(statsResult.rows[0].total, 10) || 0;
+        const alreadyPresent  = parseInt(statsResult.rows[0].already_present_count, 10) || 0;
+        const fresh           = parseInt(statsResult.rows[0].fresh_count, 10) || 0;
+        const alreadyDownloaded = parseInt(statsResult.rows[0].already_downloaded_count, 10) || 0;
+
+        // Apply presenceFilter to table data query
+        const dataConditions = [...baseConditions];
+        const dataParams     = [...baseParams];
+
+        if (presenceFilter === 'already_present') {
+            dataConditions.push(`is_already_present = true`);
+        } else if (presenceFilter === 'fresh') {
+            dataConditions.push(`is_already_present = false`);
+        } else if (presenceFilter === 'already_downloaded') {
+            dataConditions.push(`is_downloaded = true`);
+        }
+
+        const dataWhere = dataConditions.length ? `WHERE ${dataConditions.join(' AND ')}` : '';
+
+        const countResult = await db.query(
+            `SELECT COUNT(*) AS total FROM dnc_single_checks ${dataWhere}`,
+            dataParams
+        );
+        const filteredTotal = parseInt(countResult.rows[0].total, 10) || 0;
+        const totalPages    = Math.ceil(filteredTotal / limitNum);
+
+        const dataResult = await db.query(
+            `SELECT * FROM dnc_single_checks ${dataWhere} ORDER BY checked_at DESC LIMIT $${p} OFFSET $${p + 1}`,
+            [...dataParams, limitNum, offset]
+        );
+
+        return res.json({
+            success: true,
+            data: dataResult.rows,
+            pagination: {
+                page: pageNum,
+                limit: limitNum,
+                total: filteredTotal,
+                allTotal: totalOverall,
+                totalPages,
+                alreadyPresent,
+                fresh,
+                alreadyDownloaded,
+            },
+        });
+    } catch (err) {
+        console.error('getSingleChecks error:', err);
+        return res.status(500).json({ success: false, message: 'Internal server error.' });
+    }
+};
+
+/**
+ * POST /api/dnc-checker/single-lookups/download
+ * Export single checks based on category (all, already_present, fresh, already_downloaded)
+ * with quantity limit and include_downloaded toggle.
+ */
+const downloadSingleChecks = async (req, res) => {
+    try {
+        const {
+            type = 'all', // 'all', 'already_present', 'fresh', 'already_downloaded'
+            quantity,
+            include_downloaded = false,
+            search = '',
+            status = '',
+            startDate = '',
+            endDate = '',
+        } = req.body;
+
         const conditions = [];
         const params     = [];
         let   p          = 1;
+
+        if (type === 'already_present') {
+            conditions.push(`is_already_present = true`);
+        } else if (type === 'fresh') {
+            conditions.push(`is_already_present = false`);
+        } else if (type === 'already_downloaded') {
+            conditions.push(`is_downloaded = true`);
+        }
+
+        const shouldIncludeDownloaded =
+            include_downloaded === true || String(include_downloaded).toLowerCase() === 'true';
+
+        // Unless user explicitly requested re-downloading or selected the 'already_downloaded' category,
+        // filter out already downloaded records
+        if (!shouldIncludeDownloaded && type !== 'already_downloaded') {
+            conditions.push(`is_downloaded = false`);
+        }
 
         if (search && search.trim()) {
             conditions.push(`phone_number ILIKE $${p}`);
@@ -286,39 +411,91 @@ const getSingleChecks = async (req, res) => {
             params.push(end);
             p++;
         }
-        if (presenceFilter === 'already_present') {
-            conditions.push(`is_already_present = true`);
-        } else if (presenceFilter === 'fresh') {
-            conditions.push(`is_already_present = false`);
-        }
 
         const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-        const countResult = await db.query(
-            `SELECT 
-                COUNT(*) AS total,
-                COALESCE(SUM(CASE WHEN is_already_present = true THEN 1 ELSE 0 END), 0) AS already_present_count,
-                COALESCE(SUM(CASE WHEN is_already_present = false THEN 1 ELSE 0 END), 0) AS fresh_count
-             FROM dnc_single_checks ${where}`,
-            params
-        );
-        const total      = parseInt(countResult.rows[0].total, 10);
-        const alreadyPresent = parseInt(countResult.rows[0].already_present_count, 10);
-        const fresh = parseInt(countResult.rows[0].fresh_count, 10);
-        const totalPages = Math.ceil(total / limitNum);
+        let limitClause = '';
+        const qtyNum = parseInt(quantity, 10);
+        if (qtyNum && qtyNum > 0) {
+            limitClause = `LIMIT $${p}`;
+            params.push(qtyNum);
+            p++;
+        }
 
-        const dataResult = await db.query(
-            `SELECT * FROM dnc_single_checks ${where} ORDER BY checked_at DESC LIMIT $${p} OFFSET $${p + 1}`,
-            [...params, limitNum, offset]
+        const selectQuery = `
+            SELECT id, phone_number, dnc_status, line_type, source, ip_address, is_already_present, is_downloaded, checked_at, downloaded_at
+            FROM dnc_single_checks
+            ${where}
+            ORDER BY checked_at DESC
+            ${limitClause}
+        `;
+
+        const result = await db.query(selectQuery, params);
+        const rows = result.rows;
+
+        if (!rows.length) {
+            return res.status(400).json({
+                success: false,
+                message: shouldIncludeDownloaded || type === 'already_downloaded'
+                    ? 'No records found matching the criteria.'
+                    : 'No new records to download. All matching records were previously downloaded. Check "Include already downloaded" to re-download them.',
+            });
+        }
+
+        // Mark the downloaded records in DB
+        const ids = rows.map(r => r.id);
+        await db.query(
+            `UPDATE dnc_single_checks 
+             SET is_downloaded = true, 
+                 downloaded_at = CURRENT_TIMESTAMP 
+             WHERE id = ANY($1::bigint[])`,
+            [ids]
         );
+
+        // Format CSV rows
+        const formattedRows = rows.map(r => ({
+            'Phone Number': r.phone_number,
+            'DNC Status': r.dnc_status,
+            'Line Type': r.line_type || '',
+            'Source': r.source || '',
+            'IP Address': r.ip_address || '',
+            'CRM Status': r.is_already_present ? 'Already Present' : 'Fresh',
+            'Checked At': r.checked_at ? new Date(r.checked_at).toISOString() : '',
+            'Downloaded At': new Date().toISOString(),
+        }));
+
+        const { parse } = require('json2csv');
+        const csv = parse(formattedRows);
+
+        const typeLabel = type || 'all';
+        const fileName = `dnc_${typeLabel}_lookups_${Date.now()}.csv`;
 
         return res.json({
             success: true,
-            data: dataResult.rows,
-            pagination: { page: pageNum, limit: limitNum, total, totalPages, alreadyPresent, fresh },
+            count: rows.length,
+            csv,
+            fileName,
         });
     } catch (err) {
-        console.error('getSingleChecks error:', err);
+        console.error('downloadSingleChecks error:', err);
+        return res.status(500).json({ success: false, message: 'Internal server error during download.' });
+    }
+};
+
+/**
+ * POST /api/dnc-checker/single-lookups/:id/mark-downloaded
+ * Mark a single check as downloaded.
+ */
+const markSingleDownloaded = async (req, res) => {
+    try {
+        const { id } = req.params;
+        await db.query(
+            `UPDATE dnc_single_checks SET is_downloaded = true, downloaded_at = CURRENT_TIMESTAMP WHERE id = $1`,
+            [id]
+        );
+        return res.json({ success: true });
+    } catch (err) {
+        console.error('markSingleDownloaded error:', err);
         return res.status(500).json({ success: false, message: 'Internal server error.' });
     }
 };
@@ -453,4 +630,14 @@ const analyzeCleanFile = async (req, res) => {
     }
 };
 
-module.exports = { createDncResult, createSingleDncResult, getUploadedFiles, getSingleChecks, getDncJobById, getCampaignSummary, analyzeCleanFile };
+module.exports = {
+    createDncResult,
+    createSingleDncResult,
+    getUploadedFiles,
+    getSingleChecks,
+    downloadSingleChecks,
+    markSingleDownloaded,
+    getDncJobById,
+    getCampaignSummary,
+    analyzeCleanFile,
+};

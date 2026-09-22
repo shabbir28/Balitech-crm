@@ -33,8 +33,25 @@ export const analyzeCleanFile = (jobId) => {
 
 /**
  * Fetch paginated list of DNC single lookups.
- * @param {Object} params - { page, limit, search, status, startDate, endDate }
+ * @param {Object} params - { page, limit, search, status, startDate, endDate, presenceFilter }
  */
 export const fetchSingleLookups = (params = {}) => {
     return api.get('/dnc-checker/single-lookups', { params });
 };
+
+/**
+ * Bulk download single lookups with filters and quantity.
+ * @param {Object} payload - { type, quantity, include_downloaded, search, status, startDate, endDate }
+ */
+export const downloadSingleLookups = (payload = {}) => {
+    return api.post('/dnc-checker/single-lookups/download', payload);
+};
+
+/**
+ * Mark a single lookup check as downloaded.
+ * @param {number|string} id
+ */
+export const markSingleLookupDownloaded = (id) => {
+    return api.post(`/dnc-checker/single-lookups/${id}/mark-downloaded`);
+};
+

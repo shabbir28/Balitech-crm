@@ -9,6 +9,8 @@ const {
     analyzeCleanFile,
     createSingleDncResult,
     getSingleChecks,
+    downloadSingleChecks,
+    markSingleDownloaded,
 } = require('../controllers/dncCheckerController');
 
 const verifyToken   = require('../middleware/auth');
@@ -31,6 +33,12 @@ router.get('/uploaded-files', getUploadedFiles);
 
 // GET /api/dnc-checker/single-lookups
 router.get('/single-lookups', getSingleChecks);
+
+// POST /api/dnc-checker/single-lookups/download
+router.post('/single-lookups/download', downloadSingleChecks);
+
+// POST /api/dnc-checker/single-lookups/:id/mark-downloaded
+router.post('/single-lookups/:id/mark-downloaded', markSingleDownloaded);
 
 // GET /api/dnc-checker/uploaded-files/:id
 router.get('/uploaded-files/:id', getDncJobById);
