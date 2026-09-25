@@ -8,20 +8,6 @@ import {
     Inbox, Filter, Eye, Layers, ArrowLeftRight, Activity, Zap, CheckCircle
 } from 'lucide-react';
 
-const fmtDate = (d) => d
-    ? parseDbTime(d).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
-    : '—';
-
-
-
-const fmtTimeAgo = (d) => {
-    const diff = (Date.now() - parseDbTime(d).getTime()) / 1000;
-    if (diff < 60) return 'Just now';
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return `${Math.floor(diff / 86400)}d ago`;
-};
-
 // ── Status Badge
 const StatusBadge = ({ status }) => {
     const cfg = {

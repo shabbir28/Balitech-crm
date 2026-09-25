@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../services/api';
 import { AuthContext } from '../context/AuthContext';
-import { fmtDbDateTime, fmtDbTimeAgo, parseDbTime } from '../utils/dbTime';
+import { fmtDbDateTime } from '../utils/dbTime';
 
 import {
     Send, Download, AlertCircle, ChevronDown, Check,
@@ -43,8 +43,6 @@ const StatusBadge = ({ status }) => {
         </span>
     );
 };
-
-const fmtDate = (d) => d ? new Date(d).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
 
 // ── Custom Select ─────────────────────────────────────────────
 const Field = ({ label, required, hint, children }) => (

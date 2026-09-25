@@ -74,15 +74,18 @@ const WcDbSessionDetails = () => {
                                 <div><p className="text-slate-500 text-[11px] uppercase tracking-widest font-bold">Total Valid Rows in File</p><p className="text-2xl font-extrabold text-white mt-0.5">{(jobStatsModal.job.total_rows || 0).toLocaleString()}</p></div>
                             </div>
                             {[
-                                { label: 'Fresh Numbers', val: jobStatsModal.job.fresh_count, color: 'cyan', Icon: TrendingUp },
-                                { label: 'Inserted in DB', val: jobStatsModal.job.inserted, color: 'emerald', Icon: CheckCircle2 },
-                                { label: 'Already Present', val: jobStatsModal.job.existing_count, color: 'amber', Icon: AlertCircle },
-                                { label: 'Duplicates in File', val: jobStatsModal.job.duplicates_in_file, color: 'orange', Icon: Copy },
-                            ].map(({ label, val, color, Icon }) => (
-                                <div key={label} className={`bg-[#0a0a0f] rounded-xl border border-${color}-500/20 p-4 relative overflow-hidden`}>
-                                    <div className={`absolute top-0 left-0 w-1 h-full bg-${color}-500`} />
-                                    <div className="flex items-center gap-2 mb-2 ml-2"><Icon className={`w-3.5 h-3.5 text-${color}-400`} /><p className={`text-${color}-400 text-[11px] uppercase tracking-widest font-bold`}>{label}</p></div>
-                                    <p className="text-2xl font-extrabold text-white ml-2">{(val || 0).toLocaleString()}</p>
+                                { label: 'Fresh Numbers', val: jobStatsModal.job.fresh_count, color: 'cyan', icon: TrendingUp },
+                                { label: 'Inserted in DB', val: jobStatsModal.job.inserted, color: 'emerald', icon: CheckCircle2 },
+                                { label: 'Already Present', val: jobStatsModal.job.existing_count, color: 'amber', icon: AlertCircle },
+                                { label: 'Duplicates in File', val: jobStatsModal.job.duplicates_in_file, color: 'orange', icon: Copy },
+                            ].map((item) => (
+                                <div key={item.label} className={`bg-[#0a0a0f] rounded-xl border border-${item.color}-500/20 p-4 relative overflow-hidden`}>
+                                    <div className={`absolute top-0 left-0 w-1 h-full bg-${item.color}-500`} />
+                                    <div className="flex items-center gap-2 mb-2 ml-2">
+                                        {React.createElement(item.icon, { className: `w-3.5 h-3.5 text-${item.color}-400` })}
+                                        <p className={`text-${item.color}-400 text-[11px] uppercase tracking-widest font-bold`}>{item.label}</p>
+                                    </div>
+                                    <p className="text-2xl font-extrabold text-white ml-2">{(item.val || 0).toLocaleString()}</p>
                                 </div>
                             ))}
                             <div className="col-span-2 bg-[#0a0a0f] rounded-xl border border-purple-500/20 p-4 relative overflow-hidden">

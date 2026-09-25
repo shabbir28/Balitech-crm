@@ -83,8 +83,6 @@ const WcDbVendors = () => {
 
     if (loading) return <div className="text-gray-400">Loading WC DB Vendors...</div>;
 
-    const accentClass = 'cyan';
-
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
