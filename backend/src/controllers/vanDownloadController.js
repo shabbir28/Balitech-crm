@@ -2,6 +2,7 @@ const db = require("../config/db");
 const { Parser } = require("json2csv");
 const { areaCodesMap } = require("../utils/areaCodes");
 const { scrubPhones, normalizePhone } = require("../utils/blacklistAlliance");
+const { getUserCampaignAccess } = require("../utils/campaignAccess");
 
 const CSV_GOOD_FIELDS = [
   { label: "First Name", value: "first_name" },
@@ -86,6 +87,23 @@ function buildFilters({
     params.push(vendor_id);
   }
 
+  if (campaign_id && campaign_id !== "all") {
+    filters.push(`EXISTS (
+      SELECT 1
+      FROM van_sessions s
+      LEFT JOIN van_campaigns vc ON vc.campaign_id::text = s.campaign_type::text
+      WHERE s.id = van_data.session_id
+        AND (
+          s.campaign_type = $${idx}
+          OR vc.campaign_id::text = $${idx}
+          OR LOWER(BTRIM(COALESCE(vc.name, ''))) = LOWER(BTRIM($${idx}))
+          OR LOWER(BTRIM(COALESCE(s.campaign_type, ''))) = LOWER(BTRIM($${idx}))
+        )
+    )`);
+    params.push(String(campaign_id));
+    idx++;
+  }
+
   if (job_id && (Array.isArray(job_id) ? job_id.length > 0 : job_id !== "")) {
     const jobIds = Array.isArray(job_id) ? job_id : [job_id];
     const placeholders = jobIds.map((_, i) => `$${idx + i}`).join(",");
@@ -137,6 +155,9 @@ const downloadVanData = async (req, res) => {
     } = req.body;
     if (!quantity || quantity <= 0)
       return res.status(400).json({ message: "Valid quantity is required" });
+    if (quantity > 100000) {
+      return res.status(400).json({ message: "Maximum allowed quantity is 100,000." });
+    }
 
     const { filters, params, paramIdx } = buildFilters({
       vendor_id,
@@ -342,7 +363,7 @@ const downloadVanData = async (req, res) => {
 // POST /api/van-download/state-counts
 const getStateCounts = async (req, res) => {
   try {
-    const {
+    let {
       vendor_id,
       campaign_id,
       states,
@@ -351,6 +372,14 @@ const getStateCounts = async (req, res) => {
       include_downloaded,
       job_id,
     } = req.body;
+
+    const access = await getUserCampaignAccess(req.user, 'van_campaigns');
+    if (access.isRestricted) {
+      if (!campaign_id || campaign_id === 'all' || (!access.campaignIds.includes(String(campaign_id)) && !access.campaignNamesLower.includes(String(campaign_id).toLowerCase()))) {
+        campaign_id = access.campaignIds[0];
+      }
+    }
+
     const { filters, params } = buildFilters({
       vendor_id,
       campaign_id,
@@ -394,19 +423,28 @@ const getAlreadyDownloaded = async (req, res) => {
     const limitNum = Math.min(500, parseInt(limit, 10) || 100);
     const offset = (pageNum - 1) * limitNum;
 
+    const params = [];
+    let where = "WHERE 1=1";
+    const access = await getUserCampaignAccess(req.user, 'van_campaigns');
+    if (access.isRestricted) {
+      params.push(req.user.id);
+      where += ` AND dl.user_id = $${params.length}`;
+    }
+
     const dataQuery = `
       SELECT dl.*, v.name as vendor_name, u.username, u.first_name as user_first_name, u.last_name as user_last_name
       FROM van_download_logs dl
       LEFT JOIN van_vendors v ON dl.vendor_id = v.vendor_id
       LEFT JOIN users u ON dl.user_id = u.id
+      ${where}
       ORDER BY dl.download_date DESC
-      LIMIT $1 OFFSET $2
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `;
-    const countQuery = `SELECT COUNT(*)::int as count FROM van_download_logs`;
+    const countQuery = `SELECT COUNT(*)::int as count FROM van_download_logs dl ${where}`;
 
     const [dataResult, countResult] = await Promise.all([
-      db.query(dataQuery, [limitNum, offset]),
-      db.query(countQuery),
+      db.query(dataQuery, [...params, limitNum, offset]),
+      db.query(countQuery, params),
     ]);
 
     const data = dataResult.rows.map((row) => {
@@ -495,6 +533,35 @@ const previewScrub = async (req, res) => {
     const requestedQty = parseInt(quantity, 10);
     if (!requestedQty || requestedQty <= 0) {
       return res.status(400).json({ message: "Valid quantity is required." });
+    }
+    if (requestedQty > 100000) {
+      return res.status(400).json({ message: "Maximum allowed quantity is 100,000." });
+    }
+    if (campaign_id && campaign_id !== "all") {
+      const access = await getUserCampaignAccess(req.user, 'van_campaigns');
+      if (access.isRestricted) {
+        let isAllowed = access.campaignIds.includes(String(campaign_id)) || access.campaignNamesLower.includes(String(campaign_id).toLowerCase());
+        if (!isAllowed) {
+          try {
+            const cCheck = await db.query(
+              `SELECT campaign_id, name FROM van_campaigns WHERE campaign_id::text = $1 OR name = $1`,
+              [String(campaign_id)]
+            );
+            if (cCheck.rows.length > 0) {
+              const row = cCheck.rows[0];
+              if (
+                access.campaignNamesLower.includes(row.name.trim().toLowerCase()) ||
+                access.campaignIds.includes(String(row.campaign_id))
+              ) {
+                isAllowed = true;
+              }
+            }
+          } catch (_) {}
+        }
+        if (!isAllowed) {
+          return res.status(403).json({ message: "You are only authorized to download data from your assigned campaign." });
+        }
+      }
     }
 
     const { filters, params, paramIdx } = buildFilters({
@@ -659,8 +726,39 @@ const createDownloadRequest = async (req, res) => {
     if (!vendor_id) {
       return res.status(400).json({ message: "Please select a vendor." });
     }
+    if (!campaign_id || campaign_id === "all") {
+      return res.status(400).json({ message: "Please select a specific campaign." });
+    }
+
+    const access = await getUserCampaignAccess(req.user, 'van_campaigns');
+    if (access.isRestricted) {
+      let isAllowed = access.campaignIds.includes(String(campaign_id)) || access.campaignNamesLower.includes(String(campaign_id).toLowerCase());
+      if (!isAllowed) {
+        try {
+          const cCheck = await db.query(
+            `SELECT campaign_id, name FROM van_campaigns WHERE campaign_id::text = $1 OR name = $1`,
+            [String(campaign_id)]
+          );
+          if (cCheck.rows.length > 0) {
+            const row = cCheck.rows[0];
+            if (
+              access.campaignNamesLower.includes(row.name.trim().toLowerCase()) ||
+              access.campaignIds.includes(String(row.campaign_id))
+            ) {
+              isAllowed = true;
+            }
+          }
+        } catch (_) {}
+      }
+      if (!isAllowed) {
+        return res.status(403).json({ message: "You are only authorized to download data from your assigned campaign." });
+      }
+    }
     if (!quantity || quantity <= 0) {
       return res.status(400).json({ message: "Valid quantity is required." });
+    }
+    if (quantity > 100000) {
+      return res.status(400).json({ message: "Maximum allowed quantity is 100,000." });
     }
     if (
       (include_downloaded === true || include_downloaded === "true") &&
@@ -704,8 +802,8 @@ const createDownloadRequest = async (req, res) => {
 
       const result = await db.query(
       `INSERT INTO van_download_requests
-               (admin_id, vendor_id, campaign_id, quantity, states, min_age, max_age, min_duration, max_duration, job_id, job_ids, include_downloaded, quality, bla_summary, disposition)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+               (admin_id, vendor_id, campaign_id, quantity, states, min_age, max_age, min_duration, max_duration, job_id, include_downloaded, quality, bla_summary, disposition)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
              RETURNING *`,
       [
         req.user.id,
@@ -717,7 +815,6 @@ const createDownloadRequest = async (req, res) => {
         max_age || null,
         min_duration || null,
         max_duration || null,
-        singleVanJobId,
         normalizedVanJobIds.length ? normalizedVanJobIds : null,
         include_downloaded === true || include_downloaded === "true",
         req.body.quality || 'All',

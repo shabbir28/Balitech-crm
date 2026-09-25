@@ -3,6 +3,7 @@ const { Parser } = require("json2csv");
 const { areaCodesMap } = require("../utils/areaCodes");
 const { createNotification } = require("./notificationController");
 const { scrubPhones, normalizePhone } = require("../utils/blacklistAlliance");
+const { getUserCampaignAccess } = require("../utils/campaignAccess");
 
 /**
  * Blacklist Alliance API is 1 HTTP call per phone. On big downloads (100k phones)
@@ -700,6 +701,9 @@ const downloadLeads = async (req, res) => {
     if (!quantity || quantity <= 0) {
       return res.status(400).json({ message: "Valid quantity is required" });
     }
+    if (quantity > 100000) {
+      return res.status(400).json({ message: "Maximum allowed quantity is 100,000." });
+    }
     if (
       (include_downloaded === true || include_downloaded === "true") &&
       (!vendor_id || vendor_id === "all")
@@ -831,6 +835,9 @@ const previewScrub = async (req, res) => {
     const requestedQty = parseInt(quantity, 10);
     if (!requestedQty || requestedQty <= 0) {
       return res.status(400).json({ message: "Valid quantity is required." });
+    }
+    if (requestedQty > 100000) {
+      return res.status(400).json({ message: "Maximum allowed quantity is 100,000." });
     }
 
     const { filters, params, paramIdx } = await buildFilters(client, {
@@ -1008,8 +1015,22 @@ const createDownloadRequest = async (req, res) => {
     if (!vendor_id) {
       return res.status(400).json({ message: "Please select a vendor." });
     }
+    if (!campaign_id || campaign_id === "all") {
+      return res.status(400).json({ message: "Please select a specific campaign." });
+    }
+
+    const access = await getUserCampaignAccess(req.user, 'refine_campaigns');
+    if (access.isRestricted) {
+      const isAllowed = access.campaignIds.includes(String(campaign_id)) || access.campaignNamesLower.includes(String(campaign_id).toLowerCase());
+      if (!isAllowed) {
+        return res.status(403).json({ message: "You are only authorized to download data from your assigned campaign." });
+      }
+    }
     if (!quantity || quantity <= 0) {
       return res.status(400).json({ message: "Valid quantity is required." });
+    }
+    if (quantity > 100000) {
+      return res.status(400).json({ message: "Maximum allowed quantity is 100,000." });
     }
     if (
       (include_downloaded === true || include_downloaded === "true") &&
@@ -1588,6 +1609,12 @@ const getAlreadyDownloadedList = async (req, res) => {
       where += ` AND dl.vendor_id = $${params.length}`;
     }
 
+    const access = await getUserCampaignAccess(req.user, 'refine_campaigns');
+    if (access.isRestricted) {
+      params.push(req.user.id);
+      where += ` AND dl.user_id = $${params.length}`;
+    }
+
     const dataQuery = `
       SELECT
         dl.id,
@@ -1789,7 +1816,7 @@ const getDownloadLogFile = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 const getStateCounts = async (req, res) => {
   try {
-    const {
+    let {
       vendor_id,
       campaign_id,
       states,
@@ -1802,6 +1829,14 @@ const getStateCounts = async (req, res) => {
       quality,
       disposition,
     } = req.body;
+
+    const access = await getUserCampaignAccess(req.user, 'refine_campaigns');
+    if (access.isRestricted) {
+      if (!campaign_id || campaign_id === 'all' || (!access.campaignIds.includes(String(campaign_id)) && !access.campaignNamesLower.includes(String(campaign_id).toLowerCase()))) {
+        campaign_id = access.campaignIds[0];
+      }
+    }
+
     const client = await db.getClient();
     try {
       const { filters, params } = await buildFilters(client, {
@@ -1888,10 +1923,10 @@ const downloadJobFile = async (req, res) => {
   const { jobId } = req.params;
   try {
     const jobRes = await db.query(
-      `SELECT j.id, j.file_name, j.created_at, s.vendor_id, v.name as vendor_name
+      `SELECT j.id, j.file_name, j.created_at, s.vendor_id, s.campaign_type, v.name as vendor_name
        FROM refine_jobs j
        JOIN refine_sessions s ON j.session_id = s.id
-       JOIN vendors v ON s.vendor_id = v.vendor_id
+       JOIN refine_vendors v ON s.vendor_id = v.vendor_id
        WHERE j.id = $1`,
       [jobId],
     );
@@ -1901,6 +1936,18 @@ const downloadJobFile = async (req, res) => {
     }
 
     const job = jobRes.rows[0];
+
+    const access = await getUserCampaignAccess(req.user, 'refine_campaigns');
+    if (access.isRestricted) {
+      const jobCampaignTokens = String(job.campaign_type || '')
+        .split(',')
+        .map(t => t.toLowerCase().trim())
+        .filter(Boolean);
+      const hasAccess = jobCampaignTokens.some(t => access.campaignNamesLower.includes(t));
+      if (!hasAccess) {
+        return res.status(403).json({ message: "You are not authorized to download this file." });
+      }
+    }
 
     // Query refine_data of this job
     let leadsRes = await db.query(
@@ -1964,10 +2011,10 @@ const getJobStats = async (req, res) => {
   const { jobId } = req.params;
   try {
     const jobRes = await db.query(
-      `SELECT j.id, j.file_name, j.created_at, s.vendor_id, v.name as vendor_name
+      `SELECT j.id, j.file_name, j.created_at, s.vendor_id, s.campaign_type, v.name as vendor_name
        FROM refine_jobs j
        JOIN refine_sessions s ON j.session_id = s.id
-       JOIN vendors v ON s.vendor_id = v.vendor_id
+       JOIN refine_vendors v ON s.vendor_id = v.vendor_id
        WHERE j.id = $1`,
       [jobId],
     );
@@ -1977,6 +2024,18 @@ const getJobStats = async (req, res) => {
     }
 
     const job = jobRes.rows[0];
+
+    const access = await getUserCampaignAccess(req.user, 'refine_campaigns');
+    if (access.isRestricted) {
+      const jobCampaignTokens = String(job.campaign_type || '')
+        .split(',')
+        .map(t => t.toLowerCase().trim())
+        .filter(Boolean);
+      const hasAccess = jobCampaignTokens.some(t => access.campaignNamesLower.includes(t));
+      if (!hasAccess) {
+        return res.status(403).json({ message: "You are not authorized to view stats for this file." });
+      }
+    }
 
     // Check if there are refine_data with this job_id
     const jobCheck = await db.query(

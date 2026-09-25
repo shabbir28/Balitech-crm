@@ -1,6 +1,7 @@
 const db = require("../config/db");
 const path = require("path");
 const fs = require("fs");
+const { getUserCampaignAccess } = require("../utils/campaignAccess");
 
 // POST /api/campaigns
 const createCampaign = async (req, res) => {
@@ -38,21 +39,22 @@ const createCampaign = async (req, res) => {
 const getCampaigns = async (req, res) => {
   try {
     let result;
-    if (req.user && req.user.role === 'dialer_agent') {
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        const accessible = (req.user.accessible_campaigns || []).filter(id => uuidRegex.test(id));
-        if (accessible.length === 0) {
-            return res.json([]);
+    if (req.user && req.user.role !== 'super_admin') {
+      const access = await getUserCampaignAccess(req.user, 'campaigns');
+      if (access.isRestricted) {
+        if (access.campaignIds.length === 0) {
+          return res.json([]);
         }
         result = await db.query(
-            `SELECT * FROM campaigns WHERE campaign_id = ANY($1::uuid[]) ORDER BY created_at DESC`,
-            [accessible]
+          `SELECT * FROM campaigns WHERE campaign_id::text = ANY($1::text[]) ORDER BY created_at DESC`,
+          [access.campaignIds]
         );
-    } else {
-        result = await db.query(
-            `SELECT * FROM campaigns ORDER BY created_at DESC`
-        );
+        return res.json(result.rows);
+      }
     }
+    result = await db.query(
+        `SELECT * FROM campaigns ORDER BY created_at DESC`
+    );
     res.json(result.rows);
   } catch (err) {
     console.error("Error fetching campaigns:", err);

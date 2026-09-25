@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { getUserCampaignAccess } = require("../utils/campaignAccess");
 
 const createVendor = async (req, res) => {
   const { name, company, email, phone, comment, status } = req.body;
@@ -19,6 +20,47 @@ const getVendors = async (req, res) => {
   try {
     let query;
     if (includeCounts) {
+      const access = await getUserCampaignAccess(req.user, 'van_campaigns');
+      if (access.isRestricted) {
+        if (access.campaignNamesLower.length === 0 && (!access.rawCampaignIds || access.rawCampaignIds.length === 0)) {
+          query = `
+            SELECT v.*, 0::bigint AS total_leads, 0::bigint AS available_leads, 0::bigint AS downloaded_leads
+            FROM van_vendors v
+            ORDER BY v.created_at DESC
+          `;
+          const result = await db.query(query);
+          return res.json(result.rows);
+        }
+        query = `
+          WITH filtered_leads AS (
+            SELECT d.id, d.vendor_id, d.status
+            FROM van_data d
+            JOIN van_sessions s ON d.session_id = s.id
+            LEFT JOIN van_campaigns vc ON vc.campaign_id::text = s.campaign_type::text
+            WHERE LOWER(BTRIM(COALESCE(vc.name, s.campaign_type))) = ANY($1)
+               OR vc.campaign_id::text = ANY($2)
+               OR s.campaign_type::text = ANY($2)
+          ),
+          vendor_stats AS (
+            SELECT fl.vendor_id,
+                   COUNT(fl.id)::bigint AS total_leads,
+                   COUNT(CASE WHEN fl.status = 'available' THEN 1 END)::bigint AS available_leads,
+                   COUNT(CASE WHEN fl.status = 'downloaded' THEN 1 END)::bigint AS downloaded_leads
+            FROM filtered_leads fl
+            GROUP BY fl.vendor_id
+          )
+          SELECT v.*,
+                 COALESCE(vs.total_leads, 0)::bigint AS total_leads,
+                 COALESCE(vs.available_leads, 0)::bigint AS available_leads,
+                 COALESCE(vs.downloaded_leads, 0)::bigint AS downloaded_leads
+          FROM van_vendors v
+          LEFT JOIN vendor_stats vs ON v.vendor_id = vs.vendor_id
+          ORDER BY v.created_at DESC
+        `;
+        const result = await db.query(query, [access.campaignNamesLower, access.rawCampaignIds || []]);
+        return res.json(result.rows);
+      }
+
       query = `
         SELECT
           v.*,
@@ -75,14 +117,28 @@ const deleteVendor = async (req, res) => {
 const getVendorFiles = async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await db.query(
-      `SELECT j.id, j.file_name, j.created_at, j.total_rows, j.status
-       FROM van_jobs j
-       JOIN van_sessions s ON j.session_id = s.id
-       WHERE s.vendor_id = $1
-       ORDER BY j.created_at DESC`,
-      [id]
-    );
+    const access = await getUserCampaignAccess(req.user, 'van_campaigns');
+    let query = `
+      SELECT j.id, j.file_name, j.created_at, j.total_rows, j.status, s.campaign_type
+      FROM van_jobs j
+      JOIN van_sessions s ON j.session_id = s.id
+      WHERE s.vendor_id = $1
+    `;
+    const params = [id];
+    if (access.isRestricted) {
+      if (access.campaignNamesLower.length === 0) {
+        return res.json([]);
+      }
+      query += ` AND EXISTS (
+        SELECT 1
+        FROM unnest(string_to_array(COALESCE(s.campaign_type, ''), ',')) AS ct(v)
+        WHERE LOWER(BTRIM(ct.v)) = ANY($2)
+      )`;
+      params.push(access.campaignNamesLower);
+    }
+    query += ` ORDER BY j.created_at DESC`;
+
+    const result = await db.query(query, params);
     res.json(result.rows);
   } catch (err) {
     console.error("Error fetching vendor files:", err);

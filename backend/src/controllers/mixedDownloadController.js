@@ -268,6 +268,9 @@ const downloadMixedData = async (req, res) => {
 
     if (!quantity || quantity <= 0)
       return res.status(400).json({ message: "Valid quantity is required" });
+    if (quantity > 100000) {
+      return res.status(400).json({ message: "Maximum allowed quantity is 100,000." });
+    }
     if (van_percentage + refine_percentage + premium_percentage !== 100) {
       return res
         .status(400)
@@ -621,6 +624,7 @@ const previewScrub = async (req, res) => {
     } = req.body;
 
     if (!quantity || quantity <= 0) return res.status(400).json({ message: "Valid quantity is required" });
+    if (quantity > 100000) return res.status(400).json({ message: "Maximum allowed quantity is 100,000." });
     if (van_percentage + refine_percentage + premium_percentage !== 100) return res.status(400).json({ message: "Percentages must sum up to 100." });
 
     const van_qty = Math.floor(quantity * (van_percentage / 100));
@@ -702,6 +706,9 @@ const createMixedDownloadRequest = async (req, res) => {
 
     if (!quantity || quantity <= 0) {
       return res.status(400).json({ message: "Valid quantity is required." });
+    }
+    if (quantity > 100000) {
+      return res.status(400).json({ message: "Maximum allowed quantity is 100,000." });
     }
 
     let actual_campaign_id = null;
@@ -827,11 +834,11 @@ const reviewDownloadRequest = async (req, res) => {
     }
 
     // Accept: fetch data and generate CSV
-    await client.query("BEGIN");
+    const hasBlaPreview = !!dlReq.bla_summary;
 
-    // Accept immediately and send response before campaign lookup/fetch/scrub.
-    // Heavy CSV generation continues after the browser already has a response.
-    if (!res.headersSent) {
+    // Accept immediately and send response before campaign lookup/fetch/scrub only if NO bla preview
+    // Heavy CSV generation continues after the browser already has a response for legacy flow.
+    if (!hasBlaPreview && !res.headersSent) {
       await client.query(
         `UPDATE mixed_download_requests SET status = 'accepted', reviewed_at = NOW(), reviewed_by = $1 WHERE id = $2`,
         [req.user.id, id]
@@ -893,8 +900,6 @@ const reviewDownloadRequest = async (req, res) => {
     const refineRows = await fetchFromTable(client, "refine_data", refine_qty, refineFilters);
     const premiumRows = await fetchFromTable(client, "premium_data", premium_qty, premiumFilters);
 
-
-
     const allRows = [...vanRows, ...refineRows, ...premiumRows];
     if (allRows.length === 0) {
       await client.query("ROLLBACK");
@@ -905,7 +910,74 @@ const reviewDownloadRequest = async (req, res) => {
       return;
     }
 
-    // Mark as accepted immediately to prevent double-processing
+    if (hasBlaPreview) {
+      console.log(`[Approval Mixed] bla_summary present for request ${id} — skipping BLA re-scrub, building CSV immediately.`);
+      const parserGood = new Parser({ fields: CSV_GOOD_FIELDS });
+      const goodCsv = allRows.length > 0 ? parserGood.parse(allRows) : "";
+      
+      const summary = {
+        fileName: `approved_mixed_${id}.csv`,
+        scrubDate: new Date().toLocaleString(),
+        total: (dlReq.bla_summary && dlReq.bla_summary.total) || allRows.length,
+        blacklist: (dlReq.bla_summary && dlReq.bla_summary.blacklist) || 0,
+        suppress: 0,
+        stateDnc: (dlReq.bla_summary && dlReq.bla_summary.stateDnc) || 0,
+        federalDnc: (dlReq.bla_summary && dlReq.bla_summary.federalDnc) || 0,
+        wireless: 0,
+        landline: 0,
+        good: allRows.length,
+        errors: 0,
+        badPhone: (dlReq.bla_summary && dlReq.bla_summary.badPhone) || 0,
+        scrubPending: false,
+        scrubCompleted: true,
+      };
+
+      const payloadObj = {
+        isScrubbed: true,
+        goodCsv,
+        badCsv: "",
+        summary,
+      };
+
+      const csvDataString = JSON.stringify(payloadObj);
+
+      await client.query(
+        `UPDATE mixed_download_requests SET status = 'accepted', reviewed_at = NOW(), reviewed_by = $1, csv_data = $2, quantity = $4 WHERE id = $3`,
+        [req.user.id, csvDataString, id, allRows.length]
+      );
+
+      await client.query(
+        `INSERT INTO mixed_download_logs (user_id, quantity, states, min_age, max_age, csv_payload) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          dlReq.admin_id,
+          allRows.length,
+          states && states.length > 0 ? JSON.stringify(states) : null,
+          dlReq.min_age || null,
+          dlReq.max_age || null,
+          csvDataString,
+        ]
+      );
+
+      await client.query("COMMIT");
+      client.release();
+
+      try {
+        await createNotification(dlReq.admin_id, "download_request_accepted", "✅ Download Request Approved", `Your mixed download request for ${allRows.length.toLocaleString()} leads has been approved and is ready to download.`, id);
+      } catch (notifyErr) {
+        console.error("Mixed accepted notification error:", notifyErr?.message || notifyErr);
+      }
+
+      return res.status(200).json({
+        message: "Request accepted instantly! Clean CSV is ready for download.",
+        id: Number(id),
+        status: "accepted",
+        has_csv: true,
+        processing: false,
+        count: allRows.length,
+      });
+    }
+
+    // Mark as accepted immediately to prevent double-processing (legacy non-preview flow)
     await client.query(
       `UPDATE mixed_download_requests SET status = 'accepted', reviewed_at = NOW(), reviewed_by = $1 WHERE id = $2`,
       [req.user.id, id]
@@ -915,17 +987,16 @@ const reviewDownloadRequest = async (req, res) => {
     await client.query("COMMIT");
     client.release();
 
-      // Send response immediately, then continue CSV/BLA work in background.
-      if (!res.headersSent) {
-        res.status(200).json({
-          message: "Request approved. CSV is being generated in the background.",
-          id: Number(id),
-          status: "accepted",
-          has_csv: false,
-          processing: true,
-          count: allRows.length
-        });
-      }
+    if (!res.headersSent) {
+      res.status(200).json({
+        message: "Request approved. CSV is being generated in the background.",
+        id: Number(id),
+        status: "accepted",
+        has_csv: false,
+        processing: true,
+        count: allRows.length
+      });
+    }
 
       await new Promise((resolve) => setImmediate(resolve));
 

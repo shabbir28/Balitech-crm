@@ -560,7 +560,10 @@ const Layout = ({ children }) => {
                 {/* Logo */}
                 <div className="h-[70px] flex items-center justify-center px-4 border-b border-white/[0.06] shrink-0 relative">
                     <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-brand-500/30 to-transparent" />
-                    <img src="/assets/logo.png" alt="BaliTech" className="h-12 w-auto max-w-[85%] object-contain select-none" />
+                    {/* Balitech Logo (Temporarily commented out) */}
+                    {/* <img src="/assets/logo.png" alt="BaliTech" className="h-12 w-auto max-w-[85%] object-contain select-none" /> */}
+                    {/* New Logo */}
+                    <img src="/assets/Go Connectivo 1.png" alt="Logo" className="h-12 w-auto max-w-[85%] object-contain select-none" />
                 </div>
 
                 {/* Nav */}
@@ -799,8 +802,8 @@ const Layout = ({ children }) => {
                                 </div>
                             )}
 
-                            {/* MIXED DOWNLOAD Collapsible (Always available to super_admin/admin, no specific module needed, or maybe tie it to van_desk/premium/refine?) */}
-                            {(isSuperAdmin || isAdmin) && (
+                            {/* MIXED DOWNLOAD Collapsible */}
+                            {hasModule('mixed_data') && (
                                 <div className="mt-4">
                                 <button
                                     type="button"
@@ -915,39 +918,6 @@ const Layout = ({ children }) => {
                                             <NavLink to="/already-downloaded" className={getClassName}>
                                                 <History className="h-[15px] w-[15px] shrink-0" /><span>Already Downloaded</span>
                                             </NavLink>
-                                            <div className="mt-4">
-                                            <button
-                                                type="button"
-                                                onClick={() => setMixedMenuOpen((open) => !open)}
-                                                className={`w-full flex items-center px-3.5 py-2.5 text-[13px] font-medium rounded-xl transition-all duration-200 gap-3 mb-0.5 border ${
-                                                    isMixedPath
-                                                        ? 'bg-gradient-to-r from-blue-500/15 to-transparent text-white border-blue-500/25'
-                                                        : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border-transparent'
-                                                }`}
-                                            >
-                                                <FolderDown className="h-[15px] w-[15px] shrink-0 text-blue-400" />
-                                                <span className="flex-1 text-left">Mixed Data</span>
-                                    <ChevronDown
-                                        className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${mixedMenuOpen ? 'rotate-180' : ''}`}
-                                    />
-                                </button>
-
-                                <div
-                                    className={`overflow-hidden transition-all duration-300 ease-out ${
-                                        mixedMenuOpen ? 'max-h-[520px] opacity-100 mt-1' : 'max-h-0 opacity-0'
-                                    }`}
-                                >
-                                    {MIXED_NAV_ITEMS.map((item) => {
-                                        const ItemIcon = item.icon;
-                                        return (
-                                            <NavLink key={item.to} to={item.to} className={getSubClassName}>
-                                                <ItemIcon className="h-[14px] w-[14px] shrink-0" />
-                                                <span>{item.label}</span>
-                                            </NavLink>
-                                        );
-                                    })}
-                                </div>
-                                </div>
                                         </>
                                     )}
                                 </div>
@@ -1101,6 +1071,42 @@ const Layout = ({ children }) => {
                                                 </NavLink>
                                             </>
                                         )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {hasModule('mixed_data') && (
+                                <div className="mt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setMixedMenuOpen((open) => !open)}
+                                        className={`w-full flex items-center px-3.5 py-2.5 text-[13px] font-medium rounded-xl transition-all duration-200 gap-3 mb-0.5 border ${
+                                            isMixedPath
+                                                ? 'bg-gradient-to-r from-blue-500/15 to-transparent text-white border-blue-500/25'
+                                                : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border-transparent'
+                                        }`}
+                                    >
+                                        <FolderDown className="h-[15px] w-[15px] shrink-0 text-blue-400" />
+                                        <span className="flex-1 text-left">Mixed Data</span>
+                                        <ChevronDown
+                                            className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${mixedMenuOpen ? 'rotate-180' : ''}`}
+                                        />
+                                    </button>
+
+                                    <div
+                                        className={`overflow-hidden transition-all duration-300 ease-out ${
+                                            mixedMenuOpen ? 'max-h-[520px] opacity-100 mt-1' : 'max-h-0 opacity-0'
+                                        }`}
+                                    >
+                                        {MIXED_NAV_ITEMS.map((item) => {
+                                            const ItemIcon = item.icon;
+                                            return (
+                                                <NavLink key={item.to} to={item.to} className={getSubClassName}>
+                                                    <ItemIcon className="h-[14px] w-[14px] shrink-0" />
+                                                    <span>{item.label}</span>
+                                                </NavLink>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}

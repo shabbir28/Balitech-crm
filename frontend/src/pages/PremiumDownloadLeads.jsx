@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../services/api';
 import { AuthContext } from '../context/AuthContext';
-import { fmtDbDateTime, fmtDbTimeAgo, parseDbTime } from '../utils/dbTime';
+import { fmtDbDateTime } from '../utils/dbTime';
 
 import {
     Send, Download, AlertCircle, ChevronDown, Check,
@@ -43,8 +43,6 @@ const StatusBadge = ({ status }) => {
         </span>
     );
 };
-
-const fmtDate = (d) => d ? new Date(d).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
 
 // ── Custom Select ─────────────────────────────────────────────
 const Field = ({ label, required, hint, children }) => (
@@ -555,9 +553,23 @@ const PremiumDownloadLeads = () => {
 
     useEffect(() => {
         Promise.all([api.get('/premium-vendors?counts=true'), api.get('/premium-campaigns'), api.get('/filters')])
-            .then(([v, c, f]) => { 
-                setVendors(v.data); 
-                setCampaigns(c.data.filter(x => x.status === 'Active')); 
+            .then(([v, c, f]) => {
+                setVendors(v?.data || []);
+                const user = JSON.parse(localStorage.getItem('user') || '{}');
+                const role = String(user.role || '').toLowerCase();
+                let allowedCampaigns = user.accessible_campaigns;
+                if (typeof allowedCampaigns === 'string') {
+                    try { allowedCampaigns = JSON.parse(allowedCampaigns); } catch { allowedCampaigns = []; }
+                }
+                if (!Array.isArray(allowedCampaigns)) allowedCampaigns = [];
+
+                const activeCampaigns = (c.data || []).filter(x => x.status === 'Active');
+                const visibleCampaigns = role === 'super_admin' ? activeCampaigns : (allowedCampaigns.length > 0 ? activeCampaigns.filter(x => allowedCampaigns.map(String).includes(String(x.campaign_id))) : activeCampaigns);
+
+                setCampaigns(visibleCampaigns); 
+                if (visibleCampaigns.length === 1) {
+                    setForm(prev => ({ ...prev, campaign_id: String(visibleCampaigns[0].campaign_id) }));
+                }
                 setFilters(f?.data || []);
             })
             .catch(() => {})
@@ -707,6 +719,7 @@ const PremiumDownloadLeads = () => {
         if (!form.vendor_id) { setError('Please select a vendor.'); return; }
         if (!form.campaign_id) { setError('Please select a campaign.'); return; }
         if (!form.quantity || form.quantity <= 0) { setError('Please enter a valid quantity.'); return; }
+        if (Number(form.quantity) > 100000) { setError('Maximum allowed quantity is 100,000.'); return; }
         setSubmitting(true); setError(''); setSuccessMsg('');
         try {
             if (isSuperAdmin) {
@@ -1100,7 +1113,6 @@ const body = {
                                     required
                                 >
                                     <option value="" disabled>{loadingC ? 'Loading...' : 'Choose a campaign...'}</option>
-                                    <option value="all">All Campaigns</option>
                                     {campaigns.map(c => <option key={c.campaign_id} value={c.campaign_id}>{c.name}</option>)}
                                 </SelectInput>
                             </Field>

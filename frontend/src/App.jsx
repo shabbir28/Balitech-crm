@@ -250,8 +250,8 @@ const AppRoutes = () => {
             <Route path="/wc-db-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="wc_db"><WcDbAlreadyDownloaded /></ProtectedRoute>} />
 
             {/* MIXED DOWNLOAD MODULE */}
-            <Route path="/mixed-download" element={<ProtectedRoute roles={['super_admin', 'admin', 'dialer_agent']}><MixedDownloadLeads /></ProtectedRoute>} />
-            <Route path="/mixed-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin', 'dialer_agent']}><MixedAlreadyDownloaded /></ProtectedRoute>} />
+            <Route path="/mixed-download" element={<ProtectedRoute roles={['super_admin', 'admin', 'dialer_agent', 'data_entry']} module="mixed_data"><MixedDownloadLeads /></ProtectedRoute>} />
+            <Route path="/mixed-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin', 'dialer_agent', 'data_entry']} module="mixed_data"><MixedAlreadyDownloaded /></ProtectedRoute>} />
 
             {/* Clients & Separation */}
             <Route path="/clients" element={<ProtectedRoute roles={['super_admin', 'admin']} module="core"><Clients /></ProtectedRoute>} />

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { AuthContext } from '../context/AuthContext';
 
-import { fmtDbDateTime, fmtDbTimeAgo, parseDbTime } from '../utils/dbTime';
+import { fmtDbDateTime } from '../utils/dbTime';
 
 const SCRUB_POLL_INTERVAL_MS = 5000;
 const SCRUB_POLL_MAX_MS = 60 * 60 * 1000;
@@ -305,10 +305,10 @@ const MixedDownloadLeads = () => {
         refine_vendor: 'all',
         premium_vendor: 'all',
         campaign_id: null,
-        global_campaign: 'all',
-        van_campaign: 'all',
-        refine_campaign: 'all',
-        premium_campaign: 'all',
+        global_campaign: '',
+        van_campaign: '',
+        refine_campaign: '',
+        premium_campaign: '',
         quality: 'All',
         min_age: '',
         max_age: '',
@@ -474,6 +474,7 @@ const MixedDownloadLeads = () => {
         e.preventDefault();
         
         if (!form.quantity || form.quantity <= 0) { setError('Please enter a valid quantity.'); return; }
+        if (Number(form.quantity) > 100000) { setError('Maximum allowed quantity is 100,000.'); return; }
         const van = Number(form.van_percentage || 0);
         const refine = Number(form.refine_percentage || 0);
         const premium = Number(form.premium_percentage || 0);
@@ -838,7 +839,7 @@ const MixedDownloadLeads = () => {
                                             });
                                         }}
                                     >
-                                        <option value="all">All Campaigns</option>
+                                        <option value="" disabled>Choose a campaign...</option>
                                         {[...new Set([
                                             ...vanCampaigns.map(c => c.name),
                                             ...refineCampaigns.map(c => c.name),
@@ -878,6 +879,7 @@ const MixedDownloadLeads = () => {
                                             type="number"
                                             required
                                             min="1"
+                                            max="100000"
                                             value={form.quantity}
                                             onChange={(e) => setForm({ ...form, quantity: e.target.value })}
                                             className="w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 text-white rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500/60 transition-all font-mono text-sm shadow-inner"

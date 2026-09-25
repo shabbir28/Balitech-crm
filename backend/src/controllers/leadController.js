@@ -3,6 +3,7 @@ const { processFileBuffer } = require("../utils/fileProcessor");
 const { parsePhone } = require("../utils/phoneParser");
 const { getAreaCodesForStateSearch } = require("../utils/areaCodes");
 const { cleanupFile } = require('../middleware/upload');
+const { getUserCampaignAccess } = require("../utils/campaignAccess");
 
 // POST /api/leads/upload
 const uploadLeads = async (req, res) => {
@@ -139,8 +140,27 @@ const getLeads = async (req, res) => {
     } = req.query;
     const offset = (page - 1) * limit;
 
+    const access = await getUserCampaignAccess(req.user, 'campaigns');
+    if (access.isRestricted && access.campaignNamesLower.length === 0) {
+      return res.json({
+        data: [],
+        total: 0,
+        page: parseInt(page),
+        limit: parseInt(limit),
+      });
+    }
+
     let query = "SELECT * FROM leads WHERE 1=1";
     const params = [];
+
+    if (access.isRestricted) {
+      params.push(access.campaignNamesLower);
+      query += ` AND EXISTS (
+        SELECT 1
+        FROM unnest(string_to_array(COALESCE(campaign_type, ''), ',')) AS ct(v)
+        WHERE LOWER(BTRIM(ct.v)) = ANY($${params.length})
+      )`;
+    }
 
     if (vendor_id) {
       params.push(vendor_id);

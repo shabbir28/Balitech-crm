@@ -3,6 +3,7 @@ const { Parser } = require("json2csv");
 const { areaCodesMap } = require("../utils/areaCodes");
 const { createNotification } = require("./notificationController");
 const { scrubPhones, normalizePhone } = require("../utils/blacklistAlliance");
+const { getUserCampaignAccess } = require("../utils/campaignAccess");
 
 /**
  * Blacklist Alliance API is 1 HTTP call per phone. On big downloads (100k phones)
@@ -331,7 +332,14 @@ async function buildFilters(
       [campaign_id],
     );
     if (campRes.rows.length > 0) {
-      filters.push(`campaign_type = $${paramIdx++}`);
+      filters.push(`EXISTS (
+        SELECT 1
+        FROM unnest(
+          string_to_array(COALESCE(campaign_type, ''), ',')
+        ) AS campaign_token(value)
+        WHERE LOWER(BTRIM(campaign_token.value)) =
+              LOWER(BTRIM($${paramIdx++}))
+      )`);
       params.push(campRes.rows[0].name);
     } else {
       filters.push(`1 = 0`);
@@ -401,13 +409,11 @@ async function executeDownload(
   const whereParts = [...filters];
   whereParts.push(
     `NOT EXISTS (SELECT 1 FROM dnc_numbers d WHERE d.phone = leads.phone)`,
+    `NOT EXISTS (SELECT 1 FROM refine_dnc_numbers d WHERE d.phone = leads.phone)`,
+    `NOT EXISTS (SELECT 1 FROM premium_dnc_numbers d WHERE d.phone = leads.phone)`,
+    `NOT EXISTS (SELECT 1 FROM dead_numbers d WHERE d.phone = leads.phone)`,
+    `NOT EXISTS (SELECT 1 FROM separation_data sd WHERE sd.phone = leads.phone)`
   );
-  if (campaign_id && campaign_id !== "all") {
-    whereParts.push(
-      `NOT EXISTS (SELECT 1 FROM separation_data sd WHERE sd.phone = leads.phone AND sd.campaign_id = $${currentParamIdx++})`,
-    );
-    params.push(campaign_id);
-  }
   const whereClause = whereParts.length > 0 ? whereParts.join(" AND ") : "1=1";
 
   await client.query("SET local work_mem = '512MB'");
@@ -655,6 +661,9 @@ const downloadLeads = async (req, res) => {
     if (!quantity || quantity <= 0) {
       return res.status(400).json({ message: "Valid quantity is required" });
     }
+    if (quantity > 100000) {
+      return res.status(400).json({ message: "Maximum allowed quantity is 100,000." });
+    }
     if (
       (include_downloaded === true || include_downloaded === "true") &&
       (!vendor_id || vendor_id === "all")
@@ -751,6 +760,180 @@ const downloadLeads = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────
+// POST /api/download/preview-scrub
+// Run BLA scrub PREVIEW without marking data as downloaded.
+// Returns scrub summary so agent can review before submitting a request.
+// ─────────────────────────────────────────────────────────────
+const previewScrub = async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const {
+      vendor_id,
+      quantity,
+      states,
+      campaign_id,
+      min_age,
+      max_age,
+      job_id,
+      include_downloaded,
+    } = req.body;
+
+    if (!vendor_id) {
+      return res.status(400).json({ message: "Please select a vendor." });
+    }
+    if (!campaign_id || campaign_id === "all") {
+      return res.status(400).json({ message: "Please select a specific campaign." });
+    }
+
+    const access = await getUserCampaignAccess(req.user, 'campaigns');
+    if (access.isRestricted) {
+      if (!access.campaignIds.includes(String(campaign_id))) {
+        return res.status(403).json({ message: "You are only authorized to download data from your assigned campaign." });
+      }
+    }
+
+    const requestedQty = parseInt(quantity, 10);
+    if (!requestedQty || requestedQty <= 0) {
+      return res.status(400).json({ message: "Valid quantity is required." });
+    }
+    if (requestedQty > 100000) {
+      return res.status(400).json({ message: "Maximum allowed quantity is 100,000." });
+    }
+
+    const { filters, params, paramIdx } = await buildFilters(client, {
+      vendor_id: vendor_id && vendor_id !== "all" ? vendor_id : null,
+      campaign_id: campaign_id && campaign_id !== "all" ? campaign_id : null,
+      states,
+      min_age,
+      max_age,
+      job_id,
+      include_downloaded,
+    });
+
+    const whereParts = [...filters];
+    whereParts.push(
+      `NOT EXISTS (SELECT 1 FROM dnc_numbers d WHERE d.phone = leads.phone)`,
+      `NOT EXISTS (SELECT 1 FROM refine_dnc_numbers d WHERE d.phone = leads.phone)`,
+      `NOT EXISTS (SELECT 1 FROM premium_dnc_numbers d WHERE d.phone = leads.phone)`,
+      `NOT EXISTS (SELECT 1 FROM dead_numbers d WHERE d.phone = leads.phone)`,
+      `NOT EXISTS (SELECT 1 FROM separation_data sd WHERE sd.phone = leads.phone)`
+    );
+
+    const whereClause = whereParts.length > 0 ? whereParts.join(" AND ") : "1=1";
+
+    await client.query("SET local work_mem = '256MB'");
+
+    const result = await client.query(
+      `SELECT id, name, phone, email, country_code, area_code, disposition, age
+       FROM leads
+       WHERE ${whereClause}
+       ORDER BY id ASC
+       LIMIT $${paramIdx}`,
+      [...params, requestedQty]
+    );
+
+    const rows = result.rows;
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "No available leads found matching your criteria." });
+    }
+
+    let finalRows = rows;
+    let blacklist = 0;
+    let stateDnc = 0;
+    let federalDnc = 0;
+    let badPhone = 0;
+
+    try {
+      const allPhones = rows.map((r) => r.phone).filter(Boolean);
+      const scrubResult = await scrubPhones(allPhones);
+
+      if (allPhones.length >= 200 && scrubResult.bad.length === allPhones.length) {
+        throw new Error("Suspicious scrub result: all numbers flagged DNC. Check BLACKLIST_ALLIANCE_API_KEY.");
+      }
+
+      const scrubInfoByPhone = new Map(
+        scrubResult.bad.map((b) => [normalizePhone(b.phone), b])
+      );
+
+      const badRows = rows.filter((r) =>
+        scrubInfoByPhone.has(normalizePhone(r.phone))
+      );
+
+      for (const r of badRows) {
+        const item = scrubInfoByPhone.get(normalizePhone(r.phone)) || {};
+        const typeLower = String(item.type || "").toLowerCase();
+
+        if (typeLower.includes("federal")) federalDnc++;
+        else if (typeLower.includes("state")) stateDnc++;
+        else if (typeLower.includes("invalid") || typeLower.includes("bad")) badPhone++;
+        else blacklist++;
+      }
+
+      if (badRows.length > 0) {
+        const badPhones = [...new Set(badRows.map(r => r.phone).filter(Boolean))];
+
+        await client.query("BEGIN");
+        try {
+          await client.query(
+            `UPDATE leads
+             SET status='available',
+                 downloaded_at=null,
+                 disposition='DNC'
+             WHERE phone = ANY($1::text[])`,
+            [badPhones]
+          );
+
+          await upsertDncNumbersBatched({
+            queryFn: client.query.bind(client),
+            badItems: badRows.map((r) => {
+              const info = scrubInfoByPhone.get(normalizePhone(r.phone)) || {};
+              return {
+                phone: normalizePhone(r.phone),
+                reason: info.reason || "Blacklist Alliance Match",
+              };
+            }),
+            createdBy: req.user?.id,
+            notePrefix: "Preview BLA: ",
+            campaignId: campaign_id && campaign_id !== "all" ? campaign_id : null,
+          });
+
+          await client.query("COMMIT");
+        } catch (badErr) {
+          await client.query("ROLLBACK").catch(() => {});
+          throw badErr;
+        }
+      }
+
+      finalRows = rows.filter((r) => !scrubInfoByPhone.has(normalizePhone(r.phone)));
+    } catch (scrubErr) {
+      console.error("[Download Leads Preview Scrub] BLA failed:", scrubErr.message);
+      return res.status(500).json({ message: "Blacklist Alliance scrub failed: " + scrubErr.message });
+    }
+
+    return res.json({
+      summary: {
+        total: rows.length,
+        good: finalRows.length,
+        blacklist,
+        stateDnc,
+        federalDnc,
+        badPhone,
+        errors: 0,
+        scrubCompleted: true,
+        fileName: `leads_${Date.now()}.csv`,
+        scrubDate: new Date().toLocaleString(),
+      },
+      goodCount: finalRows.length,
+    });
+  } catch (err) {
+    console.error("Preview Scrub Error:", err);
+    return res.status(500).json({ message: "Server error during preview scrub" });
+  } finally {
+    client.release();
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
 // POST /api/download/request
 // Admin submits a download request → stored as "pending"
 // ─────────────────────────────────────────────────────────────
@@ -770,8 +953,21 @@ const createDownloadRequest = async (req, res) => {
     if (!vendor_id) {
       return res.status(400).json({ message: "Please select a vendor." });
     }
+    if (!campaign_id || campaign_id === "all") {
+      return res.status(400).json({ message: "Please select a specific campaign." });
+    }
+
+    const access = await getUserCampaignAccess(req.user, 'campaigns');
+    if (access.isRestricted) {
+      if (!access.campaignIds.includes(String(campaign_id))) {
+        return res.status(403).json({ message: "You are only authorized to download data from your assigned campaign." });
+      }
+    }
     if (!quantity || quantity <= 0) {
       return res.status(400).json({ message: "Valid quantity is required." });
+    }
+    if (parseInt(quantity, 10) > 100000) {
+      return res.status(400).json({ message: "Maximum allowed quantity is 100,000." });
     }
     if (
       (include_downloaded === true || include_downloaded === "true") &&
@@ -782,6 +978,18 @@ const createDownloadRequest = async (req, res) => {
           "Re-download mode requires a specific vendor (not All Vendors).",
       });
     }
+
+    let blaSummary = req.body.bla_summary || null;
+    if (typeof blaSummary === "string") {
+      try { blaSummary = JSON.parse(blaSummary); } catch (_) {}
+    }
+
+    if (!blaSummary || blaSummary.scrubCompleted !== true || blaSummary.blaSkipped === true) {
+      return res.status(400).json({
+        message: "Please run Preview BLA first. Only scrubbed clean data can be requested."
+      });
+    }
+
     // Support one or multiple selected uploaded files.
     const rawJobIds = Array.isArray(job_id)
       ? job_id
@@ -806,28 +1014,25 @@ const createDownloadRequest = async (req, res) => {
       });
     }
 
-    // Preserve legacy job_id for single-file requests.
-    const singleJobId =
-      normalizedJobIds.length === 1 ? normalizedJobIds[0] : null;
-
-
+    const requestedQty = parseInt(req.body.requested_quantity || quantity, 10);
 
     const result = await db.query(
       `INSERT INTO download_requests
-               (admin_id, vendor_id, campaign_id, quantity, states, min_age, max_age, job_id, job_ids, include_downloaded)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+               (admin_id, vendor_id, campaign_id, quantity, requested_quantity, states, min_age, max_age, job_id, include_downloaded, bla_summary)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
              RETURNING *`,
       [
         req.user.id,
         vendor_id && vendor_id !== "all" ? vendor_id : null,
         campaign_id && campaign_id !== "all" ? campaign_id : null,
         quantity,
+        requestedQty,
         states && states.length ? states : null,
         min_age || null,
         max_age || null,
-        singleJobId,
         normalizedJobIds.length ? normalizedJobIds : null,
         include_downloaded === true || include_downloaded === "true",
+        blaSummary ? JSON.stringify(blaSummary) : null,
       ],
     );
 
@@ -1029,6 +1234,60 @@ const reviewDownloadRequest = async (req, res) => {
       client.release();
       return res.status(404).json({
         message: "No available leads found. Request has been marked as rejected.",
+      });
+    }
+
+    const hasBlaPreview = !!dlReq.bla_summary;
+
+    if (hasBlaPreview) {
+      console.log(`[Approval] bla_summary present for request ${id} — skipping BLA re-scrub, building CSV immediately.`);
+      const serializedData = serializeDownloadPayload(
+        goodRows,
+        [],
+        {
+          ...(dlReq.bla_summary || {}),
+          total: goodRows.length,
+          good: goodRows.length,
+          scrubPending: false,
+          scrubCompleted: true,
+        },
+        `approved_leads_${id}.csv`
+      );
+
+      await db.query(
+        `UPDATE download_requests SET status='accepted', reviewed_at=NOW(), reviewed_by=$1, csv_data=$2 WHERE id=$3`,
+        [req.user.id, serializedData, id]
+      );
+
+      await db.query(
+        `INSERT INTO download_logs (user_id, vendor_id, campaign_id, quantity, states, min_age, max_age, csv_payload, download_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+        [
+          dlReq.admin_id,
+          dlReq.vendor_id,
+          dlReq.campaign_id,
+          goodRows.length,
+          dlReq.states,
+          dlReq.min_age,
+          dlReq.max_age,
+          serializedData
+        ]
+      );
+
+      await createNotification(
+        dlReq.admin_id,
+        'download_request_accepted',
+        '✅ Download Request Approved!',
+        `Your download request for ${goodRows.length.toLocaleString()} leads has been approved. You can now download your CSV file.`,
+        dlReq.id,
+      );
+
+      client2.release();
+      client.release();
+
+      return res.json({
+        message: `Request accepted instantly! Clean CSV file is ready for download.`,
+        lead_count: goodRows.length,
       });
     }
 
@@ -1325,6 +1584,18 @@ const getAlreadyDownloadedList = async (req, res) => {
       where += ` AND dl.vendor_id = $${params.length}`;
     }
 
+    const access = await getUserCampaignAccess(req.user, 'campaigns');
+    if (access.isRestricted) {
+      params.push(req.user.id);
+      const uuidIds = access.campaignIds.filter(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+      if (uuidIds.length > 0) {
+        params.push(uuidIds);
+        where += ` AND (dl.user_id = $${params.length - 1} OR dl.campaign_id = ANY($${params.length}::uuid[]))`;
+      } else {
+        where += ` AND dl.user_id = $${params.length}`;
+      }
+    }
+
     const dataQuery = `
       SELECT
         dl.id,
@@ -1526,7 +1797,7 @@ const getDownloadLogFile = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 const getStateCounts = async (req, res) => {
   try {
-    const {
+    let {
       vendor_id,
       campaign_id,
       states,
@@ -1535,6 +1806,14 @@ const getStateCounts = async (req, res) => {
       job_id,
       include_downloaded,
     } = req.body;
+
+    const access = await getUserCampaignAccess(req.user, 'campaigns');
+    if (access.isRestricted) {
+      if (!campaign_id || campaign_id === 'all' || !access.campaignIds.includes(String(campaign_id))) {
+        campaign_id = access.campaignIds[0];
+      }
+    }
+
     const client = await db.getClient();
     try {
       const { filters, params } = await buildFilters(client, {
@@ -1584,7 +1863,7 @@ const downloadJobFile = async (req, res) => {
   const { jobId } = req.params;
   try {
     const jobRes = await db.query(
-      `SELECT j.id, j.file_name, j.created_at, s.vendor_id, v.name as vendor_name
+      `SELECT j.id, j.file_name, j.created_at, s.vendor_id, s.campaign_type, v.name as vendor_name
        FROM upload_jobs j
        JOIN upload_sessions s ON j.session_id = s.id
        JOIN vendors v ON s.vendor_id = v.vendor_id
@@ -1597,6 +1876,18 @@ const downloadJobFile = async (req, res) => {
     }
 
     const job = jobRes.rows[0];
+
+    const access = await getUserCampaignAccess(req.user, 'campaigns');
+    if (access.isRestricted) {
+      const jobCampaignTokens = String(job.campaign_type || '')
+        .split(',')
+        .map(t => t.toLowerCase().trim())
+        .filter(Boolean);
+      const hasAccess = jobCampaignTokens.some(t => access.campaignNamesLower.includes(t));
+      if (!hasAccess) {
+        return res.status(403).json({ message: "You are not authorized to download this file." });
+      }
+    }
 
     // Query leads of this job
     let leadsRes = await db.query(
@@ -1660,7 +1951,7 @@ const getJobStats = async (req, res) => {
   const { jobId } = req.params;
   try {
     const jobRes = await db.query(
-      `SELECT j.id, j.file_name, j.created_at, s.vendor_id, v.name as vendor_name
+      `SELECT j.id, j.file_name, j.created_at, s.vendor_id, s.campaign_type, v.name as vendor_name
        FROM upload_jobs j
        JOIN upload_sessions s ON j.session_id = s.id
        JOIN vendors v ON s.vendor_id = v.vendor_id
@@ -1673,6 +1964,18 @@ const getJobStats = async (req, res) => {
     }
 
     const job = jobRes.rows[0];
+
+    const access = await getUserCampaignAccess(req.user, 'campaigns');
+    if (access.isRestricted) {
+      const jobCampaignTokens = String(job.campaign_type || '')
+        .split(',')
+        .map(t => t.toLowerCase().trim())
+        .filter(Boolean);
+      const hasAccess = jobCampaignTokens.some(t => access.campaignNamesLower.includes(t));
+      if (!hasAccess) {
+        return res.status(403).json({ message: "You are not authorized to view stats for this file." });
+      }
+    }
 
     // Check if there are leads with this job_id
     const jobCheck = await db.query(
@@ -1750,4 +2053,5 @@ module.exports = {
   getStateCounts,
   downloadJobFile,
   getJobStats,
+  previewScrub,
 };

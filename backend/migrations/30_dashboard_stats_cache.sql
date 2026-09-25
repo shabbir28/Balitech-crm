@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS dashboard_stats_cache (
+    cache_key VARCHAR(100) PRIMARY KEY,
+    data JSONB NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);

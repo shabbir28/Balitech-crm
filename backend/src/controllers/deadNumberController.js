@@ -1,6 +1,7 @@
 const db = require("../config/db");
 const { processFileBuffer } = require("../utils/fileProcessor");
 const { cleanupFile } = require("../middleware/upload");
+const { normalizeUsDigits } = require("../utils/phoneParser");
 
 // POST /api/dead-numbers/upload
 const uploadDeadNumbers = async (req, res) => {
@@ -21,7 +22,8 @@ const uploadDeadNumbers = async (req, res) => {
 
         const phones = [];
         for (const r of records) {
-            if (r.phone) phones.push(r.phone);
+            const normalized = normalizeUsDigits(r.phone);
+            if (normalized) phones.push(normalized);
         }
 
         const uniquePhones = Array.from(new Set(phones));

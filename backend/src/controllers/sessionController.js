@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { getUserCampaignAccess } = require("../utils/campaignAccess");
 
 const createSession = async (req, res) => {
   try {
@@ -8,6 +9,15 @@ const createSession = async (req, res) => {
       return res
         .status(400)
         .json({ message: "Vendor ID and Campaign Type are required" });
+    }
+
+    const access = await getUserCampaignAccess(req.user, 'campaigns');
+    if (access.isRestricted) {
+      const tokens = String(campaign_type).split(',').map(t => t.toLowerCase().trim()).filter(Boolean);
+      const isAllowed = tokens.some(t => access.campaignNamesLower.includes(t));
+      if (!isAllowed) {
+        return res.status(403).json({ message: "You are not authorized to upload data for this campaign." });
+      }
     }
 
     const vendorCheck = await db.query(
@@ -53,6 +63,17 @@ const getSession = async (req, res) => {
       return res.status(404).json({ message: "Session not found" });
     }
 
+    const session = sessionResult.rows[0];
+
+    const access = await getUserCampaignAccess(req.user, 'campaigns');
+    if (access.isRestricted) {
+      const tokens = String(session.campaign_type || '').split(',').map(t => t.toLowerCase().trim()).filter(Boolean);
+      const isAllowed = tokens.some(t => access.campaignNamesLower.includes(t));
+      if (!isAllowed) {
+        return res.status(403).json({ message: "You are not authorized to view this session." });
+      }
+    }
+
     const jobsResult = await db.query(
       `
             SELECT * FROM upload_jobs
@@ -62,7 +83,6 @@ const getSession = async (req, res) => {
       [id],
     );
 
-    const session = sessionResult.rows[0];
     session.jobs = jobsResult.rows;
 
     res.json(session);
@@ -83,6 +103,20 @@ const listSessions = async (req, res) => {
 
     const params = [];
     let where = "WHERE 1=1";
+
+    const access = await getUserCampaignAccess(req.user, 'campaigns');
+    if (access.isRestricted) {
+      if (access.campaignNamesLower.length === 0) {
+        where += ` AND 1=0`;
+      } else {
+        params.push(access.campaignNamesLower);
+        where += ` AND EXISTS (
+          SELECT 1
+          FROM unnest(string_to_array(COALESCE(s.campaign_type, ''), ',')) AS ct(v)
+          WHERE LOWER(BTRIM(ct.v)) = ANY($${params.length})
+        )`;
+      }
+    }
 
     if (search) {
       params.push(`%${search}%`);

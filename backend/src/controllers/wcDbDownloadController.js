@@ -154,6 +154,9 @@ const downloadWcDbData = async (req, res) => {
     const normalizedStates = normalizeTextArray(states);
     if (!quantity || quantity <= 0)
       return res.status(400).json({ message: "Valid quantity is required" });
+    if (quantity > 100000) {
+      return res.status(400).json({ message: "Maximum allowed quantity is 100,000." });
+    }
 
     const wantsAsyncScrub = req.body.async_scrub === true || req.body.async_scrub === "true";
 
@@ -628,6 +631,9 @@ const previewScrub = async (req, res) => {
     if (!requestedQty || requestedQty <= 0) {
       return res.status(400).json({ message: "Valid quantity is required." });
     }
+    if (requestedQty > 100000) {
+      return res.status(400).json({ message: "Maximum allowed quantity is 100,000." });
+    }
 
     const { filters, params, paramIdx } = buildFilters({
       vendor_id: vendor_id && vendor_id !== "all" ? vendor_id : null,
@@ -764,6 +770,7 @@ const createDownloadRequest = async (req, res) => {
 
     if (!vendor_id) return res.status(400).json({ message: "Please select a vendor." });
     if (!quantity || quantity <= 0) return res.status(400).json({ message: "Valid quantity is required." });
+    if (quantity > 100000) return res.status(400).json({ message: "Maximum allowed quantity is 100,000." });
 
     let blaSummary = req.body.bla_summary || null;
 

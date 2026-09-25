@@ -292,7 +292,7 @@ const ScrubSummaryModal = ({ data, onClose }) => {
 };
 
 // ── Scrub Summary Inline Component ─────────────────────────────
-const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
+const ScrubSummaryInline = ({ data, onClose, scrubPolling, previewMode = false, onConfirmRequest, onCancelPreview, submittingRequest = false }) => {
     if (!data) return null;
 
     const { summary, badCsv } = data;
@@ -321,28 +321,41 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
     }
 
     return (
-        <div className="mt-6 bg-[#13151f]/80 backdrop-blur-xl border border-white/[0.07] rounded-2xl p-6 shadow-2xl relative animate-fade-in">
+        <div className={`mt-6 backdrop-blur-xl border rounded-2xl p-6 shadow-2xl relative animate-fade-in ${previewMode ? 'bg-[#0d1520]/90 border-brand-500/20 ring-1 ring-brand-500/10' : 'bg-[#13151f]/80 border-white/[0.07]'}`}>
+            {/* Preview Mode Banner */}
+            {previewMode && (
+                <div className="mb-5 flex items-start gap-3 p-4 rounded-xl bg-brand-500/10 border border-brand-500/20">
+                    <Sparkles className="h-5 w-5 text-brand-400 shrink-0 mt-0.5" />
+                    <div>
+                        <p className="text-sm font-bold text-brand-200">BLA Scrub Preview — Review Before Requesting</p>
+                        <p className="text-[11px] text-brand-100/70 mt-1 leading-relaxed">
+                            This is a <strong>preview only</strong> — no data has been marked as downloaded yet. Review the numbers below, then click <strong>Request Clean Data Download</strong> to send this to your SuperAdmin for approval.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
+                    <div className={`h-9 w-9 rounded-xl flex items-center justify-center shadow-lg shrink-0 ${previewMode ? 'bg-gradient-to-br from-brand-500 to-violet-600 shadow-brand-500/20' : 'bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/20'}`}>
                         <Sparkles className="h-4.5 w-4.5 text-white animate-pulse" />
                     </div>
                     <div>
-                        <h3 className="font-bold text-white text-sm">Last Export Scrub Summary</h3>
+                        <h3 className="font-bold text-white text-sm">{previewMode ? 'BLA Preview Summary' : 'Last Export Scrub Summary'}</h3>
                         <p className="text-[11px] text-slate-500">Blacklist Alliance TCPA & DNC results</p>
                     </div>
                 </div>
                 <button
-                    onClick={onClose}
+                    onClick={previewMode ? onCancelPreview : onClose}
                     className="text-slate-550 hover:text-white hover:bg-white/5 p-1.5 rounded-lg transition-colors shrink-0"
-                    title="Clear Summary"
+                    title={previewMode ? "Go Back" : "Clear Summary"}
                 >
                     <XCircle className="h-5 w-5" />
                 </button>
             </div>
 
-            {isPending && (
+            {isPending && !previewMode && (
                 <div className="mb-5 flex items-start gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/25">
                     <RefreshCw className="h-5 w-5 text-amber-400 shrink-0 animate-spin mt-0.5" />
                     <div>
@@ -362,7 +375,7 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
                 </div>
                 <div className="flex items-center gap-2 text-slate-400 min-w-0">
                     <Building2 className="h-3.5 w-3.5 text-slate-600 shrink-0" />
-                    <span className="font-semibold text-brand-400 truncate" title={summary.fileName}>{summary.fileName || 'leads_scrubbed.csv'}</span>
+                    <span className="font-semibold text-brand-400 truncate" title={summary.fileName}>{previewMode ? 'Preview (not downloaded yet)' : (summary.fileName || 'leads_scrubbed.csv')}</span>
                 </div>
             </div>
 
@@ -402,39 +415,74 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
                 </div>
             </div>
 
-            {/* Bottom Section */}
-            <div className="flex flex-col gap-3">
-                {/* Note */}
-                <div className="flex items-start gap-2 bg-blue-500/5 border border-blue-500/10 rounded-xl p-3 text-[11px] text-slate-400 leading-relaxed">
-                    <Info className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
-                    <div>
-                        <span className="font-bold text-white block mb-0.5">Compliance Actions Taken:</span>
-                        Flagged litigation & DNC leads have been added to the local DNC database and excluded from your exports.
-                    </div>
-                </div>
-
-                {!isPending && data.goodCsv && (
+            {/* ── Preview Mode: Confirm/Cancel buttons ── */}
+            {previewMode && (
+                <div className="flex flex-col gap-3">
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Next Step</p>
                     <button
                         type="button"
-                        onClick={handleDownloadGood}
-                        className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 text-emerald-400 font-bold text-xs rounded-xl transition-all"
+                        onClick={onConfirmRequest}
+                        disabled={submittingRequest}
+                        className="w-full flex items-center justify-center gap-2 py-3.5 bg-gradient-to-r from-brand-500 to-violet-600 hover:from-brand-400 hover:to-violet-500 text-white font-bold text-sm rounded-xl transition-all shadow-[0_8px_24px_rgba(59,130,246,0.35)] hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:translate-y-0"
                     >
-                        <FileDown className="h-4 w-4 shrink-0" />
-                        Download Good Leads CSV ({summary.good?.toLocaleString()})
+                        {submittingRequest ? (
+                            <><div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Submitting Request...</>
+                        ) : (
+                            <><Send className="h-4 w-4 shrink-0" />Request Clean Data Download&nbsp;&nbsp;<span className="bg-white/20 px-2 py-0.5 rounded-full font-mono text-xs">{(summary.good || 0).toLocaleString()} leads</span></>
+                        )}
                     </button>
-                )}
-
-                {/* Download bad leads if present */}
-                {!isPending && hasBadLeads && (
                     <button
-                        onClick={handleDownloadBad}
-                        className="w-full flex items-center justify-center gap-2 py-3 bg-red-500/10 hover:bg-red-500/15 border border-red-500/20 hover:border-red-500/30 text-red-400 font-bold text-xs rounded-xl transition-all"
+                        type="button"
+                        onClick={onCancelPreview}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 bg-white/5 hover:bg-white/8 border border-white/8 text-slate-400 hover:text-white font-bold text-xs rounded-xl transition-all"
                     >
-                        <FileDown className="h-4 w-4 shrink-0" />
-                        Download Bad/DNC Leads ({((summary.blacklist || 0) + (summary.stateDnc || 0) + (summary.federalDnc || 0) + (summary.badPhone || 0)).toLocaleString()})
+                        ← Go Back & Edit Filters
                     </button>
-                )}
-            </div>
+                    <div className="flex items-start gap-2 bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-3 text-[11px] text-slate-400 leading-relaxed">
+                        <Info className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                        <div>
+                            <span className="font-bold text-white block mb-0.5">Preview Only — No data moved yet</span>
+                            BLA scrub ran in preview mode. Clicking "Request Clean Data Download" will send only the clean numbers to SuperAdmin — on approval, your CSV will be ready instantly.
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Normal Mode: Download Choices ── */}
+            {!isPending && !previewMode && (
+                <div className="flex flex-col gap-3">
+                    {/* Note */}
+                    <div className="flex items-start gap-2 bg-blue-500/5 border border-blue-500/10 rounded-xl p-3 text-[11px] text-slate-400 leading-relaxed">
+                        <Info className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
+                        <div>
+                            <span className="font-bold text-white block mb-0.5">Compliance Actions Taken:</span>
+                            Flagged litigation & DNC leads have been added to the local DNC database and excluded from your exports.
+                        </div>
+                    </div>
+
+                    {data.goodCsv && (
+                        <button
+                            type="button"
+                            onClick={handleDownloadGood}
+                            className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 text-emerald-400 font-bold text-xs rounded-xl transition-all"
+                        >
+                            <FileDown className="h-4 w-4 shrink-0" />
+                            Download Good Leads CSV ({summary.good?.toLocaleString()})
+                        </button>
+                    )}
+
+                    {/* Download bad leads if present */}
+                    {hasBadLeads && (
+                        <button
+                            onClick={handleDownloadBad}
+                            className="w-full flex items-center justify-center gap-2 py-3 bg-red-500/10 hover:bg-red-500/15 border border-red-500/20 hover:border-red-500/30 text-red-400 font-bold text-xs rounded-xl transition-all"
+                        >
+                            <FileDown className="h-4 w-4 shrink-0" />
+                            Download Bad/DNC Leads ({((summary.blacklist || 0) + (summary.stateDnc || 0) + (summary.federalDnc || 0) + (summary.badPhone || 0)).toLocaleString()})
+                        </button>
+                    )}
+                </div>
+            )}
         </div>
     );
 };
@@ -443,7 +491,7 @@ const ScrubSummaryInline = ({ data, onClose, scrubPolling }) => {
 const DownloadLeads = () => {
     const { user } = useContext(AuthContext);
     const isSuperAdmin = user?.role === 'super_admin';
-    const isRequester = user?.role === 'admin' || user?.role === 'data_entry';
+    const isRequester = user?.role === 'admin' || user?.role === 'data_entry' || user?.role === 'dialer_agent';
 
     const [vendors, setVendors]         = useState([]);
     const [campaigns, setCampaigns]     = useState([]);
@@ -475,6 +523,9 @@ const DownloadLeads = () => {
     const [scrubSummaryData, setScrubSummaryData] = useState(null);
     const [scrubPolling, setScrubPolling] = useState(false);
     const scrubPollCancelRef = useRef(false);
+    const [previewMode, setPreviewMode] = useState(false); // true = showing BLA preview before request
+    const [previewFormSnapshot, setPreviewFormSnapshot] = useState(null); // saved form for after preview
+    const [submittingRequest, setSubmittingRequest] = useState(false); // submitting the actual request after preview
 
     const [stateCounts, setStateCounts] = useState({});
     const [loadingCounts, setLoadingCounts] = useState(false);
@@ -513,13 +564,18 @@ const DownloadLeads = () => {
                 const visibleCampaigns =
                     role === 'super_admin'
                         ? activeCampaigns
-                        : activeCampaigns.filter(campaign =>
-                            allowedCampaigns
-                                .map(String)
-                                .includes(String(campaign.campaign_id))
-                        );
+                        : (allowedCampaigns.length > 0
+                            ? activeCampaigns.filter(campaign =>
+                                allowedCampaigns
+                                    .map(String)
+                                    .includes(String(campaign.campaign_id))
+                              )
+                            : activeCampaigns);
 
                 setCampaigns(visibleCampaigns); 
+                if (visibleCampaigns.length === 1) {
+                    setForm(prev => ({ ...prev, campaign_id: String(visibleCampaigns[0].campaign_id) }));
+                }
                 setFilters(f.data);
             })
             .catch(() => {})
@@ -667,6 +723,7 @@ const DownloadLeads = () => {
         if (!form.vendor_id) { setError('Please select a vendor.'); return; }
         if (!form.campaign_id) { setError('Please select a campaign.'); return; }
         if (!form.quantity || form.quantity <= 0) { setError('Please enter a valid quantity.'); return; }
+        if (Number(form.quantity) > 100000) { setError('Maximum allowed quantity is 100,000.'); return; }
         setSubmitting(true); setError(''); setSuccessMsg('');
         try {
             if (isSuperAdmin) {
@@ -689,23 +746,17 @@ const DownloadLeads = () => {
 
                 api.get('/vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
             } else {
-                const body = { ...form, job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined };
-                await api.post('/download/request', body);
-                setSuccessMsg('Request submitted! SuperAdmin will review it shortly.');
-                setForm({
-                    states: [],
-                    campaign_id: '',
-                    vendor_id: '',
-                    quantity: 1000,
-                    min_age: '',
-                    max_age: '',
-                    include_downloaded: false,
-                });
-                setSelectedFileIds([]);
-                fetchMyReqs();
-                
-                // Refetch vendors to update stats (though usually won't change until approved)
-                api.get('/vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
+                // ── Dialer/Admin: Step 1 — run BLA preview scrub first ────────────────
+                const body = {
+                    ...form,
+                    job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined
+                };
+                const res = await api.post('/download/preview-scrub', body, { timeout: 15 * 60 * 1000 });
+                // Show the BLA summary — user must confirm before request is sent
+                setScrubSummaryData({ summary: res.data.summary, goodCsv: null, badCsv: null });
+                setPreviewMode(true);
+                setPreviewFormSnapshot({ ...form, selectedFileIds: [...selectedFileIds] });
+                setSuccessMsg('');
             }
         } catch (err) {
             const status = err.response?.status;
@@ -717,6 +768,57 @@ const DownloadLeads = () => {
                 setError(err.response?.data?.message || 'Request failed.');
             }
         } finally { setSubmitting(false); }
+    };
+
+    // ── Step 2: after seeing BLA preview, send real download request with clean leads ─
+    const handleConfirmRequest = async () => {
+        if (!previewFormSnapshot) return;
+        setSubmittingRequest(true); setError(''); setSuccessMsg('');
+        try {
+            const goodQty = Number(scrubSummaryData?.summary?.good || 0);
+
+            if (!goodQty || goodQty <= 0) {
+                setError('No good leads available to request after BLA scrub.');
+                setSubmittingRequest(false);
+                return;
+            }
+
+            const { selectedFileIds: snapFileIds, ...snapForm } = previewFormSnapshot;
+            const body = {
+                ...snapForm,
+                quantity: goodQty,
+                requested_quantity: goodQty,
+                job_id: snapFileIds.length > 0 ? snapFileIds : undefined,
+                bla_summary: scrubSummaryData?.summary || null,
+            };
+            await api.post('/download/request', body);
+            setSuccessMsg('✅ Request submitted! SuperAdmin will review it shortly.');
+            setScrubSummaryData(null);
+            setPreviewMode(false);
+            setPreviewFormSnapshot(null);
+            setForm({
+                states: [],
+                campaign_id: campaigns.length === 1 ? String(campaigns[0].campaign_id) : '',
+                vendor_id: '',
+                quantity: 1000,
+                min_age: '',
+                max_age: '',
+                include_downloaded: false,
+            });
+            setSelectedFileIds([]);
+            fetchMyReqs();
+            api.get('/vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to submit request.');
+        } finally {
+            setSubmittingRequest(false);
+        }
+    };
+
+    const handleCancelPreview = () => {
+        setScrubSummaryData(null);
+        setPreviewMode(false);
+        setPreviewFormSnapshot(null);
     };
 
     const handleDownloadCSV = async (req) => {
@@ -1053,7 +1155,7 @@ const DownloadLeads = () => {
                                 ) : isSuperAdmin ? (
                                     <><Download className="h-5 w-5" />Export to CSV<ArrowRight className="h-4 w-4 ml-1" /></>
                                 ) : (
-                                    <><Send className="h-5 w-5" />Send Download Request<ArrowRight className="h-4 w-4 ml-1" /></>
+                                    <><Sparkles className="h-5 w-5" />Preview BLA & Scrub Results<ArrowRight className="h-4 w-4 ml-1" /></>
                                 )}
                             </button>
                         </form>
@@ -1063,10 +1165,15 @@ const DownloadLeads = () => {
                     <ScrubSummaryInline
                         data={scrubSummaryData}
                         scrubPolling={scrubPolling}
+                        previewMode={previewMode}
+                        onConfirmRequest={handleConfirmRequest}
+                        onCancelPreview={handleCancelPreview}
+                        submittingRequest={submittingRequest}
                         onClose={() => {
                             scrubPollCancelRef.current = true;
                             setScrubSummaryData(null);
                             setScrubPolling(false);
+                            setPreviewMode(false);
                         }}
                     />
                 </div>

@@ -45,7 +45,7 @@ const getCampaigns = async (req, res) => {
             return res.json([]);
         }
         result = await db.query(
-            `SELECT vc.* FROM refine_campaigns vc JOIN campaigns c ON vc.name = c.name WHERE c.campaign_id = ANY($1::uuid[]) ORDER BY vc.created_at DESC`,
+            `SELECT vc.* FROM refine_campaigns vc JOIN campaigns c ON vc.name = c.name WHERE c.campaign_id::text = ANY($1::text[]) ORDER BY vc.created_at DESC`,
             [accessible]
         );
     } else {
