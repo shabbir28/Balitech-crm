@@ -60,14 +60,14 @@ const upsertDeadNumbersBatched = async ({ queryFn, badItems }) => {
     let idx = 1;
 
     for (const badItem of chunk) {
-      valueStrings.push(`($${idx}, $${idx + 1})`);
-      insertValues.push(badItem.phone, "Mixed Download BLA Scrub");
-      idx += 2;
+      valueStrings.push(`($${idx}, $${idx + 1}, $${idx + 2})`);
+      insertValues.push(badItem.phone, "DNC", "Mixed Download BLA Scrub");
+      idx += 3;
     }
 
     await queryFn(
       `
-        INSERT INTO dead_numbers (phone, source)
+        INSERT INTO dnc_numbers (phone, dnc_type, source)
         VALUES ${valueStrings.join(",")}
         ON CONFLICT (phone) DO NOTHING
       `,

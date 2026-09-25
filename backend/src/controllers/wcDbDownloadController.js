@@ -72,12 +72,12 @@ const upsertDeadNumbersBatched = async ({ queryFn, badItems }) => {
     const insertValues = [];
     let idx = 1;
     for (const badItem of chunk) {
-      valueStrings.push(`($${idx}, $${idx + 1})`);
-      insertValues.push(badItem.phone, "WC DB Download BLA Scrub");
-      idx += 2;
+      valueStrings.push(`($${idx}, $${idx + 1}, $${idx + 2})`);
+      insertValues.push(badItem.phone, "DNC", "WC DB Download BLA Scrub");
+      idx += 3;
     }
     await queryFn(
-      `INSERT INTO dead_numbers (phone, source) VALUES ${valueStrings.join(",")} ON CONFLICT (phone) DO NOTHING`,
+      `INSERT INTO dnc_numbers (phone, dnc_type, source) VALUES ${valueStrings.join(",")} ON CONFLICT (phone) DO NOTHING`,
       insertValues
     );
   }
@@ -316,7 +316,7 @@ const downloadWcDbData = async (req, res) => {
     const updateQuery = `
       WITH selected AS (
         SELECT id FROM wc_db_data WHERE ${whereClause}
-        ORDER BY id ASC FOR UPDATE SKIP LOCKED LIMIT $${paramIdx}
+        ORDER BY RANDOM() FOR UPDATE SKIP LOCKED LIMIT $${paramIdx}
       )
       UPDATE wc_db_data d SET status='downloaded', downloaded_at=CURRENT_TIMESTAMP
       FROM selected s WHERE d.id = s.id
@@ -645,7 +645,7 @@ const previewScrub = async (req, res) => {
     const selectSql =
       "SELECT id, phone, area_code FROM wc_db_data WHERE " +
       whereClause +
-      " ORDER BY id ASC LIMIT $" +
+      " ORDER BY RANDOM() LIMIT $" +
       paramIdx;
 
     const result = await client.query(selectSql, [...params, requestedQty]);
@@ -914,7 +914,7 @@ const reviewDownloadRequest = async (req, res) => {
     const updateQuery = `
       WITH selected AS (
         SELECT id FROM wc_db_data WHERE ${whereClause}
-        ORDER BY id ASC FOR UPDATE SKIP LOCKED LIMIT $${paramIdx}
+        ORDER BY RANDOM() FOR UPDATE SKIP LOCKED LIMIT $${paramIdx}
       )
       UPDATE wc_db_data d SET status='downloaded', downloaded_at=CURRENT_TIMESTAMP
       FROM selected s WHERE d.id = s.id

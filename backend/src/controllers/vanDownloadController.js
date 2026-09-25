@@ -32,14 +32,14 @@ const upsertDeadNumbersBatched = async ({ queryFn, badItems }) => {
     let idx = 1;
 
     for (const badItem of chunk) {
-      valueStrings.push(`($${idx}, $${idx + 1})`);
-      insertValues.push(badItem.phone, "Van Desk Download BLA Scrub");
-      idx += 2;
+      valueStrings.push(`($${idx}, $${idx + 1}, $${idx + 2})`);
+      insertValues.push(badItem.phone, "DNC", "Van Desk Download BLA Scrub");
+      idx += 3;
     }
 
     await queryFn(
       `
-        INSERT INTO dead_numbers (phone, source)
+        INSERT INTO dnc_numbers (phone, dnc_type, source)
         VALUES ${valueStrings.join(",")}
         ON CONFLICT (phone) DO NOTHING
       `,
@@ -676,11 +676,36 @@ const createDownloadRequest = async (req, res) => {
 
     const blaSummary = req.body.bla_summary || null;
     const disposition = req.body.disposition || null;
+      // Support one or multiple selected VAN upload files.
+      const rawVanJobIds = Array.isArray(job_id)
+        ? job_id
+        : (job_id !== undefined && job_id !== null && job_id !== "")
+          ? [job_id]
+          : [];
 
-    const result = await db.query(
+      const normalizedVanJobIds = [
+        ...new Set(rawVanJobIds.map((id) => Number(id))),
+      ];
+
+      if (
+        normalizedVanJobIds.some(
+          (id) => !Number.isInteger(id) || id <= 0
+        )
+      ) {
+        return res.status(400).json({
+          message: "One or more selected VAN files have an invalid job ID.",
+        });
+      }
+
+      const singleVanJobId =
+        normalizedVanJobIds.length === 1
+          ? normalizedVanJobIds[0]
+          : null;
+
+      const result = await db.query(
       `INSERT INTO van_download_requests
-               (admin_id, vendor_id, campaign_id, quantity, states, min_age, max_age, min_duration, max_duration, job_id, include_downloaded, quality, bla_summary, disposition)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+               (admin_id, vendor_id, campaign_id, quantity, states, min_age, max_age, min_duration, max_duration, job_id, job_ids, include_downloaded, quality, bla_summary, disposition)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
              RETURNING *`,
       [
         req.user.id,
@@ -692,7 +717,8 @@ const createDownloadRequest = async (req, res) => {
         max_age || null,
         min_duration || null,
         max_duration || null,
-        job_id || null,
+        singleVanJobId,
+        normalizedVanJobIds.length ? normalizedVanJobIds : null,
         include_downloaded === true || include_downloaded === "true",
         req.body.quality || 'All',
         blaSummary ? JSON.stringify(blaSummary) : null,
@@ -873,7 +899,10 @@ const reviewDownloadRequest = async (req, res) => {
       min_age: dlReq.min_age,
       max_age: dlReq.max_age,
       include_downloaded: dlReq.include_downloaded,
-      job_id: dlReq.job_id,
+      job_id:
+        Array.isArray(dlReq.job_ids) && dlReq.job_ids.length > 0
+          ? dlReq.job_ids
+          : dlReq.job_id,
       campaign_id: dlReq.campaign_id,
     });
     const whereClause = filters.join(" AND ");

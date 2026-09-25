@@ -489,7 +489,37 @@ const DownloadLeads = () => {
         Promise.all([api.get('/vendors?counts=true'), api.get('/campaigns'), api.get('/filters')])
             .then(([v, c, f]) => { 
                 setVendors(v.data); 
-                setCampaigns(c.data.filter(x => x.status === 'Active')); 
+                const user = JSON.parse(localStorage.getItem('user') || '{}');
+                const role = String(user.role || '').toLowerCase();
+
+                let allowedCampaigns = user.accessible_campaigns;
+
+                if (typeof allowedCampaigns === 'string') {
+                    try {
+                        allowedCampaigns = JSON.parse(allowedCampaigns);
+                    } catch {
+                        allowedCampaigns = [];
+                    }
+                }
+
+                if (!Array.isArray(allowedCampaigns)) {
+                    allowedCampaigns = [];
+                }
+
+                const activeCampaigns = (c.data || []).filter(
+                    campaign => campaign.status === 'Active'
+                );
+
+                const visibleCampaigns =
+                    role === 'super_admin'
+                        ? activeCampaigns
+                        : activeCampaigns.filter(campaign =>
+                            allowedCampaigns
+                                .map(String)
+                                .includes(String(campaign.campaign_id))
+                        );
+
+                setCampaigns(visibleCampaigns); 
                 setFilters(f.data);
             })
             .catch(() => {})
@@ -970,7 +1000,7 @@ const DownloadLeads = () => {
                                     required
                                 >
                                     <option value="" disabled>{loadingC ? 'Loading...' : 'Choose a campaign...'}</option>
-                                    <option value="all">All Campaigns</option>
+                                    
                                     {campaigns.map(c => <option key={c.campaign_id} value={c.campaign_id}>{c.name}</option>)}
                                 </SelectInput>
                             </Field>

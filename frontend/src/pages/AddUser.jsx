@@ -19,7 +19,8 @@ const AVAILABLE_MODULES = [
     { id: 'premium', label: 'Premium Data' },
     { id: 'van_desk', label: 'Van Desk' },
     { id: 'dnc_checker', label: 'DNC Checker' },
-    { id: 'download_data', label: 'Download Data' }
+    { id: 'download_data', label: 'Download Data' },
+    { id: 'mixed_data', label: 'Mixed Data' }
 ];
 
 const AddUser = ({ editMode }) => {

@@ -33,15 +33,15 @@ const sepUpsertDeadNumbersFromBla = async (badItems) => {
         let idx = 1;
 
         for (const phone of chunk) {
-            placeholders.push(`($${idx++}, $${idx++})`);
-            values.push(phone, 'Separation Download BLA Scrub');
+            placeholders.push(`($${idx++}, $${idx++}, $${idx++})`);
+            values.push(phone, 'DNC', 'Separation Download BLA Scrub');
         }
 
         if (placeholders.length === 0) continue;
 
         await db.query(
             `
-            INSERT INTO dead_numbers (phone, source)
+            INSERT INTO dnc_numbers (phone, dnc_type, source)
             VALUES ${placeholders.join(',')}
             ON CONFLICT (phone) DO NOTHING
             `,

@@ -782,11 +782,40 @@ const createDownloadRequest = async (req, res) => {
           "Re-download mode requires a specific vendor (not All Vendors).",
       });
     }
+    // Support one or multiple selected uploaded files.
+    const rawJobIds = Array.isArray(job_id)
+      ? job_id
+      : job_id
+        ? [job_id]
+        : [];
+
+    const normalizedJobIds = [
+      ...new Set(
+        rawJobIds
+          .filter(Boolean)
+          .map((id) => String(id).trim())
+      ),
+    ];
+
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    if (normalizedJobIds.some((id) => !uuidRegex.test(id))) {
+      return res.status(400).json({
+        message: "One or more selected files have an invalid job ID.",
+      });
+    }
+
+    // Preserve legacy job_id for single-file requests.
+    const singleJobId =
+      normalizedJobIds.length === 1 ? normalizedJobIds[0] : null;
+
+
 
     const result = await db.query(
       `INSERT INTO download_requests
-               (admin_id, vendor_id, campaign_id, quantity, states, min_age, max_age, job_id, include_downloaded)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+               (admin_id, vendor_id, campaign_id, quantity, states, min_age, max_age, job_id, job_ids, include_downloaded)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
              RETURNING *`,
       [
         req.user.id,
@@ -796,7 +825,8 @@ const createDownloadRequest = async (req, res) => {
         states && states.length ? states : null,
         min_age || null,
         max_age || null,
-        job_id || null,
+        singleJobId,
+        normalizedJobIds.length ? normalizedJobIds : null,
         include_downloaded === true || include_downloaded === "true",
       ],
     );
@@ -977,7 +1007,10 @@ const reviewDownloadRequest = async (req, res) => {
         max_duration: dlReq.max_duration,
         user_id: dlReq.admin_id,
         approved_by_id: req.user.id,
-        job_id: dlReq.job_id,
+        job_id:
+          Array.isArray(dlReq.job_ids) && dlReq.job_ids.length > 0
+            ? dlReq.job_ids
+            : dlReq.job_id,
         include_downloaded: dlReq.include_downloaded,
         async_scrub: true, // skip sync BLA call — we handle it below
       },
@@ -1048,7 +1081,7 @@ const reviewDownloadRequest = async (req, res) => {
           console.error('[BG Scrub leads] scrub failed, using unfiltered rows:', scrubErr.message);
         }
 
-        const serializedData = serializeDownloadPayload(finalGood, finalBad, { ...summary, total: allPhones.length, scrubPending: false, scrubCompleted: true }, `approved_leads_${id}.csv`);
+        const serializedData = serializeDownloadPayload(finalGood, finalBad, { ...summary, total: allPhones.length, good: finalGood.length, scrubPending: false, scrubCompleted: true }, `approved_leads_${id}.csv`);
 
         await db.query(
           `UPDATE download_requests SET csv_data=$1 WHERE id=$2`,
