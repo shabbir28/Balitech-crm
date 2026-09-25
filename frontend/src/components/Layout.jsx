@@ -560,10 +560,7 @@ const Layout = ({ children }) => {
                 {/* Logo */}
                 <div className="h-[70px] flex items-center justify-center px-4 border-b border-white/[0.06] shrink-0 relative">
                     <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-brand-500/30 to-transparent" />
-                    {/* Balitech Logo (Temporarily commented out) */}
-                    {/* <img src="/assets/logo.png" alt="BaliTech" className="h-12 w-auto max-w-[85%] object-contain select-none" /> */}
-                    {/* New Logo */}
-                    <img src="/assets/Go Connectivo 1.png" alt="Logo" className="h-12 w-auto max-w-[85%] object-contain select-none" />
+                    <img src="/assets/logo.png" alt="BaliTech" className="h-12 w-auto max-w-[85%] object-contain select-none" />
                 </div>
 
                 {/* Nav */}

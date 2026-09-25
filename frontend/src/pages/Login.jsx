@@ -1,7 +1,8 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useRef, useState } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Lock, User, ArrowRight, ShieldCheck } from 'lucide-react';
+import ReCAPTCHA from 'react-google-recaptcha';
 
 const Login = () => {
     const { login } = useContext(AuthContext);
@@ -9,17 +10,26 @@ const Login = () => {
     const [formData, setFormData] = useState({ username: '', password: '' });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [captchaToken, setCaptchaToken] = useState(null);
+    const recaptchaRef = useRef(null);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
+        if (!captchaToken) {
+            setError('Please complete the reCAPTCHA');
+            return;
+        }
+
         setLoading(true);
         setError('');
         try {
-            await login(formData.username, formData.password);
+            await login(formData.username, formData.password, captchaToken);
             navigate('/');
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to login');
+            recaptchaRef.current?.reset();
+            setCaptchaToken(null);
         } finally {
             setLoading(false);
         }
@@ -38,10 +48,7 @@ const Login = () => {
                     {/* Exact Logo Bar mapped from Dashboard Layout */}
                     <div className="h-28 flex items-center px-4 border-b border-white/5 shrink-0 relative overflow-hidden justify-center bg-black/10">
                         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-                        {/* Balitech Logo (Temporarily commented out) */}
-                        {/* <img src="/assets/logo.png" alt="BaliTech Logo" className="h-[75px] w-auto max-w-[90%] object-contain drop-shadow-xl select-none" /> */}
-                        {/* New Logo */}
-                        <img src="/assets/Go Connectivo 1.png" alt="Logo" className="h-[75px] w-auto max-w-[90%] object-contain drop-shadow-xl select-none" />
+                        <img src="/assets/logo.png" alt="BaliTech Logo" className="h-[75px] w-auto max-w-[90%] object-contain drop-shadow-xl select-none" />
                     </div>
 
                     <div className="p-8 sm:p-10">
@@ -99,6 +106,15 @@ const Login = () => {
                                         onChange={(e) => setFormData({...formData, password: e.target.value})}
                                     />
                                 </div>
+                            </div>
+
+                            <div className="flex justify-center pt-2">
+                                <ReCAPTCHA
+                                    ref={recaptchaRef}
+                                    sitekey="6LeLzwctAAAAAIRVXWG_PUJcMegb1k1B-o_s4q1w"
+                                    onChange={(token) => setCaptchaToken(token)}
+                                    theme="dark"
+                                />
                             </div>
 
                             <div className="pt-2">
