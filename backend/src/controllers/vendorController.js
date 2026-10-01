@@ -19,6 +19,8 @@ const createVendor = async (req, res) => {
 // GET /api/vendors
 const getVendors = async (req, res) => {
   const includeCounts = req.query.counts === "true";
+  const campaignId = req.query.campaign_id;
+  const onlyWithData = req.query.only_with_data === "true";
 
   try {
     let query;
@@ -26,7 +28,22 @@ const getVendors = async (req, res) => {
     if (includeCounts) {
       const access = await getUserCampaignAccess(req.user, 'campaigns');
       let leadFilter = "";
-      if (access.isRestricted) {
+
+      if (campaignId && campaignId !== "all") {
+        const campRes = await db.query(
+          "SELECT campaign_id, name FROM campaigns WHERE campaign_id::text = $1 OR LOWER(name) = LOWER($1)",
+          [campaignId]
+        );
+        if (campRes.rows.length === 0) {
+          return res.json([]);
+        }
+        const selectedCampName = campRes.rows[0].name.toLowerCase();
+        if (access.isRestricted && !access.campaignNamesLower.includes(selectedCampName)) {
+          return res.json([]);
+        }
+        leadFilter = `WHERE l.campaign_type ILIKE '%' || $1 || '%'`;
+        params.push(selectedCampName);
+      } else if (access.isRestricted) {
         if (access.campaignNamesLower.length === 0) {
           leadFilter = "WHERE 1=0";
         } else {
@@ -61,7 +78,8 @@ const getVendors = async (req, res) => {
                COALESCE(vs.downloaded_leads, 0) as downloaded_leads,
                COALESCE(vs.dnc_leads, 0) as dnc_leads
         FROM vendors v
-        LEFT JOIN vendor_stats vs ON v.vendor_id = vs.vendor_id
+        ${onlyWithData ? "INNER JOIN" : "LEFT JOIN"} vendor_stats vs ON v.vendor_id = vs.vendor_id
+        ${onlyWithData ? "WHERE vs.total_leads > 0" : ""}
         ORDER BY v.created_at DESC
       `;
     } else {

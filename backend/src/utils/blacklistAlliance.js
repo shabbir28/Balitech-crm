@@ -78,13 +78,12 @@ async function scrubPhones(
 
   const rawSuppressed = bulkResult?.supression ?? bulkResult?.suppression ?? [];
   const suppressed = Array.isArray(rawSuppressed) ? rawSuppressed : [];
-  const cleanList = Array.isArray(bulkResult?.phones) ? bulkResult.phones : [];
   const reasons = bulkResult?.reasons || {};
-  const suppressedSet = new Set(
-    suppressed.map((p) => normalizePhone(p)),
-  );
-  const cleanSet = new Set(cleanList.map((p) => normalizePhone(p)));
-  const hasCleanList = cleanSet.size > 0;
+  const suppressedSet = new Set(suppressed.map((p) => normalizePhone(p)));
+  for (const reasonPhone of Object.keys(reasons)) {
+    const normalized = normalizePhone(reasonPhone);
+    if (normalized) suppressedSet.add(normalized);
+  }
 
   for (const phone of uniquePhones) {
     if (suppressedSet.has(phone)) {
@@ -93,16 +92,6 @@ async function scrubPhones(
         type: "DNC",
         reason: reasons[phone] || reasons[`1${phone}`] || "blacklisted",
       });
-    } else if (hasCleanList) {
-      if (cleanSet.has(phone)) {
-        results.good.push(phone);
-      } else {
-        results.bad.push({
-          phone,
-          type: "DNC",
-          reason: "not in API clean list",
-        });
-      }
     } else {
       results.good.push(phone);
     }

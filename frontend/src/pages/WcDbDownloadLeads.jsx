@@ -527,9 +527,8 @@ const WcDbDownloadLeads = () => {
     const [fileStats, setFileStats] = useState(null);
 
     useEffect(() => {
-        Promise.all([api.get('/wc-db-vendors?counts=true'), api.get('/wc-db-campaigns'), api.get('/filters')])
-            .then(([v, c, f]) => {
-                setVendors(v?.data || []);
+        Promise.all([api.get('/wc-db-campaigns'), api.get('/filters')])
+            .then(([c, f]) => {
                 const user = JSON.parse(localStorage.getItem('user') || '{}');
                 const role = String(user.role || '').toLowerCase();
                 let allowedCampaigns = user.accessible_campaigns;
@@ -545,11 +544,37 @@ const WcDbDownloadLeads = () => {
                 if (visibleCampaigns.length === 1) {
                     setForm(prev => ({ ...prev, campaign_id: String(visibleCampaigns[0].campaign_id) }));
                 }
-                setFilters(f.data);
+                setFilters(f?.data || []);
             })
             .catch(() => {})
-            .finally(() => { setLoadingV(false); setLoadingC(false); setLoadingFilters(false); });
+            .finally(() => { setLoadingC(false); setLoadingFilters(false); });
     }, []);
+
+    // Load vendors specifically for the selected campaign
+    useEffect(() => {
+        if (!form.campaign_id || form.campaign_id === 'all') {
+            setVendors([]);
+            setLoadingV(false);
+            setForm(prev => (prev.vendor_id ? { ...prev, vendor_id: '' } : prev));
+            return;
+        }
+
+        setLoadingV(true);
+        api.get(`/wc-db-vendors?counts=true&campaign_id=${form.campaign_id}&only_with_data=true`)
+            .then(res => {
+                const list = (res.data || []).filter(v => Number(v.available_leads || v.total_leads || 0) > 0);
+                setVendors(list);
+                setForm(prev => {
+                    const stillValid = list.some(v => String(v.vendor_id) === String(prev.vendor_id));
+                    return stillValid ? prev : { ...prev, vendor_id: '' };
+                });
+            })
+            .catch(err => {
+                console.error('Failed to load wc-db vendors for campaign', err);
+                setVendors([]);
+            })
+            .finally(() => setLoadingV(false));
+    }, [form.campaign_id]);
 
     useEffect(() => () => {
         scrubPollCancelRef.current = true;
@@ -578,7 +603,9 @@ const WcDbDownloadLeads = () => {
                     const fullRes = await api.get(`/wc-db-download/logs/${logId}/file`);
                     setScrubSummaryData(fullRes.data);
                     setSuccessMsg('Blacklist scrub complete — full summary is shown below.');
-                    api.get('/wc-db-vendors?counts=true').then((v) => setVendors(v.data)).catch(() => {});
+                    if (form.campaign_id) {
+                        api.get(`/wc-db-vendors?counts=true&campaign_id=${form.campaign_id}&only_with_data=true`).then((v) => setVendors(v.data)).catch(() => {});
+                    }
                     return;
                 }
             }
@@ -713,7 +740,9 @@ const WcDbDownloadLeads = () => {
                     setSuccessMsg('Export scrubbing complete! View summary details below.');
                 }
 
-                api.get('/wc-db-vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
+                if (form.campaign_id) {
+                    api.get(`/wc-db-vendors?counts=true&campaign_id=${form.campaign_id}&only_with_data=true`).then(v => setVendors(v.data)).catch(() => {});
+                }
             } else {
                 const body = { ...form, job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined };
                 const res = await api.post('/wc-db-download/preview-scrub', body, { timeout: 30 * 60 * 1000 });
@@ -756,7 +785,9 @@ const WcDbDownloadLeads = () => {
             setPreviewMode(false);
             setPreviewSummaryData(null);
             fetchMyReqs();
-            api.get('/wc-db-vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
+            if (form.campaign_id) {
+                api.get(`/wc-db-vendors?counts=true&campaign_id=${form.campaign_id}&only_with_data=true`).then(v => setVendors(v.data)).catch(() => {});
+            }
         } catch (err) {
             setError(err.response?.data?.message || 'Download request error occurred.');
         } finally {
@@ -855,6 +886,19 @@ const WcDbDownloadLeads = () => {
 
                         <form onSubmit={handleSubmit} className="p-6 space-y-5">
 
+                            {/* Campaign */}
+                            <Field label="Campaign Filter" required hint="Select the campaign to export from">
+                                <SelectInput
+                                    value={form.campaign_id}
+                                    onChange={e => setForm({ ...form, campaign_id: e.target.value })}
+                                    disabled={loadingC}
+                                    required
+                                >
+                                    <option value="" disabled>{loadingC ? 'Loading...' : 'Choose a campaign...'}</option>
+                                    {campaigns.map(c => <option key={c.campaign_id} value={c.campaign_id}>{c.name}</option>)}
+                                </SelectInput>
+                            </Field>
+
                             {/* Vendor */}
                             <Field label="Vendor Source" required hint="Select the vendor whose data you want to export">
                                 <SelectInput
@@ -870,9 +914,9 @@ const WcDbDownloadLeads = () => {
                                                     : false,
                                         }));
                                     }}
-                                    disabled={loadingV}
+                                    disabled={!form.campaign_id || loadingV}
                                 >
-                                    <option value="" disabled>{loadingV ? 'Loading...' : 'Choose a vendor...'}</option>
+                                    <option value="" disabled>{!form.campaign_id ? 'Please select a campaign first...' : loadingV ? 'Loading...' : 'Choose a vendor...'}</option>
                                     <option value="all">All Vendors</option>
                                     {vendors.map(v => (
                                         <option key={v.vendor_id} value={v.vendor_id}>
@@ -1035,19 +1079,6 @@ const WcDbDownloadLeads = () => {
                                     </Field>
                                 </div>
                             </div>
-
-                            {/* Campaign */}
-                            <Field label="Campaign Filter" required hint="Select the campaign to export from">
-                                <SelectInput
-                                    value={form.campaign_id}
-                                    onChange={e => setForm({ ...form, campaign_id: e.target.value })}
-                                    disabled={loadingC}
-                                    required
-                                >
-                                    <option value="" disabled>{loadingC ? 'Loading...' : 'Choose a campaign...'}</option>
-                                    {campaigns.map(c => <option key={c.campaign_id} value={c.campaign_id}>{c.name}</option>)}
-                                </SelectInput>
-                            </Field>
 
                             {/* Quantity */}
                             <Field label="Quantity" required hint="Max 100,000 per request recommended">

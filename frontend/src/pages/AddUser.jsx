@@ -2,6 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import { ArrowLeft, UploadCloud, X, Check, CheckCircle2, AlertCircle, User, Eye, EyeOff } from 'lucide-react';
+import {
+    SAFE_QUOTE_MODULE,
+    SAFE_QUOTE_PAGES,
+    SAFE_QUOTE_PAGE_IDS,
+    SAFE_QUOTE_PAGES_SET,
+    expandSafeQuotePages,
+} from '../utils/safeQuoteAccess';
 
 const FormField = ({ label, children, error }) => (
     <div className="mb-5">
@@ -18,6 +25,8 @@ const AVAILABLE_MODULES = [
     { id: 'refine', label: 'Refine Data' },
     { id: 'premium', label: 'Premium Data' },
     { id: 'van_desk', label: 'Van Desk' },
+    { id: 'wc_db', label: 'WC DB' },
+    { id: 'safe_quote', label: 'Safe Quote' },
     { id: 'dnc_checker', label: 'DNC Checker' },
     { id: 'download_data', label: 'Download Data' },
     { id: 'mixed_data', label: 'Mixed Data' }
@@ -31,7 +40,7 @@ const AddUser = ({ editMode }) => {
         first_name: '', last_name: '', email: '', phone: '',
         date_of_birth: '', password: '', confirm_password: '', role: '', accessible_modules: [], accessible_campaigns: []
     });
-    const [allCampaigns, setAllCampaigns] = useState({ core: [], refine: [], premium: [], van_desk: [] });
+    const [allCampaigns, setAllCampaigns] = useState({ core: [], refine: [], premium: [], van_desk: [], wc_db: [], safe_quote: [] });
     const [profileFile, setProfileFile] = useState(null);
     const [profilePreview, setProfilePreview] = useState(null);
     const [errors, setErrors] = useState({});
@@ -51,13 +60,17 @@ const AddUser = ({ editMode }) => {
             api.get('/campaigns').catch(() => ({ data: [] })),
             api.get('/refine-campaigns').catch(() => ({ data: [] })),
             api.get('/premium-campaigns').catch(() => ({ data: [] })),
-            api.get('/van-campaigns').catch(() => ({ data: [] }))
-        ]).then(([core, refine, premium, van]) => {
+            api.get('/van-campaigns').catch(() => ({ data: [] })),
+            api.get('/wc-db-campaigns').catch(() => ({ data: [] })),
+            api.get('/safe-quote-campaigns').catch(() => ({ data: [] }))
+        ]).then(([core, refine, premium, van, wcDb, safeQuote]) => {
             setAllCampaigns({
                 core: core.data || [],
                 refine: refine.data || [],
                 premium: premium.data || [],
-                van_desk: van.data || []
+                van_desk: van.data || [],
+                wc_db: wcDb.data || [],
+                safe_quote: safeQuote.data || []
             });
         });
     }, []);
@@ -77,7 +90,7 @@ const AddUser = ({ editMode }) => {
                     role: u.role || '',
                     password: '',
                     confirm_password: '',
-                    accessible_modules: u.accessible_modules || [],
+                    accessible_modules: expandSafeQuotePages(u.accessible_modules),
                     accessible_campaigns: u.accessible_campaigns || [],
                 }));
                 if (u.profile_picture) {
@@ -94,14 +107,36 @@ const AddUser = ({ editMode }) => {
         if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
     };
 
+    const stripSafeQuotePages = (modules) =>
+        modules.filter((id) => id !== SAFE_QUOTE_PAGES_SET && !SAFE_QUOTE_PAGE_IDS.includes(id));
+
     const toggleModule = (modId) => {
         setForm(prev => {
             const current = prev.accessible_modules || [];
             if (current.includes(modId)) {
-                return { ...prev, accessible_modules: current.filter(m => m !== modId) };
-            } else {
-                return { ...prev, accessible_modules: [...current, modId] };
+                const next = current.filter(m => m !== modId);
+                return {
+                    ...prev,
+                    accessible_modules: modId === SAFE_QUOTE_MODULE ? stripSafeQuotePages(next) : next,
+                };
             }
+            const next = [...current, modId];
+            if (modId === SAFE_QUOTE_MODULE) {
+                next.push(SAFE_QUOTE_PAGES_SET, ...SAFE_QUOTE_PAGE_IDS.filter((id) => !next.includes(id)));
+            }
+            return { ...prev, accessible_modules: next };
+        });
+    };
+
+    const toggleSafeQuotePage = (pageId) => {
+        setForm(prev => {
+            const current = [...(prev.accessible_modules || [])];
+            if (!current.includes(SAFE_QUOTE_MODULE)) current.push(SAFE_QUOTE_MODULE);
+            if (!current.includes(SAFE_QUOTE_PAGES_SET)) current.push(SAFE_QUOTE_PAGES_SET);
+            const next = current.includes(pageId)
+                ? current.filter((id) => id !== pageId)
+                : [...current, pageId];
+            return { ...prev, accessible_modules: next };
         });
     };
 
@@ -309,13 +344,33 @@ const AddUser = ({ editMode }) => {
                                     </p>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         {AVAILABLE_MODULES.map(mod => (
-                                            <label key={mod.id} className="flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-[#0a0a0f] hover:border-brand-500/50 cursor-pointer transition-all">
-                                                <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${form.accessible_modules?.includes(mod.id) ? 'bg-brand-500 border-brand-500' : 'border-white/20'}`}>
-                                                    {form.accessible_modules?.includes(mod.id) && <Check className="w-3.5 h-3.5 text-white" />}
-                                                </div>
-                                                <span className="text-sm text-slate-300 font-medium">{mod.label}</span>
-                                                <input type="checkbox" className="hidden" checked={form.accessible_modules?.includes(mod.id) || false} onChange={() => toggleModule(mod.id)} />
-                                            </label>
+                                            <div key={mod.id} className={mod.id === SAFE_QUOTE_MODULE && form.accessible_modules?.includes(SAFE_QUOTE_MODULE) ? 'sm:col-span-2' : ''}>
+                                                <label className="flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-[#0a0a0f] hover:border-brand-500/50 cursor-pointer transition-all">
+                                                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${form.accessible_modules?.includes(mod.id) ? 'bg-brand-500 border-brand-500' : 'border-white/20'}`}>
+                                                        {form.accessible_modules?.includes(mod.id) && <Check className="w-3.5 h-3.5 text-white" />}
+                                                    </div>
+                                                    <span className="text-sm text-slate-300 font-medium">{mod.label}</span>
+                                                    <input type="checkbox" className="hidden" checked={form.accessible_modules?.includes(mod.id) || false} onChange={() => toggleModule(mod.id)} />
+                                                </label>
+                                                {mod.id === SAFE_QUOTE_MODULE && form.accessible_modules?.includes(SAFE_QUOTE_MODULE) && (
+                                                    <div className="mt-2 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] p-3">
+                                                        <p className="text-[11px] font-medium text-amber-200/80 mb-2">
+                                                            Choose which Safe Quote screens this user can open. Unchecked screens stay hidden.
+                                                        </p>
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                            {SAFE_QUOTE_PAGES.map(page => (
+                                                                <label key={page.id} className="flex items-center gap-3 p-2.5 rounded-xl border border-white/10 bg-[#0a0a0f] hover:border-amber-500/50 cursor-pointer transition-all">
+                                                                    <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${form.accessible_modules?.includes(page.id) ? 'bg-amber-500 border-amber-500' : 'border-white/20'}`}>
+                                                                        {form.accessible_modules?.includes(page.id) && <Check className="w-3 h-3 text-white" />}
+                                                                    </div>
+                                                                    <span className="text-[13px] text-slate-300 font-medium">{page.label}</span>
+                                                                    <input type="checkbox" className="hidden" checked={form.accessible_modules?.includes(page.id) || false} onChange={() => toggleSafeQuotePage(page.id)} />
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
                                         ))}
                                     </div>
                                 </FormField>

@@ -535,9 +535,8 @@ const DownloadLeads = () => {
     const [fileStats, setFileStats] = useState(null);
 
     useEffect(() => {
-        Promise.all([api.get('/vendors?counts=true'), api.get('/campaigns'), api.get('/filters')])
-            .then(([v, c, f]) => { 
-                setVendors(v.data); 
+        Promise.all([api.get('/campaigns'), api.get('/filters')])
+            .then(([c, f]) => { 
                 const user = JSON.parse(localStorage.getItem('user') || '{}');
                 const role = String(user.role || '').toLowerCase();
 
@@ -577,8 +576,34 @@ const DownloadLeads = () => {
                 setFilters(f.data);
             })
             .catch(() => {})
-            .finally(() => { setLoadingV(false); setLoadingC(false); setLoadingFilters(false); });
+            .finally(() => { setLoadingC(false); setLoadingFilters(false); });
     }, []);
+
+    // Load vendors specifically for the selected campaign
+    useEffect(() => {
+        if (!form.campaign_id || form.campaign_id === 'all') {
+            setVendors([]);
+            setLoadingV(false);
+            setForm(prev => (prev.vendor_id ? { ...prev, vendor_id: '' } : prev));
+            return;
+        }
+
+        setLoadingV(true);
+        api.get(`/vendors?counts=true&campaign_id=${form.campaign_id}&only_with_data=true`)
+            .then(res => {
+                const list = (res.data || []).filter(v => Number(v.available_leads || v.total_leads || 0) > 0);
+                setVendors(list);
+                setForm(prev => {
+                    const stillValid = list.some(v => String(v.vendor_id) === String(prev.vendor_id));
+                    return stillValid ? prev : { ...prev, vendor_id: '' };
+                });
+            })
+            .catch(err => {
+                console.error('Failed to load campaign vendors:', err);
+                setVendors([]);
+            })
+            .finally(() => setLoadingV(false));
+    }, [form.campaign_id]);
 
     useEffect(() => () => {
         scrubPollCancelRef.current = true;
@@ -607,7 +632,11 @@ const DownloadLeads = () => {
                     const fullRes = await api.get(`/download/logs/${logId}/file`);
                     setScrubSummaryData(fullRes.data);
                     setSuccessMsg('Blacklist scrub complete — full summary is shown below.');
-                    api.get('/vendors?counts=true').then((v) => setVendors(v.data)).catch(() => {});
+                    if (form.campaign_id) {
+                        api.get(`/vendors?counts=true&campaign_id=${form.campaign_id}&only_with_data=true`)
+                            .then((v) => setVendors((v.data || []).filter(x => Number(x.available_leads || x.total_leads || 0) > 0)))
+                            .catch(() => {});
+                    }
                     return;
                 }
             }
@@ -742,7 +771,11 @@ const DownloadLeads = () => {
                     setSuccessMsg('Export scrubbing complete! View summary details below.');
                 }
 
-                api.get('/vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
+                if (form.campaign_id) {
+                    api.get(`/vendors?counts=true&campaign_id=${form.campaign_id}&only_with_data=true`)
+                        .then(v => setVendors((v.data || []).filter(x => Number(x.available_leads || x.total_leads || 0) > 0)))
+                        .catch(() => {});
+                }
             } else {
                 // ── Dialer/Admin: Step 1 — run BLA preview scrub first ────────────────
                 const body = {
@@ -910,6 +943,19 @@ const DownloadLeads = () => {
 
                         <form onSubmit={handleSubmit} className="p-6 space-y-5">
 
+                            {/* Campaign */}
+                            <Field label="Campaign Filter" required hint="Select the campaign to export from">
+                                <SelectInput
+                                    value={form.campaign_id}
+                                    onChange={e => setForm({ ...form, campaign_id: e.target.value })}
+                                    disabled={loadingC}
+                                    required
+                                >
+                                    <option value="" disabled>{loadingC ? 'Loading...' : 'Choose a campaign...'}</option>
+                                    {campaigns.map(c => <option key={c.campaign_id} value={c.campaign_id}>{c.name}</option>)}
+                                </SelectInput>
+                            </Field>
+
                             {/* Vendor */}
                             <Field label="Vendor Source" required hint="Select the vendor whose data you want to export">
                                 <SelectInput
@@ -925,18 +971,28 @@ const DownloadLeads = () => {
                                                     : false,
                                         }));
                                     }}
-                                    disabled={loadingV}
+                                    disabled={!form.campaign_id || loadingV}
                                 >
-                                    <option value="" disabled>{loadingV ? 'Loading...' : 'Choose a vendor...'}</option>
-                                    <option value="all">All Vendors</option>
-                                    {vendors.map(v => (
-                                        <option key={v.vendor_id} value={v.vendor_id}>
-                                            {v.name}
-                                            {v.available_leads != null
-                                                ? ` — ${vendorDownloadPool(v).toLocaleString()} ${form.include_downloaded ? 're-downloadable' : 'available'}`
-                                                : ''}
-                                        </option>
-                                    ))}
+                                    {!form.campaign_id ? (
+                                        <option value="" disabled>Please select a campaign first...</option>
+                                    ) : loadingV ? (
+                                        <option value="" disabled>Loading vendors for this campaign...</option>
+                                    ) : vendors.length === 0 ? (
+                                        <option value="" disabled>No vendors found with data for this campaign</option>
+                                    ) : (
+                                        <>
+                                            <option value="" disabled>Choose a vendor...</option>
+                                            <option value="all">All Vendors ({vendors.length})</option>
+                                            {vendors.map(v => (
+                                                <option key={v.vendor_id} value={v.vendor_id}>
+                                                    {v.name}
+                                                    {v.available_leads != null
+                                                        ? ` — ${vendorDownloadPool(v).toLocaleString()} ${form.include_downloaded ? 're-downloadable' : 'available'}`
+                                                        : ''}
+                                                </option>
+                                            ))}
+                                        </>
+                                    )}
                                 </SelectInput>
                                 {/* Vendor preview pill */}
                                 {selectedVendor && (
@@ -1091,19 +1147,6 @@ const DownloadLeads = () => {
                                 </div>
                             </div>
 
-                            {/* Campaign */}
-                            <Field label="Campaign Filter" required hint="Select the campaign to export from">
-                                <SelectInput
-                                    value={form.campaign_id}
-                                    onChange={e => setForm({ ...form, campaign_id: e.target.value })}
-                                    disabled={loadingC}
-                                    required
-                                >
-                                    <option value="" disabled>{loadingC ? 'Loading...' : 'Choose a campaign...'}</option>
-                                    
-                                    {campaigns.map(c => <option key={c.campaign_id} value={c.campaign_id}>{c.name}</option>)}
-                                </SelectInput>
-                            </Field>
 
                             {/* Quantity */}
                             <Field label="Quantity" required hint="Max 100,000 per request recommended">

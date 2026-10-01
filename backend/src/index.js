@@ -65,6 +65,17 @@ const wcDbJobRoutes = require("./routes/wc_db_jobs");
 const wcDbDataRoutes = require("./routes/wc_db_data");
 const wcDbDownloadRoutes = require("./routes/wc_db_download");
 
+// Safe Quote Module
+const safeQuoteVendorRoutes = require("./routes/safe_quote_vendors");
+const safeQuoteCampaignRoutes = require("./routes/safe_quote_campaigns");
+const safeQuoteSessionRoutes = require("./routes/safe_quote_sessions");
+const safeQuoteJobRoutes = require("./routes/safe_quote_jobs");
+const safeQuoteDataRoutes = require("./routes/safe_quote_data");
+const safeQuoteDownloadRoutes = require("./routes/safe_quote_download");
+const safeQuoteDashboardRoutes = require("./routes/safe_quote_dashboard");
+const safeQuoteDncRoutes = require("./routes/safe_quote_dnc");
+const safeQuoteSeparationRoutes = require("./routes/safe_quote_separation");
+
 const clientRoutes = require("./routes/clientRoutes");
 const separationRoutes = require("./routes/separationRoutes");
 
@@ -233,6 +244,17 @@ app.use("/api/wc-db-sessions", wcDbSessionRoutes);
 app.use("/api/wc-db-jobs", wcDbJobRoutes);
 app.use("/api/wc-db-data", wcDbDataRoutes);
 app.use("/api/wc-db-download", wcDbDownloadRoutes);
+
+// Safe Quote Module
+app.use("/api/safe-quote-vendors", safeQuoteVendorRoutes);
+app.use("/api/safe-quote-campaigns", safeQuoteCampaignRoutes);
+app.use("/api/safe-quote-sessions", safeQuoteSessionRoutes);
+app.use("/api/safe-quote-jobs", safeQuoteJobRoutes);
+app.use("/api/safe-quote-data", safeQuoteDataRoutes);
+app.use("/api/safe-quote-download", safeQuoteDownloadRoutes);
+app.use("/api/safe-quote-dashboard", safeQuoteDashboardRoutes);
+app.use("/api/safe-quote-dnc", safeQuoteDncRoutes);
+app.use("/api/safe-quote-separation", safeQuoteSeparationRoutes);
 
 // Clients and Separation
 app.use("/api/clients", clientRoutes);

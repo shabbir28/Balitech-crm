@@ -384,22 +384,47 @@ const MixedDownloadLeads = () => {
             api.get('/refine-campaigns').catch(() => ({ data: [] })),
             api.get('/premium-campaigns').catch(() => ({ data: [] }))
         ]).then(([vanRes, refRes, premRes]) => {
-            setVanCampaigns(vanRes.data.filter(c => c.status === 'Active') || []);
-            setRefineCampaigns(refRes.data.filter(c => c.status === 'Active') || []);
-            setPremiumCampaigns(premRes.data.filter(c => c.status === 'Active') || []);
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            const role = String(user.role || '').toLowerCase();
+            let allowedCampaigns = user.accessible_campaigns;
+            if (typeof allowedCampaigns === 'string') {
+                try { allowedCampaigns = JSON.parse(allowedCampaigns); } catch { allowedCampaigns = []; }
+            }
+            if (!Array.isArray(allowedCampaigns)) allowedCampaigns = [];
+
+            const filterActive = (list) => {
+                const active = (list || []).filter(c => c.status === 'Active');
+                if (role === 'super_admin') return active;
+                if (allowedCampaigns.length > 0) {
+                    return active.filter(x => allowedCampaigns.map(String).includes(String(x.campaign_id)));
+                }
+                return active;
+            };
+
+            const vc = filterActive(vanRes.data);
+            const rc = filterActive(refRes.data);
+            const pc = filterActive(premRes.data);
+
+            setVanCampaigns(vc);
+            setRefineCampaigns(rc);
+            setPremiumCampaigns(pc);
+
+            const allNames = [...new Set([...vc.map(c => c.name), ...rc.map(c => c.name), ...pc.map(c => c.name)])];
+            if (allNames.length === 1) {
+                const selectedName = allNames[0];
+                const vanC = vc.find(c => c.name === selectedName);
+                const refC = rc.find(c => c.name === selectedName);
+                const premC = pc.find(c => c.name === selectedName);
+                setForm(prev => ({
+                    ...prev,
+                    global_campaign: selectedName,
+                    campaign_id: (vanC || refC || premC)?.campaign_id || null,
+                    van_campaign: vanC ? String(vanC.campaign_id) : '',
+                    refine_campaign: refC ? selectedName : '',
+                    premium_campaign: premC ? selectedName : ''
+                }));
+            }
         });
-            
-        Promise.all([
-            api.get('/van-vendors?counts=true').catch(() => ({ data: [] })),
-            api.get('/refine-vendors?counts=true').catch(() => ({ data: [] })),
-            api.get('/premium-vendors?counts=true').catch(() => ({ data: [] }))
-        ])
-        .then(([vanRes, refineRes, premiumRes]) => {
-            setVanVendors(vanRes.data || []);
-            setRefineVendors(refineRes.data || []);
-            setPremiumVendors(premiumRes.data || []);
-        })
-        .finally(() => setLoadingV(false));
 
         api.get('/filters')
             .then(res => setFilters(res.data))
@@ -408,6 +433,48 @@ const MixedDownloadLeads = () => {
                 setLoadingFilters(false); 
             });
     }, []);
+
+    // Load vendors specifically for the selected global campaign
+    useEffect(() => {
+        if (!form.global_campaign || form.global_campaign === 'all') {
+            setVanVendors([]);
+            setRefineVendors([]);
+            setPremiumVendors([]);
+            setLoadingV(false);
+            setForm(prev => ({
+                ...prev,
+                van_vendor: 'all',
+                refine_vendor: 'all',
+                premium_vendor: 'all'
+            }));
+            return;
+        }
+
+        setLoadingV(true);
+        const vanC = vanCampaigns.find(c => c.name === form.global_campaign);
+        const vanCampParam = vanC ? String(vanC.campaign_id) : form.global_campaign;
+        
+        Promise.all([
+            api.get(`/van-vendors?counts=true&campaign_id=${vanCampParam}&only_with_data=true`).catch(() => ({ data: [] })),
+            api.get(`/refine-vendors?counts=true&campaign_id=${encodeURIComponent(form.global_campaign)}&only_with_data=true`).catch(() => ({ data: [] })),
+            api.get(`/premium-vendors?counts=true&campaign_id=${encodeURIComponent(form.global_campaign)}&only_with_data=true`).catch(() => ({ data: [] }))
+        ])
+        .then(([vanRes, refineRes, premiumRes]) => {
+            const vList = (vanRes.data || []).filter(v => Number(v.available_leads || v.total_leads || 0) > 0);
+            const rList = (refineRes.data || []).filter(v => Number(v.available_leads || v.total_leads || 0) > 0);
+            const pList = (premiumRes.data || []).filter(v => Number(v.available_leads || v.total_leads || 0) > 0);
+            setVanVendors(vList);
+            setRefineVendors(rList);
+            setPremiumVendors(pList);
+            setForm(prev => ({
+                ...prev,
+                van_vendor: vList.some(v => String(v.vendor_id) === String(prev.van_vendor)) ? prev.van_vendor : 'all',
+                refine_vendor: rList.some(v => String(v.vendor_id) === String(prev.refine_vendor)) ? prev.refine_vendor : 'all',
+                premium_vendor: pList.some(v => String(v.vendor_id) === String(prev.premium_vendor)) ? prev.premium_vendor : 'all',
+            }));
+        })
+        .finally(() => setLoadingV(false));
+    }, [form.global_campaign, vanCampaigns, refineCampaigns, premiumCampaigns]);
 
     // Fetch Van Files
     useEffect(() => {
@@ -606,6 +673,38 @@ const MixedDownloadLeads = () => {
                         )}
 
                         <form onSubmit={handleSubmit} className="space-y-8">
+                            {/* Global Campaign Selection */}
+                            <Field label="Campaign Filter" required hint="Select campaign for all 3 data modules">
+                                <SelectInput
+                                    value={form.global_campaign}
+                                    onChange={e => {
+                                        const selectedName = e.target.value;
+                                        const vanC = vanCampaigns.find(c => c.name === selectedName);
+                                        const refC = refineCampaigns.find(c => c.name === selectedName);
+                                        const premC = premiumCampaigns.find(c => c.name === selectedName);
+                                        
+                                        setForm({
+                                            ...form,
+                                            global_campaign: selectedName,
+                                            campaign_id: selectedName === 'all' ? null : ((vanC || refC || premC)?.campaign_id || null),
+                                            van_campaign: vanC ? String(vanC.campaign_id) : (selectedName === 'all' ? 'all' : ''),
+                                            refine_campaign: refC ? selectedName : (selectedName === 'all' ? 'all' : ''),
+                                            premium_campaign: premC ? selectedName : (selectedName === 'all' ? 'all' : '')
+                                        });
+                                    }}
+                                    required
+                                >
+                                    <option value="" disabled>Choose a campaign...</option>
+                                    {[...new Set([
+                                        ...vanCampaigns.map(c => c.name),
+                                        ...refineCampaigns.map(c => c.name),
+                                        ...premiumCampaigns.map(c => c.name)
+                                    ])].map((name, i) => (
+                                        <option key={i} value={name}>{name}</option>
+                                    ))}
+                                </SelectInput>
+                            </Field>
+
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                 
                                 {/* Percents & Vendors */}
@@ -626,9 +725,9 @@ const MixedDownloadLeads = () => {
                                         <SelectInput
                                             value={form.van_vendor}
                                             onChange={e => setForm({ ...form, van_vendor: e.target.value })}
-                                            disabled={loadingV}
+                                            disabled={!form.global_campaign || loadingV}
                                         >
-                                            <option value="all">All Vendors</option>
+                                            <option value="all">{!form.global_campaign ? 'Select campaign first...' : loadingV ? 'Loading...' : 'All Vendors'}</option>
                                             {vanVendors.map(v => <option key={v.vendor_id} value={v.vendor_id}>{v.name} ({v.available_leads || 0} available)</option>)}
                                         </SelectInput>
                                     </Field>
@@ -695,9 +794,9 @@ const MixedDownloadLeads = () => {
                                         <SelectInput
                                             value={form.refine_vendor}
                                             onChange={e => setForm({ ...form, refine_vendor: e.target.value })}
-                                            disabled={loadingV}
+                                            disabled={!form.global_campaign || loadingV}
                                         >
-                                            <option value="all">All Vendors</option>
+                                            <option value="all">{!form.global_campaign ? 'Select campaign first...' : loadingV ? 'Loading...' : 'All Vendors'}</option>
                                             {refineVendors.map(v => <option key={v.vendor_id} value={v.vendor_id}>{v.name} ({v.available_leads || 0} available)</option>)}
                                         </SelectInput>
                                     </Field>
@@ -764,9 +863,9 @@ const MixedDownloadLeads = () => {
                                         <SelectInput
                                             value={form.premium_vendor}
                                             onChange={e => setForm({ ...form, premium_vendor: e.target.value })}
-                                            disabled={loadingV}
+                                            disabled={!form.global_campaign || loadingV}
                                         >
-                                            <option value="all">All Vendors</option>
+                                            <option value="all">{!form.global_campaign ? 'Select campaign first...' : loadingV ? 'Loading...' : 'All Vendors'}</option>
                                             {premiumVendors.map(v => <option key={v.vendor_id} value={v.vendor_id}>{v.name} ({v.available_leads || 0} available)</option>)}
                                         </SelectInput>
                                     </Field>
@@ -818,37 +917,6 @@ const MixedDownloadLeads = () => {
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-                                {/* Global Campaign Selection */}
-                                <Field label="Campaign Filter" hint="Select campaign for all 3 data modules">
-                                    <SelectInput
-                                        value={form.global_campaign}
-                                        onChange={e => {
-                                            const selectedName = e.target.value;
-                                            const vanC = vanCampaigns.find(c => c.name === selectedName);
-                                            const refC = refineCampaigns.find(c => c.name === selectedName);
-                                            const premC = premiumCampaigns.find(c => c.name === selectedName);
-                                            
-                                            setForm({
-                                                ...form,
-                                                global_campaign: selectedName,
-                                                campaign_id: selectedName === 'all' ? null : ((vanC || refC || premC)?.campaign_id || null),
-                                                van_campaign: vanC ? String(vanC.campaign_id) : (selectedName === 'all' ? 'all' : ''),
-                                                refine_campaign: refC ? selectedName : (selectedName === 'all' ? 'all' : ''),
-                                                premium_campaign: premC ? selectedName : (selectedName === 'all' ? 'all' : '')
-                                            });
-                                        }}
-                                    >
-                                        <option value="" disabled>Choose a campaign...</option>
-                                        {[...new Set([
-                                            ...vanCampaigns.map(c => c.name),
-                                            ...refineCampaigns.map(c => c.name),
-                                            ...premiumCampaigns.map(c => c.name)
-                                        ])].map((name, i) => (
-                                            <option key={i} value={name}>{name}</option>
-                                        ))}
-                                    </SelectInput>
-                                </Field>
 
                                 {/* Data Filter Preset */}
                                 <Field label="Data Filter Preset" hint="Auto-selects states for you">

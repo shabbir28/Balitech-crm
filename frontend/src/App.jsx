@@ -1,6 +1,7 @@
 import React, { useContext } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, AuthContext } from './context/AuthContext';
+import { firstSafeQuotePath, parseModuleList, safeQuotePageAllowed } from './utils/safeQuoteAccess';
 import Login from './pages/Login';
 import Layout from './components/Layout';
 import IpGuard from './components/IpGuard';
@@ -78,6 +79,20 @@ import WcDbLeadsTable from './pages/WcDbLeadsTable';
 import WcDbDownloadLeads from './pages/WcDbDownloadLeads';
 import WcDbAlreadyDownloaded from './pages/WcDbAlreadyDownloaded';
 
+// Safe Quote Module
+import SafeQuoteDashboard from './pages/SafeQuoteDashboard';
+import SafeQuoteVendors from './pages/SafeQuoteVendors';
+import SafeQuoteCampaigns from './pages/SafeQuoteCampaigns';
+import SafeQuoteAddCampaign from './pages/SafeQuoteAddCampaign';
+import SafeQuoteUploadLeads from './pages/SafeQuoteUploadLeads';
+import SafeQuoteSessionsList from './pages/SafeQuoteSessionsList';
+import SafeQuoteSessionDetails from './pages/SafeQuoteSessionDetails';
+import SafeQuoteAddJob from './pages/SafeQuoteAddJob';
+import SafeQuoteLeadsTable from './pages/SafeQuoteLeadsTable';
+import SafeQuoteDownloadLeads from './pages/SafeQuoteDownloadLeads';
+import SafeQuoteAlreadyDownloaded from './pages/SafeQuoteAlreadyDownloaded';
+import SafeQuoteDnc from './pages/SafeQuoteDnc';
+
 // Mixed Data Download
 import MixedDownloadLeads from './pages/MixedDownloadLeads';
 import MixedAlreadyDownloaded from './pages/MixedAlreadyDownloaded';
@@ -86,7 +101,7 @@ import Clients from './pages/Clients';
 import SeparationUpload from './pages/SeparationUpload';
 
 
-const ProtectedRoute = ({ children, roles, module }) => {
+const ProtectedRoute = ({ children, roles, module, page }) => {
     const { user, loading } = useContext(AuthContext);
     const location = useLocation();
 
@@ -98,13 +113,14 @@ const ProtectedRoute = ({ children, roles, module }) => {
     
     const isSuperAdmin = userRole === 'super_admin';
     let hasModuleAccess = true;
+    const modules = parseModuleList(user.accessible_modules);
 
-    if (module && !isSuperAdmin) {
-        let modules = user.accessible_modules;
-        if (typeof modules === 'string') {
-            try { modules = JSON.parse(modules); } catch { modules = []; }
+    if (!isSuperAdmin) {
+        if (page) {
+            hasModuleAccess = safeQuotePageAllowed(modules, page, false);
+        } else if (module) {
+            hasModuleAccess = modules.includes(module);
         }
-        hasModuleAccess = Array.isArray(modules) && modules.includes(module);
     }
 
     if ((roles && !normalizedRoles.includes(userRole)) || !hasModuleAccess) {
@@ -112,12 +128,6 @@ const ProtectedRoute = ({ children, roles, module }) => {
         if (userRole === 'super_admin' || userRole === 'admin') {
             fallbackPath = '/';
         } else if (userRole === 'data_entry' || userRole === 'dialer_agent') {
-            let modules = user.accessible_modules;
-            if (typeof modules === 'string') {
-                try { modules = JSON.parse(modules); } catch { modules = []; }
-            }
-            if (!Array.isArray(modules)) modules = [];
-            
             if (modules.includes('core') || modules.length === 0) {
                 fallbackPath = '/vendors'; // default if they have core or no modules defined
             } else if (modules.includes('refine')) {
@@ -128,6 +138,8 @@ const ProtectedRoute = ({ children, roles, module }) => {
                 fallbackPath = '/van-vendors';
             } else if (modules.includes('wc_db')) {
                 fallbackPath = '/wc-db-vendors';
+            } else if (modules.includes('safe_quote')) {
+                fallbackPath = firstSafeQuotePath(modules) || '/login';
             } else if (modules.includes('download_data')) {
                 fallbackPath = '/download';
             }
@@ -248,6 +260,22 @@ const AppRoutes = () => {
             <Route path="/wc-db-data" element={<ProtectedRoute roles={['super_admin', 'admin']} module="wc_db"><WcDbLeadsTable /></ProtectedRoute>} />
             <Route path="/wc-db-download" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="wc_db"><WcDbDownloadLeads /></ProtectedRoute>} />
             <Route path="/wc-db-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="wc_db"><WcDbAlreadyDownloaded /></ProtectedRoute>} />
+
+            {/* SAFE QUOTE MODULE */}
+            <Route path="/safe-quote-dashboard" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_dashboard"><SafeQuoteDashboard /></ProtectedRoute>} />
+            <Route path="/safe-quote-vendors" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_vendors"><SafeQuoteVendors /></ProtectedRoute>} />
+            <Route path="/safe-quote-campaigns" element={<ProtectedRoute roles={['super_admin', 'admin']} module="safe_quote" page="sq_campaigns"><SafeQuoteCampaigns /></ProtectedRoute>} />
+            <Route path="/safe-quote-campaigns/add" element={<ProtectedRoute roles={['super_admin', 'admin']} module="safe_quote" page="sq_campaigns"><SafeQuoteAddCampaign /></ProtectedRoute>} />
+            <Route path="/safe-quote-campaigns/edit/:id" element={<ProtectedRoute roles={['super_admin', 'admin']} module="safe_quote" page="sq_campaigns"><SafeQuoteAddCampaign editMode /></ProtectedRoute>} />
+            <Route path="/safe-quote-upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_upload"><SafeQuoteUploadLeads /></ProtectedRoute>} />
+            <Route path="/safe-quote-sessions" element={<ProtectedRoute roles={['super_admin', 'admin']} module="safe_quote" page="sq_sessions"><SafeQuoteSessionsList /></ProtectedRoute>} />
+            <Route path="/safe-quote-sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_sessions"><SafeQuoteSessionDetails /></ProtectedRoute>} />
+            <Route path="/safe-quote-sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_sessions"><SafeQuoteAddJob /></ProtectedRoute>} />
+            <Route path="/safe-quote-data" element={<ProtectedRoute roles={['super_admin', 'admin']} module="safe_quote" page="sq_data"><SafeQuoteLeadsTable /></ProtectedRoute>} />
+            <Route path="/safe-quote-download" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_download"><SafeQuoteDownloadLeads /></ProtectedRoute>} />
+            <Route path="/safe-quote-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_downloaded"><SafeQuoteAlreadyDownloaded /></ProtectedRoute>} />
+            <Route path="/safe-quote-dnc" element={<ProtectedRoute roles={['super_admin', 'admin']} module="safe_quote" page="sq_dnc"><SafeQuoteDnc /></ProtectedRoute>} />
+            <Route path="/safe-quote-separation" element={<Navigate to="/safe-quote-dnc" replace />} />
 
             {/* MIXED DOWNLOAD MODULE */}
             <Route path="/mixed-download" element={<ProtectedRoute roles={['super_admin', 'admin', 'dialer_agent', 'data_entry']} module="mixed_data"><MixedDownloadLeads /></ProtectedRoute>} />

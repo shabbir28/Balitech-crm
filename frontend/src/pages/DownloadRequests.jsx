@@ -162,6 +162,15 @@ const AcceptModal = ({ req, onConfirm, onCancel }) => (
     </div>
 );
 
+const requestEndpoint = (moduleType) => {
+    if (moduleType === 'mixed') return '/mixed-download/requests';
+    if (moduleType === 'premium') return '/premium-download/requests';
+    if (moduleType === 'refine') return '/refine-download/requests';
+    if (moduleType === 'van') return '/van-download/requests';
+    if (moduleType === 'safe_quote') return '/safe-quote-download/requests';
+    return '/download/requests';
+};
+
 const DownloadRequests = () => {
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -181,12 +190,13 @@ const DownloadRequests = () => {
     const fetchRequests = useCallback(async () => {
         setLoading(true);
         try {
-            const [resLeads, resPremium, resRefine, resVan, resMixed] = await Promise.all([
+            const [resLeads, resPremium, resRefine, resVan, resMixed, resSafeQuote] = await Promise.all([
                 api.get('/download/requests').catch(() => ({ data: [] })),
                 api.get('/premium-download/requests').catch(() => ({ data: [] })),
                 api.get('/refine-download/requests').catch(() => ({ data: [] })),
                 api.get('/van-download/requests').catch(() => ({ data: [] })),
-                api.get('/mixed-download/requests').catch(() => ({ data: [] }))
+                api.get('/mixed-download/requests').catch(() => ({ data: [] })),
+                api.get('/safe-quote-download/requests').catch(() => ({ data: [] }))
             ]);
             
             const leads = (resLeads.data || []).map(r => ({ ...r, status: r.status?.toLowerCase(), moduleType: 'leads', typeLabel: 'Leads' }));
@@ -194,8 +204,9 @@ const DownloadRequests = () => {
             const refine = (resRefine.data || []).map(r => ({ ...r, status: r.status?.toLowerCase(), moduleType: 'refine', typeLabel: 'Refine Data' }));
             const van = (resVan.data || []).map(r => ({ ...r, status: r.status?.toLowerCase(), moduleType: 'van', typeLabel: 'Van Data' }));
             const mixed = (resMixed.data || []).map(r => ({ ...r, status: r.status?.toLowerCase(), moduleType: 'mixed', typeLabel: 'Mixed Data' }));
+            const safeQuote = (resSafeQuote.data || []).map(r => ({ ...r, status: r.status?.toLowerCase(), moduleType: 'safe_quote', typeLabel: 'Safe Quote' }));
             
-            setRequests([...leads, ...premium, ...refine, ...van, ...mixed]);
+            setRequests([...leads, ...premium, ...refine, ...van, ...mixed, ...safeQuote]);
         }
         catch { showToast('Failed to load requests from server.', 'error'); }
         finally { setLoading(false); }
@@ -205,7 +216,7 @@ const DownloadRequests = () => {
 
     const handleAccept = async () => {
         const req = acceptModal; setAcceptModal(null); setProcessing(`${req.moduleType}-${req.id}`);
-        const endpoint = req.moduleType === 'mixed' ? '/mixed-download/requests' : req.moduleType === 'premium' ? '/premium-download/requests' : req.moduleType === 'refine' ? '/refine-download/requests' : req.moduleType === 'van' ? '/van-download/requests' : '/download/requests';
+        const endpoint = requestEndpoint(req.moduleType);
         try {
             await api.patch(`${endpoint}/${req.id}`, { action: 'accept' });
             showToast('Request fulfilled successfully.', 'success');
@@ -216,7 +227,7 @@ const DownloadRequests = () => {
 
     const handleReject = async (reason) => {
         const req = rejectModal; setRejectModal(null); setProcessing(`${req.moduleType}-${req.id}`);
-        const endpoint = req.moduleType === 'mixed' ? '/mixed-download/requests' : req.moduleType === 'premium' ? '/premium-download/requests' : req.moduleType === 'refine' ? '/refine-download/requests' : req.moduleType === 'van' ? '/van-download/requests' : '/download/requests';
+        const endpoint = requestEndpoint(req.moduleType);
         try {
             await api.patch(`${endpoint}/${req.id}`, { action: 'reject', rejection_reason: reason });
             showToast('Request was declined.', 'success');

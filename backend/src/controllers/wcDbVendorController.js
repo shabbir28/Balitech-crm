@@ -17,10 +17,59 @@ const createVendor = async (req, res) => {
 
 const getVendors = async (req, res) => {
   const includeCounts = req.query.counts === "true";
+  const campaignId = req.query.campaign_id;
+  const onlyWithData = req.query.only_with_data === "true";
   try {
     let query;
     if (includeCounts) {
       const access = await getUserCampaignAccess(req.user, 'wc_db_campaigns');
+
+      if (campaignId && campaignId !== "all") {
+        const campRes = await db.query(
+          "SELECT campaign_id, name FROM wc_db_campaigns WHERE campaign_id::text = $1 OR LOWER(name) = LOWER($1)",
+          [campaignId]
+        );
+        if (campRes.rows.length === 0) {
+          return res.json([]);
+        }
+        const cId = String(campRes.rows[0].campaign_id);
+        const cName = campRes.rows[0].name.toLowerCase();
+        if (access.isRestricted && !access.campaignNamesLower.includes(cName) && !access.rawCampaignIds.includes(cId)) {
+          return res.json([]);
+        }
+
+        query = `
+          WITH filtered_leads AS (
+            SELECT d.id, d.vendor_id, d.status
+            FROM wc_db_data d
+            JOIN wc_db_sessions s ON d.session_id = s.id
+            LEFT JOIN wc_db_campaigns vc ON vc.campaign_id::text = s.campaign_type::text
+            WHERE vc.campaign_id::text = $1
+               OR s.campaign_type::text = $1
+               OR LOWER(BTRIM(COALESCE(vc.name, ''))) = $2
+               OR LOWER(BTRIM(COALESCE(s.campaign_type, ''))) = $2
+          ),
+          vendor_stats AS (
+            SELECT fl.vendor_id,
+                   COUNT(fl.id)::bigint AS total_leads,
+                   COUNT(CASE WHEN fl.status = 'available' THEN 1 END)::bigint AS available_leads,
+                   COUNT(CASE WHEN fl.status = 'downloaded' THEN 1 END)::bigint AS downloaded_leads
+            FROM filtered_leads fl
+            GROUP BY fl.vendor_id
+          )
+          SELECT v.*,
+                 COALESCE(vs.total_leads, 0)::bigint AS total_leads,
+                 COALESCE(vs.available_leads, 0)::bigint AS available_leads,
+                 COALESCE(vs.downloaded_leads, 0)::bigint AS downloaded_leads
+          FROM wc_db_vendors v
+          ${onlyWithData ? "INNER JOIN" : "LEFT JOIN"} vendor_stats vs ON v.vendor_id::text = vs.vendor_id::text
+          ${onlyWithData ? "WHERE vs.total_leads > 0" : ""}
+          ORDER BY v.created_at DESC
+        `;
+        const result = await db.query(query, [cId, cName]);
+        return res.json(result.rows);
+      }
+
       if (access.isRestricted) {
         if (access.campaignNamesLower.length === 0 && (!access.rawCampaignIds || access.rawCampaignIds.length === 0)) {
           query = `
@@ -54,7 +103,8 @@ const getVendors = async (req, res) => {
                  COALESCE(vs.available_leads, 0)::bigint AS available_leads,
                  COALESCE(vs.downloaded_leads, 0)::bigint AS downloaded_leads
           FROM wc_db_vendors v
-          LEFT JOIN vendor_stats vs ON v.vendor_id = vs.vendor_id
+          ${onlyWithData ? "INNER JOIN" : "LEFT JOIN"} vendor_stats vs ON v.vendor_id::text = vs.vendor_id::text
+          ${onlyWithData ? "WHERE vs.total_leads > 0" : ""}
           ORDER BY v.created_at DESC
         `;
         const result = await db.query(query, [access.campaignNamesLower, access.rawCampaignIds || []]);

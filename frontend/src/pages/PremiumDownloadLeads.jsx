@@ -552,9 +552,8 @@ const PremiumDownloadLeads = () => {
     const [fileStats, setFileStats] = useState(null);
 
     useEffect(() => {
-        Promise.all([api.get('/premium-vendors?counts=true'), api.get('/premium-campaigns'), api.get('/filters')])
-            .then(([v, c, f]) => {
-                setVendors(v?.data || []);
+        Promise.all([api.get('/premium-campaigns'), api.get('/filters')])
+            .then(([c, f]) => {
                 const user = JSON.parse(localStorage.getItem('user') || '{}');
                 const role = String(user.role || '').toLowerCase();
                 let allowedCampaigns = user.accessible_campaigns;
@@ -573,8 +572,34 @@ const PremiumDownloadLeads = () => {
                 setFilters(f?.data || []);
             })
             .catch(() => {})
-            .finally(() => { setLoadingV(false); setLoadingC(false); setLoadingFilters(false); });
+            .finally(() => { setLoadingC(false); setLoadingFilters(false); });
     }, []);
+
+    // Load vendors specifically for the selected campaign
+    useEffect(() => {
+        if (!form.campaign_id || form.campaign_id === 'all') {
+            setVendors([]);
+            setLoadingV(false);
+            setForm(prev => (prev.vendor_id ? { ...prev, vendor_id: '' } : prev));
+            return;
+        }
+
+        setLoadingV(true);
+        api.get(`/premium-vendors?counts=true&campaign_id=${form.campaign_id}&only_with_data=true`)
+            .then(res => {
+                const list = (res.data || []).filter(v => Number(v.available_leads || v.total_leads || 0) > 0);
+                setVendors(list);
+                setForm(prev => {
+                    const stillValid = list.some(v => String(v.vendor_id) === String(prev.vendor_id));
+                    return stillValid ? prev : { ...prev, vendor_id: '' };
+                });
+            })
+            .catch(err => {
+                console.error('Failed to load premium vendors for campaign', err);
+                setVendors([]);
+            })
+            .finally(() => setLoadingV(false));
+    }, [form.campaign_id]);
 
     useEffect(() => () => {
         scrubPollCancelRef.current = true;
@@ -603,7 +628,9 @@ const PremiumDownloadLeads = () => {
                     const fullRes = await api.get(`/premium-download/logs/${logId}/file`);
                     setScrubSummaryData(fullRes.data);
                     setSuccessMsg('Blacklist scrub complete — full summary is shown below.');
-                    api.get('/premium-vendors?counts=true').then((v) => setVendors(v.data)).catch(() => {});
+                    if (form.campaign_id) {
+                        api.get(`/premium-vendors?counts=true&campaign_id=${form.campaign_id}&only_with_data=true`).then((v) => setVendors(v.data)).catch(() => {});
+                    }
                     return;
                 }
             }
@@ -736,7 +763,9 @@ const PremiumDownloadLeads = () => {
                 } else {
                     setSuccessMsg('Export complete! Choose what to download from the summary below.');
                 }
-                api.get('/premium-vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
+                if (form.campaign_id) {
+                    api.get(`/premium-vendors?counts=true&campaign_id=${form.campaign_id}&only_with_data=true`).then(v => setVendors(v.data)).catch(() => {});
+                }
             } else {
                 // Dialer Agent / Admin -> Step 1: Preview BLA Scrub
                 const body = { ...form, job_id: selectedFileIds.length > 0 ? selectedFileIds : undefined };
@@ -793,7 +822,9 @@ const body = {
             setPreviewMode(false);
             setPreviewSummary(null);
             fetchMyReqs();
-            api.get('/premium-vendors?counts=true').then(v => setVendors(v.data)).catch(() => {});
+            if (form.campaign_id) {
+                api.get(`/premium-vendors?counts=true&campaign_id=${form.campaign_id}&only_with_data=true`).then(v => setVendors(v.data)).catch(() => {});
+            }
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to submit request.');
         } finally { setSubmitting(false); }
@@ -902,6 +933,19 @@ const body = {
                         ) : (
                             <form onSubmit={handleSubmit} className="p-6 space-y-5">
 
+                            {/* Campaign */}
+                            <Field label="Campaign Filter" required hint="Select the campaign to export from">
+                                <SelectInput
+                                    value={form.campaign_id}
+                                    onChange={e => setForm({ ...form, campaign_id: e.target.value })}
+                                    disabled={loadingC}
+                                    required
+                                >
+                                    <option value="" disabled>{loadingC ? 'Loading...' : 'Choose a campaign...'}</option>
+                                    {campaigns.map(c => <option key={c.campaign_id} value={c.campaign_id}>{c.name}</option>)}
+                                </SelectInput>
+                            </Field>
+
                             {/* Vendor */}
                             <Field label="Vendor Source" required hint="Select the vendor whose data you want to export">
                                 <SelectInput
@@ -917,9 +961,9 @@ const body = {
                                                     : false,
                                         }));
                                     }}
-                                    disabled={loadingV}
+                                    disabled={!form.campaign_id || loadingV}
                                 >
-                                    <option value="" disabled>{loadingV ? 'Loading...' : 'Choose a vendor...'}</option>
+                                    <option value="" disabled>{!form.campaign_id ? 'Please select a campaign first...' : loadingV ? 'Loading...' : 'Choose a vendor...'}</option>
                                     <option value="all">All Vendors</option>
                                     {vendors.map(v => (
                                         <option key={v.vendor_id} value={v.vendor_id}>
@@ -1104,19 +1148,6 @@ const body = {
                                 </div>
                             </div>
 
-                            {/* Campaign */}
-                            <Field label="Campaign Filter" required hint="Select the campaign to export from">
-                                <SelectInput
-                                    value={form.campaign_id}
-                                    onChange={e => setForm({ ...form, campaign_id: e.target.value })}
-                                    disabled={loadingC}
-                                    required
-                                >
-                                    <option value="" disabled>{loadingC ? 'Loading...' : 'Choose a campaign...'}</option>
-                                    {campaigns.map(c => <option key={c.campaign_id} value={c.campaign_id}>{c.name}</option>)}
-                                </SelectInput>
-                            </Field>
-                            
                             {/* Quality Filter */}
                             <Field label="Quality Filter" required hint="Select which data quality to export">
                                 <SelectInput
