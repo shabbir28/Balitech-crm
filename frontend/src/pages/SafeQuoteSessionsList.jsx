@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
+import { AuthContext } from '../context/AuthContext';
 import { Database, Search, Calendar, ChevronLeft, ChevronRight, ListFilter, AlertTriangle, Trash2, X, Activity, FileText, Files, BarChart3, TrendingUp, CheckCircle2, AlertCircle, Copy, Ban } from 'lucide-react';
 
 const ChevronDownIcon = ({ className }) => (
@@ -8,6 +9,8 @@ const ChevronDownIcon = ({ className }) => (
 );
 
 const SafeQuoteSessionsList = () => {
+    const { user } = useContext(AuthContext);
+    const canManage = user?.role === 'super_admin' || user?.role === 'admin';
     const [sessions, setSessions] = useState([]);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
@@ -272,7 +275,9 @@ const SafeQuoteSessionsList = () => {
                                         </div>
                                         <div className="flex items-center justify-end gap-2 pr-4">
                                             <Link to={`/safe-quote-sessions/${s.id}`} className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95">View</Link>
-                                            <button onClick={() => confirmDelete(s.id)} className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-2.5 py-1.5 rounded-lg transition-all" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                                            {canManage && (
+                                                <button onClick={() => confirmDelete(s.id)} className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-2.5 py-1.5 rounded-lg transition-all" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                                            )}
                                         </div>
                                     </div>
                                 );
