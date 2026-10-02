@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { Target, Plus, Trash2, Edit, AlertTriangle, CheckCircle } from 'lucide-react';
+import { AuthContext } from '../context/AuthContext';
+import { Plus, Trash2, Edit, AlertTriangle, CheckCircle } from 'lucide-react';
 
 const SafeQuoteCampaigns = () => {
     const navigate = useNavigate();
+    const { user } = useContext(AuthContext);
+    const canManage = user?.role === 'super_admin' || user?.role === 'admin';
     const [campaigns, setCampaigns] = useState([]);
     const [loading, setLoading] = useState(true);
     const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null, isDeleting: false });
@@ -68,10 +71,12 @@ const SafeQuoteCampaigns = () => {
                     <h1 className="text-2xl font-bold text-white tracking-tight">Safe Quote Campaigns</h1>
                     <p className="text-sm text-slate-500 mt-1">Manage and organize your Safe Quote campaigns efficiently.</p>
                 </div>
-                <button onClick={() => navigate('/safe-quote-campaigns/add')}
-                    className="flex items-center justify-center px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-amber-500 hover:from-amber-500 hover:to-cyan-400 text-white font-semibold rounded-xl shadow-lg transition-all shrink-0">
-                    <Plus className="mr-2 h-4 w-4" /> Add Campaign
-                </button>
+                {canManage && (
+                    <button onClick={() => navigate('/safe-quote-campaigns/add')}
+                        className="flex items-center justify-center px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-amber-500 hover:from-amber-500 hover:to-cyan-400 text-white font-semibold rounded-xl shadow-lg transition-all shrink-0">
+                        <Plus className="mr-2 h-4 w-4" /> Add Campaign
+                    </button>
+                )}
             </div>
 
             <div className="overflow-x-auto bg-[#1a1d2e] border border-white/[0.05] shadow-2xl rounded-2xl">
@@ -93,8 +98,14 @@ const SafeQuoteCampaigns = () => {
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-gray-400">{new Date(c.created_at).toLocaleDateString()}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right space-x-3">
-                                    <button onClick={() => navigate(`/safe-quote-campaigns/edit/${c.campaign_id}`)} className="text-amber-400 hover:text-cyan-300 transition-colors" title="Edit"><Edit className="h-4 w-4 inline" /></button>
-                                    <button onClick={() => setDeleteModal({ isOpen: true, id: c.campaign_id, isDeleting: false })} className="text-red-500 hover:text-red-400 transition-colors" title="Delete"><Trash2 className="h-4 w-4 inline" /></button>
+                                    {canManage ? (
+                                        <>
+                                            <button onClick={() => navigate(`/safe-quote-campaigns/edit/${c.campaign_id}`)} className="text-amber-400 hover:text-cyan-300 transition-colors" title="Edit"><Edit className="h-4 w-4 inline" /></button>
+                                            <button onClick={() => setDeleteModal({ isOpen: true, id: c.campaign_id, isDeleting: false })} className="text-red-500 hover:text-red-400 transition-colors" title="Delete"><Trash2 className="h-4 w-4 inline" /></button>
+                                        </>
+                                    ) : (
+                                        <span className="text-slate-600">—</span>
+                                    )}
                                 </td>
                             </tr>
                         ))}

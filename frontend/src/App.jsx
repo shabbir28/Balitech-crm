@@ -264,7 +264,7 @@ const AppRoutes = () => {
             {/* SAFE QUOTE MODULE */}
             <Route path="/safe-quote-dashboard" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_dashboard"><SafeQuoteDashboard /></ProtectedRoute>} />
             <Route path="/safe-quote-vendors" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_vendors"><SafeQuoteVendors /></ProtectedRoute>} />
-            <Route path="/safe-quote-campaigns" element={<ProtectedRoute roles={['super_admin', 'admin']} module="safe_quote" page="sq_campaigns"><SafeQuoteCampaigns /></ProtectedRoute>} />
+            <Route path="/safe-quote-campaigns" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_campaigns"><SafeQuoteCampaigns /></ProtectedRoute>} />
             <Route path="/safe-quote-campaigns/add" element={<ProtectedRoute roles={['super_admin', 'admin']} module="safe_quote" page="sq_campaigns"><SafeQuoteAddCampaign /></ProtectedRoute>} />
             <Route path="/safe-quote-campaigns/edit/:id" element={<ProtectedRoute roles={['super_admin', 'admin']} module="safe_quote" page="sq_campaigns"><SafeQuoteAddCampaign editMode /></ProtectedRoute>} />
             <Route path="/safe-quote-upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_upload"><SafeQuoteUploadLeads /></ProtectedRoute>} />
