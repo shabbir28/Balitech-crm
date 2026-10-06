@@ -252,7 +252,7 @@ const AddUser = ({ editMode }) => {
                     <ArrowLeft className="w-5 h-5" />
                 </button>
                 <div>
-                    <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
+                    <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-3">
                         {editMode ? 'Edit User' : 'Add New User'}
                     </h1>
                     <p className="text-slate-400 text-sm mt-1 font-medium">

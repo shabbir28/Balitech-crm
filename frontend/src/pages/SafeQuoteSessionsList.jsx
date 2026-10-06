@@ -12,7 +12,6 @@ const SafeQuoteSessionsList = () => {
     const { user } = useContext(AuthContext);
     const canManage = user?.role === 'super_admin' || user?.role === 'admin';
     const [sessions, setSessions] = useState([]);
-    const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
@@ -24,17 +23,26 @@ const SafeQuoteSessionsList = () => {
     const [selectedJobStats, setSelectedJobStats] = useState(null);
     const limit = 20;
 
-    const fetchSessions = async (pageToFetch = 1) => {
+    const fetchSessions = async () => {
         setLoading(true);
         try {
             const from = fromDate ? new Date(fromDate).toISOString() : '';
             const to = toDate ? new Date(`${toDate}T23:59:59`).toISOString() : '';
-            const res = await api.get(
-                `/safe-quote-sessions?page=${pageToFetch}&limit=${limit}&search=${encodeURIComponent(search)}&status=${encodeURIComponent(statusFilter)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
-            );
-            setSessions(res.data.data);
-            setTotal(res.data.total);
-            setPage(res.data.page);
+            const qs = `page=1&limit=500&search=${encodeURIComponent(search)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+            const [quoteRes, refineRes] = await Promise.all([
+                api.get(`/safe-quote-sessions?${qs}`),
+                api.get(`/safe-quote-refine-sessions?${qs}`),
+            ]);
+            let merged = [
+                ...(quoteRes.data.data || []).map((row) => ({ ...row, session_kind: 'quote' })),
+                ...(refineRes.data.data || []).map((row) => ({ ...row, session_kind: 'refine' })),
+            ];
+            if (statusFilter !== 'All') {
+                merged = merged.filter((row) => (row.status || 'Pending') === statusFilter);
+            }
+            merged.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            setSessions(merged);
+            setPage(1);
         } catch (err) {
             console.error('Failed to fetch Safe Quote sessions', err);
         } finally { setLoading(false); }
@@ -42,21 +50,24 @@ const SafeQuoteSessionsList = () => {
 
     useEffect(() => { fetchSessions(1); }, []); // eslint-disable-line
 
+    const total = sessions.length;
     const totalPages = Math.ceil(total / limit) || 1;
+    const visibleSessions = sessions.slice((page - 1) * limit, page * limit);
     const formatDateTime = (value) => {
         if (!value) return 'N/A';
-        return new Date(value).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        return new Date(value).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     };
     const formatShortId = (id) => id ? String(id).slice(0, 8) : '';
-    const confirmDelete = (id) => setDeleteModal({ isOpen: true, id, isDeleting: false });
-    const cancelDelete = () => setDeleteModal({ isOpen: false, id: null, isDeleting: false });
+    const confirmDelete = (id, sessionKind) => setDeleteModal({ isOpen: true, id, sessionKind, isDeleting: false });
+    const cancelDelete = () => setDeleteModal({ isOpen: false, id: null, sessionKind: null, isDeleting: false });
     const executeDelete = async () => {
         if (!deleteModal.id) return;
         setDeleteModal(prev => ({ ...prev, isDeleting: true }));
         try {
-            await api.delete(`/safe-quote-sessions/${deleteModal.id}`);
-            fetchSessions(page);
-            setDeleteModal({ isOpen: false, id: null, isDeleting: false });
+            const base = deleteModal.sessionKind === 'refine' ? '/safe-quote-refine-sessions' : '/safe-quote-sessions';
+            await api.delete(`${base}/${deleteModal.id}`);
+            fetchSessions();
+            setDeleteModal({ isOpen: false, id: null, sessionKind: null, isDeleting: false });
         } catch (err) {
             console.error('Failed to delete Safe Quote session', err);
             setDeleteModal(prev => ({ ...prev, isDeleting: false }));
@@ -64,7 +75,7 @@ const SafeQuoteSessionsList = () => {
     };
 
     return (
-        <div className="max-w-[1400px] mx-auto space-y-6 font-sans pb-12 relative">
+        <div className="w-full min-w-0 space-y-4 font-sans pb-8 relative">
 
             {/* Delete Modal */}
             {deleteModal.isOpen && (
@@ -103,7 +114,7 @@ const SafeQuoteSessionsList = () => {
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
-                                {!selectedJobStats && <span className="bg-amber-500/15 border border-amber-500/25 text-cyan-300 text-[11px] font-bold px-2.5 py-1 rounded-lg">{filesModal.files.length} {filesModal.files.length === 1 ? 'file' : 'files'}</span>}
+                                {!selectedJobStats && <span className="bg-amber-500/15 border border-amber-500/25 text-cyan-300 text-[11px] font-bold px-1.5 py-0.5 rounded-lg">{filesModal.files.length} {filesModal.files.length === 1 ? 'file' : 'files'}</span>}
                                 {selectedJobStats && <button onClick={() => setSelectedJobStats(null)} className="text-[12px] text-amber-400 hover:text-cyan-300 font-semibold px-3 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20">← Back</button>}
                                 <button onClick={() => { setFilesModal({ isOpen: false, files: [], jobsData: [], sessionId: null }); setSelectedJobStats(null); }} className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white flex items-center justify-center transition-colors"><X className="w-4 h-4" /></button>
                             </div>
@@ -173,20 +184,14 @@ const SafeQuoteSessionsList = () => {
             )}
 
             {/* Header */}
-            <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between mb-8 gap-6 border-b border-white/5 pb-6">
+            <div className="flex flex-col gap-3 mb-4 min-w-0 border-b border-white/5 pb-3">
                 <div className="shrink-0">
                     <h1 className="text-2xl font-bold text-white tracking-tight">Safe Quote Session Monitoring</h1>
                     <p className="text-sm text-slate-500 mt-1">
-                        Track all Safe Quote data upload processing sessions. ({total.toLocaleString()} total)
+                        Safe Quote and Safe Quote Refine upload sessions. ({total.toLocaleString()} total)
                     </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto justify-start xl:justify-end">
-                    <Link 
-                        to="/safe-quote-upload"
-                        className="bg-amber-600 hover:bg-amber-500 text-white px-5 py-2 rounded-xl font-bold text-[13px] transition-all shadow-lg shrink-0 flex items-center gap-2"
-                    >
-                        Bulk Upload
-                    </Link>
+                <div className="flex flex-wrap items-center gap-2 w-full min-w-0">
                     <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-[#13151f] border border-white/10 rounded-xl px-4 py-1.5 w-full sm:w-auto shadow-inner hover:border-white/20 transition-colors">
                         <Calendar className="w-4 h-4 text-slate-500 hidden sm:block shrink-0" />
                         <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="bg-transparent border-none text-slate-300 text-[12px] outline-none font-medium w-full sm:w-auto py-1" />
@@ -216,9 +221,9 @@ const SafeQuoteSessionsList = () => {
             {/* Table */}
             <div className="bg-[#13151f] rounded-3xl border border-white/5 shadow-2xl relative">
                 <div className="w-full overflow-x-auto rounded-3xl">
-                    <div className="min-w-[1300px]">
-                        <div className="grid grid-cols-[160px_100px_160px_160px_200px_140px_150px_150px_130px_180px_150px] p-4 items-center border-b border-white/10 bg-black/20 text-[11px] font-bold text-slate-400 uppercase tracking-widest sticky top-0 backdrop-blur-xl z-20">
-                            <div className="pl-4">Session ID</div><div>Jobs</div><div>Vendor</div><div>Campaign</div><div>Uploaded File</div><div>Created By</div><div>Start Time</div><div>End Time</div><div>Status</div><div>Progress</div><div className="text-right pr-4">Actions</div>
+                    <div className="min-w-[1360px]">
+                        <div className="grid grid-cols-[82px_68px_36px_minmax(72px,0.9fr)_minmax(48px,0.6fr)_minmax(100px,1.2fr)_minmax(64px,0.65fr)_100px_100px_92px_minmax(120px,0.85fr)_108px] gap-x-3 [&>*]:min-w-0 [&>*]:overflow-hidden p-4 items-center border-b border-white/10 bg-black/20 text-[10px] font-semibold text-slate-500 uppercase tracking-wide sticky top-0 backdrop-blur-xl z-20">
+                            <div className="pl-1">Session ID</div><div>Type</div><div>Jobs</div><div>Vendor</div><div>Campaign</div><div>Uploaded File</div><div>Created By</div><div>Start Time</div><div>End Time</div><div>Status</div><div>Progress</div><div className="text-right pr-4">Actions</div>
                         </div>
                         <div className="divide-y divide-white/5">
                             {loading ? (
@@ -232,39 +237,44 @@ const SafeQuoteSessionsList = () => {
                                     <p className="font-medium text-lg text-slate-300 mb-1">No Safe Quote sessions found</p>
                                     <p className="text-sm">We couldn't find anything matching your filters.</p>
                                 </div>
-                            ) : sessions.map((s) => {
+                            ) : visibleSessions.map((s) => {
                                 const processed = parseInt(s.processed_rows || 0, 10);
                                 const totalRows = parseInt(s.total_rows || 0, 10);
                                 const progress = totalRows > 0 ? Math.round((processed / totalRows) * 100) : 0;
                                 const status = s.status || 'Pending';
                                 const totalJobs = parseInt(s.total_jobs || 0, 10);
                                 return (
-                                    <div key={s.id} className="grid grid-cols-[160px_100px_160px_160px_200px_140px_150px_150px_130px_180px_150px] p-3 items-center hover:bg-white/[0.02] transition-colors group">
-                                        <div className="pl-4"><span className="text-slate-400 font-mono text-[12px] bg-black/30 border border-white/5 px-2.5 py-1 rounded group-hover:text-cyan-300 transition-colors" title={s.id}>{formatShortId(s.id)}</span></div>
-                                        <div><span className="bg-white/5 px-2.5 py-1 rounded-md text-slate-300 font-medium text-xs border border-white/5">{totalJobs}</span></div>
+                                    <div key={`${s.session_kind}-${s.id}`} className="grid grid-cols-[82px_68px_36px_minmax(72px,0.9fr)_minmax(48px,0.6fr)_minmax(100px,1.2fr)_minmax(64px,0.65fr)_100px_100px_92px_minmax(120px,0.85fr)_108px] gap-x-3 [&>*]:min-w-0 [&>*]:overflow-hidden p-3 items-center hover:bg-white/[0.02] transition-colors group">
+                                        <div className="pl-1"><span className="text-slate-400 font-mono text-[12px] bg-black/30 border border-white/5 px-1.5 py-0.5 rounded group-hover:text-cyan-300 transition-colors" title={s.id}>{formatShortId(s.id)}</span></div>
+                                        <div>
+                                            <span className={`inline-flex px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-normal border ${s.session_kind === 'refine' ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20' : 'bg-amber-500/10 text-amber-300 border-amber-500/20'}`}>
+                                                {s.session_kind === 'refine' ? 'Refine' : 'Quote'}
+                                            </span>
+                                        </div>
+                                        <div><span className="bg-white/5 px-1.5 py-0.5 rounded-md text-slate-300 font-medium text-xs border border-white/5">{totalJobs}</span></div>
                                         <div className="text-white font-semibold text-[13px] pr-2 group-hover:text-cyan-300 transition-colors line-clamp-1">{s.vendor_name || '—'}</div>
                                         <div className="text-slate-300 text-[13px] pr-2 font-medium line-clamp-1">{s.campaign_type || '—'}</div>
                                         <div className="text-slate-300 text-[13px] pr-2 font-medium">
                                             {s.uploaded_files && s.uploaded_files.length > 0 ? (
-                                                <button onClick={() => { setSelectedJobStats(null); setFilesModal({ isOpen: true, files: s.uploaded_files, jobsData: s.jobs_data || [], sessionId: s.id }); }} className="flex items-center gap-1.5 group cursor-pointer hover:text-cyan-300 transition-colors text-left">
+                                                <button onClick={() => { setSelectedJobStats(null); setFilesModal({ isOpen: true, files: s.uploaded_files, jobsData: s.jobs_data || [], sessionId: s.id }); }} className="flex items-center gap-1.5 min-w-0 w-full overflow-hidden group cursor-pointer hover:text-cyan-300 transition-colors text-left">
                                                     <FileText className="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400 shrink-0" />
-                                                    <span className="truncate max-w-[120px]">{s.uploaded_files[0]}</span>
+                                                    <span className="truncate max-w-full">{s.uploaded_files[0]}</span>
                                                     {s.uploaded_files.length > 1 && <span className="text-[10px] bg-amber-500/15 border border-amber-500/25 px-1.5 py-0.5 rounded text-amber-400 font-bold shrink-0">+{s.uploaded_files.length - 1}</span>}
                                                 </button>
                                             ) : <span className="text-slate-600">—</span>}
                                         </div>
-                                        <div className="flex items-center gap-2 text-slate-400 text-[13px]">
+                                        <div className="flex items-center gap-1.5 min-w-0 text-slate-400 text-[12px]">
                                             <div className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-[10px] uppercase">{(s.created_by_username?.[0] || 'U')}</div>
-                                            <span className="truncate max-w-[90px]">{s.created_by_username || '—'}</span>
+                                            <span className="truncate max-w-full">{s.created_by_username || '—'}</span>
                                         </div>
                                         <div className="text-slate-400 text-[12px] font-medium leading-tight">{formatDateTime(s.created_at)}</div>
                                         <div className="text-slate-500 text-[12px] font-medium leading-tight italic">{formatDateTime(s.end_time)}</div>
                                         <div>
-                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : status === 'Processing' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse' : status === 'Failed' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-white/5 text-slate-400 border-white/10'}`}>
+                                            <span className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-normal border ${status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : status === 'Processing' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse' : status === 'Failed' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-white/5 text-slate-400 border-white/10'}`}>
                                                 <span className={`w-1.5 h-1.5 rounded-full ${status === 'Completed' ? 'bg-emerald-400' : status === 'Processing' ? 'bg-amber-400' : status === 'Failed' ? 'bg-red-400' : 'bg-slate-400'}`} />{status}
                                             </span>
                                         </div>
-                                        <div className="pr-6 w-[160px]">
+                                        <div className="w-full min-w-0 pr-1">
                                             <div className="flex justify-between items-center mb-1.5">
                                                 <span className="text-[10px] text-slate-400 font-mono">{processed.toLocaleString()} / <span className="text-slate-300">{totalRows.toLocaleString()}</span></span>
                                                 <span className={`text-[10px] font-bold font-mono ${status === 'Completed' ? 'text-emerald-400' : 'text-amber-400'}`}>{progress}%</span>
@@ -273,10 +283,10 @@ const SafeQuoteSessionsList = () => {
                                                 <div className={`h-full rounded-full transition-all duration-700 ${status === 'Completed' ? 'bg-emerald-500' : status === 'Failed' ? 'bg-red-500' : 'bg-amber-500'}`} style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
                                             </div>
                                         </div>
-                                        <div className="flex items-center justify-end gap-2 pr-4">
-                                            <Link to={`/safe-quote-sessions/${s.id}`} className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95">View</Link>
+                                        <div className="flex items-center justify-end gap-1 pr-1">
+                                            <Link to={s.session_kind === 'refine' ? `/safe-quote-refine-sessions/${s.id}` : `/safe-quote-sessions/${s.id}`} className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95">View</Link>
                                             {canManage && (
-                                                <button onClick={() => confirmDelete(s.id)} className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-2.5 py-1.5 rounded-lg transition-all" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => confirmDelete(s.id, s.session_kind)} className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-2.5 py-1.5 rounded-lg transition-all" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                                             )}
                                         </div>
                                     </div>
@@ -285,12 +295,12 @@ const SafeQuoteSessionsList = () => {
                         </div>
                     </div>
                 </div>
-                <div className="p-4 border-t border-white/5 flex items-center justify-between bg-black/20 rounded-b-3xl">
+                <div className="px-3 py-2.5 border-t border-white/5 flex flex-wrap items-center justify-between gap-2 bg-black/20">
                     <span className="text-slate-500 text-[12px] font-medium">Showing <span className="text-white font-mono">{total === 0 ? 0 : (page - 1) * limit + 1}-{Math.min(page * limit, total)}</span> of <span className="text-white font-mono">{total}</span></span>
                     <div className="flex items-center gap-2">
-                        <button onClick={() => fetchSessions(Math.max(1, page - 1))} disabled={page === 1} className="bg-white/5 hover:bg-white/10 text-slate-300 disabled:opacity-30 rounded-lg p-2 transition-colors"><ChevronLeft className="w-4 h-4" /></button>
+                        <button onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1} className="bg-white/5 hover:bg-white/10 text-slate-300 disabled:opacity-30 rounded-lg p-2 transition-colors"><ChevronLeft className="w-4 h-4" /></button>
                         <span className="text-slate-400 text-[12px] font-medium px-2">Page <span className="text-white font-bold">{page}</span> of {totalPages}</span>
-                        <button onClick={() => fetchSessions(Math.min(totalPages, page + 1))} disabled={page === totalPages || totalPages === 0} className="bg-white/5 hover:bg-white/10 text-slate-300 disabled:opacity-30 rounded-lg p-2 transition-colors"><ChevronRight className="w-4 h-4" /></button>
+                        <button onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page === totalPages || totalPages === 0} className="bg-white/5 hover:bg-white/10 text-slate-300 disabled:opacity-30 rounded-lg p-2 transition-colors"><ChevronRight className="w-4 h-4" /></button>
                     </div>
                 </div>
             </div>

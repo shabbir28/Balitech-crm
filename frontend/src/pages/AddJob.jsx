@@ -357,7 +357,7 @@ const AddJob = () => {
                         {step === 1 && (
                             <div className="w-full max-w-5xl mx-auto flex flex-col md:flex-row gap-8 lg:gap-16 items-center">
                                 <div className="flex-1 w-full animate-fade-in relative z-10">
-                                    <h2 className="text-3xl font-extrabold text-white mb-2 tracking-tight">Import File</h2>
+                                    <h2 className="text-xl font-bold text-white mb-2 tracking-tight">Import File</h2>
                                     <p className="text-slate-400 mb-8 text-[14px] font-medium">Click below to drop your CSV, Excel, or TXT file into the CRM securely.</p>
                                     
                                     <div className="group relative border-2 border-dashed border-white/20 hover:border-brand-500/50 rounded-3xl p-10 text-center bg-[#1e1e2d]/50 hover:bg-brand-500/5 transition-all duration-300">
@@ -537,7 +537,7 @@ const AddJob = () => {
                                 <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-96 h-96 bg-brand-500/10 rounded-full blur-[100px] pointer-events-none"></div>
 
                                 <div className="mx-auto bg-[#1e1e2d]/60 backdrop-blur-md border border-white/5 shadow-2xl rounded-3xl p-8 sm:p-10 text-left relative overflow-hidden">
-                                    <h2 className="text-3xl font-bold text-white mb-2 tracking-tight">Preview Results</h2>
+                                    <h2 className="text-xl font-bold text-white mb-2 tracking-tight">Preview Results</h2>
                                     <p className="text-slate-400 text-[14px] font-medium mb-8">
                                         Fresh numbers will be uploaded to CRM. Existing, DNC, and Sale numbers will be skipped.
                                     </p>
@@ -546,22 +546,22 @@ const AddJob = () => {
                                         <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-brand-500/30 transition-colors">
                                             <div className="absolute top-0 left-0 w-1 h-full bg-slate-500"></div>
                                             <p className="text-slate-500 text-[11px] uppercase tracking-widest font-bold mb-1 ml-2 text-left">Total Valid Rows</p>
-                                            <p className="text-3xl font-extrabold text-white ml-2">{compareResult.total_processed}</p>
+                                            <p className="text-xl font-bold text-white ml-2">{compareResult.total_processed}</p>
                                         </div>
                                         <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-red-500/30 transition-colors">
                                             <div className="absolute top-0 left-0 w-1 h-full bg-red-500/50"></div>
                                             <p className="text-red-400/70 text-[11px] uppercase tracking-widest font-bold mb-1 ml-2 text-left">Invalid/Dupes</p>
-                                            <p className="text-3xl font-extrabold text-white ml-2">{compareResult.duplicates_in_file}</p>
+                                            <p className="text-xl font-bold text-white ml-2">{compareResult.duplicates_in_file}</p>
                                         </div>
                                         <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-brand-500/50 transition-colors">
                                             <div className="absolute top-0 left-0 w-1 h-full bg-brand-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]"></div>
                                             <p className="text-brand-400 text-[11px] uppercase tracking-widest font-bold mb-1 ml-2 text-left">Fresh Numbers</p>
-                                            <p className="text-3xl font-extrabold text-white ml-2">{compareResult.fresh_count}</p>
+                                            <p className="text-xl font-bold text-white ml-2">{compareResult.fresh_count}</p>
                                         </div>
                                         <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-amber-500/30 transition-colors flex flex-col">
                                             <div className="absolute top-0 left-0 w-1 h-full bg-amber-500/70"></div>
                                             <p className="text-amber-400/80 text-[11px] uppercase tracking-widest font-bold mb-1 ml-2 text-left">Already Present</p>
-                                            <p className="text-3xl font-extrabold text-white ml-2">{compareResult.existing_count}</p>
+                                            <p className="text-xl font-bold text-white ml-2">{compareResult.existing_count}</p>
                                             {compareResult.existing_breakdown && Object.keys(compareResult.existing_breakdown).length > 0 && (
                                                 <div className="mt-3 ml-2 text-[11px] border-t border-white/5 pt-3 flex-grow overflow-y-auto max-h-24 custom-scrollbar">
                                                     {Object.entries(compareResult.existing_breakdown).map(([campaign, count]) => (
@@ -576,7 +576,7 @@ const AddJob = () => {
                                         <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-purple-500/30 transition-colors">
                                             <div className="absolute top-0 left-0 w-1 h-full bg-purple-500/50"></div>
                                             <p className="text-purple-400/80 text-[11px] uppercase tracking-widest font-bold mb-1 ml-2 text-left">Total DNC Skipped</p>
-                                            <p className="text-3xl font-extrabold text-white ml-2">{compareResult.dnc_skipped}</p>
+                                            <p className="text-xl font-bold text-white ml-2">{compareResult.dnc_skipped}</p>
                                         </div>
                                         <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-purple-500/30 transition-colors">
                                             <div className="absolute top-0 left-0 w-1 h-full bg-purple-500/50"></div>
@@ -588,7 +588,7 @@ const AddJob = () => {
                                         <div className="bg-[#0a0a0f] p-5 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-red-500/30 transition-colors">
                                             <div className="absolute top-0 left-0 w-1 h-full bg-red-500/50"></div>
                                             <p className="text-red-400/80 text-[11px] uppercase tracking-widest font-bold mb-1 ml-2 text-left">Dead Numbers Skipped</p>
-                                            <p className="text-3xl font-extrabold text-white ml-2">{compareResult.dead_skipped || 0}</p>
+                                            <p className="text-xl font-bold text-white ml-2">{compareResult.dead_skipped || 0}</p>
                                         </div>
                                     </div>
 
@@ -672,7 +672,7 @@ const AddJob = () => {
                                     <div className="w-24 h-24 bg-emerald-500/10 border border-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-[0_0_30px_rgba(16,185,129,0.2)]">
                                         <CheckCircle className="w-12 h-12 text-emerald-400" />
                                     </div>
-                                    <h2 className="text-3xl font-extrabold text-white mb-6 tracking-tight">Upload Successful!</h2>
+                                    <h2 className="text-xl font-bold text-white mb-6 tracking-tight">Upload Successful!</h2>
                                     
                                     <div className="bg-[#1e1e2d]/80 backdrop-blur-md border border-white/5 rounded-3xl p-6 sm:p-8 text-left mb-8 shadow-2xl">
                                         <ul className="space-y-4 text-[14px]">

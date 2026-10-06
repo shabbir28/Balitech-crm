@@ -123,7 +123,7 @@ const Clients = () => {
             {/* ── Header ── */}
             <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6 border-b border-white/5 pb-6">
                 <div>
-                    <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
+                    <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-3">
                         <Users2 className="w-8 h-8 text-blue-500" /> Clients Management
                     </h1>
                     <p className="text-slate-400 text-sm mt-2 font-medium">Manage your client accounts and linked campaigns.</p>

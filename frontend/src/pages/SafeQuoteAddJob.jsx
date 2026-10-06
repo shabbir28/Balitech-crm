@@ -241,7 +241,7 @@ const SafeQuoteAddJob = () => {
                     <div className="flex-1 w-full bg-[#0a0a0f]/40 sm:p-12 p-6 text-slate-200 flex flex-col border-t border-white/5 relative z-10 min-h-[400px]">
                         {step === 1 && (
                             <div className="w-full max-w-2xl mx-auto animate-fade-in">
-                                <h2 className="text-3xl font-extrabold text-white mb-2 tracking-tight">{isBulk ? 'Bulk Upload Safe Quote Files' : 'Upload Safe Quote File'}</h2>
+                                <h2 className="text-xl font-bold text-white mb-2 tracking-tight">{isBulk ? 'Bulk Upload Safe Quote Files' : 'Upload Safe Quote File'}</h2>
                                 <p className="text-slate-400 mb-8 text-[14px] font-medium">Upload your CSV, Excel, or TXT file{isBulk ? 's' : ''}. Duplicates and DNC/Dead numbers will be auto-skipped.</p>
                                 <div className="group relative border-2 border-dashed border-white/20 hover:border-amber-500/50 rounded-3xl p-10 text-center bg-[#1e1e2d]/50 hover:bg-amber-500/5 transition-all duration-300 cursor-pointer">
                                     <input 
@@ -322,7 +322,7 @@ const SafeQuoteAddJob = () => {
                             <div className="w-full max-w-5xl mx-auto animate-fade-in flex flex-col md:flex-row gap-8">
                                 <div className="flex-1 w-full space-y-6">
                                     <div className="flex items-center justify-between mb-2">
-                                        <h2 className="text-3xl font-extrabold text-white tracking-tight">Analysis Complete</h2>
+                                        <h2 className="text-xl font-bold text-white tracking-tight">Analysis Complete</h2>
                                         <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-4 py-1.5 rounded-full text-xs font-bold tracking-widest uppercase shadow-inner">
                                             {isBulk ? `${files.length} Files Scanned` : 'File Scanned'}
                                         </span>
@@ -333,13 +333,13 @@ const SafeQuoteAddJob = () => {
                                         <div className="bg-[#1e1e2d] border border-white/5 rounded-[1.5rem] p-6 hover:bg-[#1e1e2d]/80 transition-colors shadow-lg relative overflow-hidden group">
                                             <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all"></div>
                                             <p className="text-slate-400 text-xs font-bold tracking-widest uppercase mb-1 flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> Fresh Valid Leads</p>
-                                            <p className="text-3xl font-black text-white">{compareResult.fresh_count.toLocaleString()}</p>
+                                            <p className="text-xl font-bold text-white">{compareResult.fresh_count.toLocaleString()}</p>
                                             <p className="text-[10px] text-emerald-400/80 mt-2 font-medium bg-emerald-500/10 inline-block px-2 py-0.5 rounded-md">Ready to import</p>
                                         </div>
                                         <div className="bg-[#1e1e2d] border border-white/5 rounded-[1.5rem] p-6 hover:bg-[#1e1e2d]/80 transition-colors shadow-lg relative overflow-hidden group">
                                             <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition-all"></div>
                                             <p className="text-slate-400 text-xs font-bold tracking-widest uppercase mb-1 flex items-center gap-2"><Settings className="w-3.5 h-3.5 text-amber-500" /> Existing Leads</p>
-                                            <p className="text-3xl font-black text-white">{compareResult.existing_count.toLocaleString()}</p>
+                                            <p className="text-xl font-bold text-white">{compareResult.existing_count.toLocaleString()}</p>
                                             <p className="text-[10px] text-amber-400/80 mt-2 font-medium bg-amber-500/10 inline-block px-2 py-0.5 rounded-md">Already in Safe Quote</p>
                                         </div>
                                         

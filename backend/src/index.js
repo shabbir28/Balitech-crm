@@ -75,6 +75,10 @@ const safeQuoteDownloadRoutes = require("./routes/safe_quote_download");
 const safeQuoteDashboardRoutes = require("./routes/safe_quote_dashboard");
 const safeQuoteDncRoutes = require("./routes/safe_quote_dnc");
 const safeQuoteSeparationRoutes = require("./routes/safe_quote_separation");
+const safeQuoteRefineSessionRoutes = require("./routes/safe_quote_refine_sessions");
+const safeQuoteRefineJobRoutes = require("./routes/safe_quote_refine_jobs");
+const safeQuoteRefineDownloadRoutes = require("./routes/safe_quote_refine_download");
+const safeQuoteRefineDataRoutes = require("./routes/safe_quote_refine_data");
 
 const clientRoutes = require("./routes/clientRoutes");
 const separationRoutes = require("./routes/separationRoutes");
@@ -255,6 +259,10 @@ app.use("/api/safe-quote-download", safeQuoteDownloadRoutes);
 app.use("/api/safe-quote-dashboard", safeQuoteDashboardRoutes);
 app.use("/api/safe-quote-dnc", safeQuoteDncRoutes);
 app.use("/api/safe-quote-separation", safeQuoteSeparationRoutes);
+app.use("/api/safe-quote-refine-sessions", safeQuoteRefineSessionRoutes);
+app.use("/api/safe-quote-refine-jobs", safeQuoteRefineJobRoutes);
+app.use("/api/safe-quote-refine-download", safeQuoteRefineDownloadRoutes);
+app.use("/api/safe-quote-refine-data", safeQuoteRefineDataRoutes);
 
 // Clients and Separation
 app.use("/api/clients", clientRoutes);

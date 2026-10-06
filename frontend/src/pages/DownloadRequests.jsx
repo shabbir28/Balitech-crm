@@ -11,13 +11,13 @@ import {
 // ── Status Badge
 const StatusBadge = ({ status }) => {
     const cfg = {
-        pending:  { bg: 'bg-amber-500/10', text: 'text-amber-500', border: 'border-amber-500/20', icon: <Clock className="h-3.5 w-3.5 mr-1.5" />, label: 'Action Required' },
-        accepted: { bg: 'bg-emerald-500/10', text: 'text-emerald-500', border: 'border-emerald-500/20', icon: <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />, label: 'Approved' },
-        rejected: { bg: 'bg-rose-500/10', text: 'text-rose-500', border: 'border-rose-500/20', icon: <XCircle className="h-3.5 w-3.5 mr-1.5" />, label: 'Declined' },
+        pending:  { bg: 'bg-amber-500/10', text: 'text-amber-500', border: 'border-amber-500/20', icon: <Clock className="h-3 w-3 mr-1" />, label: 'Pending' },
+        accepted: { bg: 'bg-emerald-500/10', text: 'text-emerald-500', border: 'border-emerald-500/20', icon: <CheckCircle2 className="h-3 w-3 mr-1" />, label: 'Approved' },
+        rejected: { bg: 'bg-rose-500/10', text: 'text-rose-500', border: 'border-rose-500/20', icon: <XCircle className="h-3 w-3 mr-1" />, label: 'Declined' },
     }[status] || { bg: 'bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-500/20', icon: null, label: status };
     
     return (
-        <div className={`inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold border ${cfg.bg} ${cfg.text} ${cfg.border} shadow-sm`}>
+        <div className={`inline-flex items-center px-2 py-1 rounded-md text-[10px] font-semibold border whitespace-nowrap ${cfg.bg} ${cfg.text} ${cfg.border}`}>
             {cfg.icon}{cfg.label}
         </div>
     );
@@ -168,6 +168,7 @@ const requestEndpoint = (moduleType) => {
     if (moduleType === 'refine') return '/refine-download/requests';
     if (moduleType === 'van') return '/van-download/requests';
     if (moduleType === 'safe_quote') return '/safe-quote-download/requests';
+    if (moduleType === 'safe_quote_refine') return '/safe-quote-refine-download/requests';
     return '/download/requests';
 };
 
@@ -190,13 +191,14 @@ const DownloadRequests = () => {
     const fetchRequests = useCallback(async () => {
         setLoading(true);
         try {
-            const [resLeads, resPremium, resRefine, resVan, resMixed, resSafeQuote] = await Promise.all([
+            const [resLeads, resPremium, resRefine, resVan, resMixed, resSafeQuote, resSafeQuoteRefine] = await Promise.all([
                 api.get('/download/requests').catch(() => ({ data: [] })),
                 api.get('/premium-download/requests').catch(() => ({ data: [] })),
                 api.get('/refine-download/requests').catch(() => ({ data: [] })),
                 api.get('/van-download/requests').catch(() => ({ data: [] })),
                 api.get('/mixed-download/requests').catch(() => ({ data: [] })),
-                api.get('/safe-quote-download/requests').catch(() => ({ data: [] }))
+                api.get('/safe-quote-download/requests').catch(() => ({ data: [] })),
+                api.get('/safe-quote-refine-download/requests').catch(() => ({ data: [] }))
             ]);
             
             const leads = (resLeads.data || []).map(r => ({ ...r, status: r.status?.toLowerCase(), moduleType: 'leads', typeLabel: 'Leads' }));
@@ -205,8 +207,9 @@ const DownloadRequests = () => {
             const van = (resVan.data || []).map(r => ({ ...r, status: r.status?.toLowerCase(), moduleType: 'van', typeLabel: 'Van Data' }));
             const mixed = (resMixed.data || []).map(r => ({ ...r, status: r.status?.toLowerCase(), moduleType: 'mixed', typeLabel: 'Mixed Data' }));
             const safeQuote = (resSafeQuote.data || []).map(r => ({ ...r, status: r.status?.toLowerCase(), moduleType: 'safe_quote', typeLabel: 'Safe Quote' }));
+            const safeQuoteRefine = (resSafeQuoteRefine.data || []).map(r => ({ ...r, status: r.status?.toLowerCase(), moduleType: 'safe_quote_refine', typeLabel: 'Safe Quote Refine' }));
             
-            setRequests([...leads, ...premium, ...refine, ...van, ...mixed, ...safeQuote]);
+            setRequests([...leads, ...premium, ...refine, ...van, ...mixed, ...safeQuote, ...safeQuoteRefine]);
         }
         catch { showToast('Failed to load requests from server.', 'error'); }
         finally { setLoading(false); }
@@ -270,72 +273,59 @@ const DownloadRequests = () => {
             {rejectModal && <RejectModal req={rejectModal} onConfirm={handleReject} onCancel={() => setRejectModal(null)} />}
             {acceptModal && <AcceptModal req={acceptModal} onConfirm={handleAccept} onCancel={() => setAcceptModal(null)} />}
 
-            <div className="w-full max-w-7xl mx-auto pt-8 px-4 sm:px-6 lg:px-8">
-                
-                {/* ── Page Header  */}
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
-                    <div className="relative">
-                        <div className="absolute -inset-1 bg-gradient-to-r from-brand-500/20 to-purple-500/20 blur-lg rounded-full" />
-                        <div className="relative flex items-center gap-4 mb-2">
-                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-500 to-orange-500 flex items-center justify-center border border-white/10 shadow-lg">
-                                <Activity className="w-6 h-6 text-white" />
-                            </div>
-                            <h1 className="text-3xl font-extrabold text-white tracking-tight">Review Requests</h1>
-                        </div>
-                        <p className="text-slate-400 text-sm font-medium ml-16">Review, approve, or deny administrative lead export requests.</p>
+            <div className="w-full min-w-0">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                    <div className="min-w-0">
+                        <h1 className="text-xl font-bold text-white tracking-tight">Review Requests</h1>
+                        <p className="text-xs text-slate-500 mt-0.5">Approve or decline export requests.</p>
                     </div>
-
                     <button
                         onClick={fetchRequests}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm text-white font-bold transition-all shadow-sm h-11"
+                        className="inline-flex items-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-white font-semibold shrink-0"
                     >
-                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-brand-400' : 'text-slate-400'}`} />
-                        Refresh Data
+                        <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-brand-400' : 'text-slate-400'}`} />
+                        Refresh
                     </button>
                 </div>
 
-                {/* ── Stat Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                     {[
-                        { id: 'pending', title: 'Awaiting Action', count: counts.pending, color: 'text-amber-400', bg: 'bg-gradient-to-br from-amber-500/20 to-orange-600/5', border: 'border-amber-500/30', shadow: filterStatus === 'pending' ? 'shadow-[0_0_25px_rgba(245,158,11,0.15)]' : '', icon: <Inbox className="w-6 h-6" /> },
-                        { id: 'accepted', title: 'Exported Leads', count: counts.accepted, color: 'text-emerald-400', bg: 'bg-gradient-to-br from-emerald-500/20 to-teal-600/5', border: 'border-emerald-500/30', shadow: filterStatus === 'accepted' ? 'shadow-[0_0_25px_rgba(16,185,129,0.15)]' : '', icon: <CheckCircle2 className="w-6 h-6" /> },
-                        { id: 'rejected', title: 'Declined Requests', count: counts.rejected, color: 'text-rose-400', bg: 'bg-gradient-to-br from-rose-500/20 to-red-600/5', border: 'border-rose-500/30', shadow: filterStatus === 'rejected' ? 'shadow-[0_0_25px_rgba(225,29,72,0.15)]' : '', icon: <XCircle className="w-6 h-6" /> }
+                        { id: 'pending', title: 'Awaiting Action', count: counts.pending, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30', icon: <Inbox className="w-4 h-4" /> },
+                        { id: 'accepted', title: 'Exported Leads', count: counts.accepted, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', icon: <CheckCircle2 className="w-4 h-4" /> },
+                        { id: 'rejected', title: 'Declined Requests', count: counts.rejected, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/30', icon: <XCircle className="w-4 h-4" /> }
                     ].map(stat => (
-                        <div 
-                            key={stat.id} 
+                        <button
+                            key={stat.id}
+                            type="button"
                             onClick={() => setFilterStatus(stat.id === filterStatus ? 'all' : stat.id)}
-                            className={`relative overflow-hidden rounded-3xl p-6 cursor-pointer transition-all duration-300 hover:-translate-y-1 ${stat.shadow} ${filterStatus === stat.id ? `bg-[#1a1c28] border-2 ${stat.border} scale-[1.02]` : 'bg-[#13151f] border border-white/[0.05] hover:border-white/20'}`}
+                            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${filterStatus === stat.id ? `bg-[#1a1c28] border ${stat.border}` : 'bg-[#13151f] border border-white/[0.06] hover:border-white/15'}`}
                         >
-                            {filterStatus === stat.id && <div className={`absolute inset-0 opacity-10 ${stat.bg} pointer-events-none`} />}
-                            
-                            <div className="flex items-start justify-between relative z-10">
-                                <div>
-                                    <h3 className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">{stat.title}</h3>
-                                    <div className="text-4xl font-black text-white tracking-tight">{stat.count}</div>
-                                </div>
-                                <div className={`p-3 rounded-2xl ${stat.bg} border ${stat.border} ${stat.color} shadow-inner`}>
-                                    {stat.icon}
-                                </div>
+                            <div className={`h-8 w-8 rounded-lg ${stat.bg} border ${stat.border} ${stat.color} flex items-center justify-center shrink-0`}>
+                                {stat.icon}
                             </div>
-                        </div>
+                            <div className="min-w-0">
+                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">{stat.title}</p>
+                                <p className="text-xl font-bold text-white leading-tight">{stat.count}</p>
+                            </div>
+                        </button>
                     ))}
                 </div>
 
                 {/* ── Toolbar */}
-                <div className="flex flex-col sm:flex-row items-center justify-between mb-6 gap-4">
-                    <div className="flex p-1.5 bg-[#0a0a0f] border border-white/5 rounded-xl shadow-inner">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 gap-2">
+                    <div className="flex flex-wrap p-1 bg-[#0a0a0f] border border-white/5 rounded-lg">
                         {['all', 'pending', 'accepted', 'rejected'].map(s => (
                             <button
                                 key={s}
                                 onClick={() => setFilterStatus(s)}
-                                className={`px-5 py-2 rounded-lg text-sm font-bold capitalize transition-all duration-200 flex items-center gap-2 ${
+                                className={`px-3 py-1.5 rounded-md text-xs font-semibold capitalize transition-colors flex items-center gap-1.5 ${
                                     filterStatus === s 
-                                        ? 'bg-[#1e1e2d] text-white shadow-md border border-white/10' 
-                                        : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+                                        ? 'bg-[#1e1e2d] text-white border border-white/10' 
+                                        : 'text-slate-400 hover:text-white border border-transparent'
                                 }`}
                             >
                                 {s === 'all' ? 'All' : s}
-                                <span className={`text-[10px] py-0.5 px-2 rounded-md ${filterStatus === s ? 'bg-brand-500/20 text-brand-400' : 'bg-white/5 text-slate-500'}`}>
+                                <span className={`text-[10px] py-0.5 px-1.5 rounded ${filterStatus === s ? 'bg-brand-500/20 text-brand-400' : 'bg-white/5 text-slate-500'}`}>
                                     {s === 'all' ? requests.length : counts[s]}
                                 </span>
                             </button>
@@ -344,7 +334,7 @@ const DownloadRequests = () => {
 
                     <button
                         onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#13151f] border border-white/5 rounded-xl text-sm font-bold text-slate-300 hover:text-white hover:border-white/20 transition-colors shadow-sm"
+                        className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#13151f] border border-white/5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white hover:border-white/20"
                     >
                         <CalendarDays className="w-4 h-4 text-brand-500" />
                         Sort by Date
@@ -353,18 +343,28 @@ const DownloadRequests = () => {
                 </div>
 
                 {/* ── Data List */}
-                <div className="space-y-4">
+                <div className="space-y-2 min-w-0">
+                    {!loading && displayed.length > 0 && (
+                        <div className="hidden md:grid grid-cols-[minmax(140px,1.1fr)_minmax(90px,0.8fr)_minmax(90px,0.7fr)_minmax(90px,0.8fr)_auto_auto] gap-3 px-3 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                            <span>Requester</span>
+                            <span>Vendor</span>
+                            <span>Records</span>
+                            <span>Campaign</span>
+                            <span>Status</span>
+                            <span className="text-right">Action</span>
+                        </div>
+                    )}
                     {loading ? (
-                        <div className="flex flex-col items-center justify-center py-24 bg-[#13151f] rounded-3xl border border-white/5">
+                        <div className="flex flex-col items-center justify-center py-10 bg-[#13151f] rounded-xl border border-white/5">
                             <RefreshCw className="w-10 h-10 text-brand-500 animate-spin mb-4" />
                             <p className="text-slate-400 text-sm font-medium">Retrieving requests securely...</p>
                         </div>
                     ) : displayed.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-24 bg-[#13151f] rounded-3xl border border-white/5 text-center px-4 shadow-sm">
-                            <div className="w-20 h-20 bg-gradient-to-br from-white/5 to-white/0 border border-white/10 rounded-full flex items-center justify-center mb-5 shadow-inner">
-                                <Inbox className="w-10 h-10 text-slate-500" />
+                        <div className="flex flex-col items-center justify-center py-10 bg-[#13151f] rounded-xl border border-white/5 text-center px-4">
+                            <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-full flex items-center justify-center mb-3">
+                                <Inbox className="w-5 h-5 text-slate-500" />
                             </div>
-                            <h3 className="text-xl font-bold text-white mb-2">No requests found</h3>
+                            <h3 className="text-sm font-semibold text-white mb-1">No requests found</h3>
                             <p className="text-slate-400 text-sm font-medium max-w-md">
                                 {filterStatus === 'pending' ? 'Inbox zero! No pending requests require your attention right now.' : 'There are no records matching your current filter.'}
                             </p>
@@ -376,49 +376,36 @@ const DownloadRequests = () => {
                             const isExpanded = expandedRow === `${req.moduleType}-${req.id}`;
 
                             return (
-                                <div key={`${req.moduleType}-${req.id}`} className={`bg-[#13151f] border ${isExpanded ? 'border-brand-500/50 shadow-[0_0_20px_rgba(245,158,11,0.1)]' : 'border-white/[0.05] hover:border-white/20 hover:bg-[#161824]'} rounded-2xl overflow-hidden transition-all duration-200`}>
-                                    <div 
-                                        className="p-5 flex items-center gap-6 cursor-pointer"
+                                <div key={`${req.moduleType}-${req.id}`} className={`bg-[#13151f] border ${isExpanded ? 'border-brand-500/40' : 'border-white/[0.05]'} rounded-xl overflow-hidden`}>
+                                    <div
+                                        className="px-3 py-2.5 grid grid-cols-1 md:grid-cols-[minmax(140px,1.1fr)_minmax(90px,0.8fr)_minmax(90px,0.7fr)_minmax(90px,0.8fr)_auto_auto] gap-x-3 gap-y-2 items-center cursor-pointer"
                                         onClick={() => setExpandedRow(isExpanded ? null : `${req.moduleType}-${req.id}`)}
                                     >
-                                        <div className="flex items-center gap-4 w-[250px] shrink-0">
-                                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500/20 to-orange-600/20 border border-brand-500/30 text-brand-500 flex items-center justify-center text-sm font-black shadow-inner">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <div className="w-7 h-7 rounded-lg bg-brand-500/15 border border-brand-500/25 text-brand-400 flex items-center justify-center text-[11px] font-bold shrink-0">
                                                 {adminName.charAt(0).toUpperCase()}
                                             </div>
-                                            <div>
-                                                <p className="text-white font-bold text-sm truncate">{adminName}</p>
-                                                <p className="text-slate-500 text-xs font-medium mt-0.5">{fmtDbTimeAgo(req.requested_at)}</p>
+                                            <div className="min-w-0">
+                                                <p className="text-white font-semibold text-xs truncate">{adminName}</p>
+                                                <p className="text-slate-500 text-[10px]">{fmtDbTimeAgo(req.requested_at)}</p>
                                             </div>
                                         </div>
-
-                                        <div className="flex-1 grid grid-cols-3 gap-4 items-center">
-                                            <div>
-                                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Target Vendor</p>
-                                                <p className="text-sm font-semibold text-slate-200 truncate">{req.vendor_name || '—'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Records Requested</p>
-                                                <p className="text-sm font-mono font-bold text-white bg-white/5 px-2 py-0.5 rounded-md inline-block">
-                                                    {req.quantity?.toLocaleString()} <span className="text-slate-400 text-xs font-sans ml-1">{req.typeLabel}</span>
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Campaign</p>
-                                                {req.campaign_name ? (
-                                                    <span className="inline-block px-2.5 py-1 rounded-md text-xs font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 truncate max-w-full">
-                                                        {req.campaign_name}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-sm font-medium text-slate-500">Unassigned</span>
-                                                )}
-                                            </div>
+                                        <div className="min-w-0">
+                                            <p className="text-[10px] text-slate-500 md:hidden">Vendor</p>
+                                            <p className="text-xs font-medium text-slate-200 truncate">{req.vendor_name || '—'}</p>
                                         </div>
-
-                                        <div className="shrink-0 w-32 text-right">
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-mono font-semibold text-white">
+                                                {req.quantity?.toLocaleString()} <span className="text-slate-500 text-[10px] font-sans">{req.typeLabel}</span>
+                                            </p>
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-xs text-slate-300 truncate">{req.campaign_name || 'Unassigned'}</p>
+                                        </div>
+                                        <div className="shrink-0">
                                             <StatusBadge status={req.status} />
                                         </div>
-
-                                        <div className="shrink-0 flex items-center justify-end w-40 gap-2" onClick={e => e.stopPropagation()}>
+                                        <div className="shrink-0 flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
                                             {req.status === 'pending' ? (
                                                 isProcessing ? (
                                                     <div className="flex items-center justify-center w-full">
@@ -428,13 +415,13 @@ const DownloadRequests = () => {
                                                     <>
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); setRejectModal(req); }}
-                                                            className="flex-1 py-2 rounded-xl text-xs font-bold text-rose-400 bg-rose-500/10 hover:bg-rose-500 hover:text-white transition-all border border-rose-500/20"
+                                                            className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-rose-400 bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/20"
                                                         >
                                                             Decline
                                                         </button>
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); setAcceptModal(req); }}
-                                                            className="flex-1 py-2 rounded-xl text-xs font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500 hover:text-white transition-all border border-emerald-500/20"
+                                                            className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500 hover:text-white border border-emerald-500/20"
                                                         >
                                                             Approve
                                                         </button>
@@ -443,7 +430,7 @@ const DownloadRequests = () => {
                                             ) : (
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); setExpandedRow(isExpanded ? null : `${req.moduleType}-${req.id}`); }}
-                                                    className="w-full py-2 rounded-xl text-xs font-bold text-slate-400 bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+                                                    className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-slate-400 bg-white/5 hover:bg-white/10 flex items-center justify-center gap-1 whitespace-nowrap"
                                                 >
                                                     View Details {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                                                 </button>
@@ -453,9 +440,9 @@ const DownloadRequests = () => {
 
                                     {/* Expanded Details Panel */}
                                     {isExpanded && (
-                                        <div className="border-t border-white/5 bg-[#0a0a0f] p-6 relative overflow-hidden">
+                                        <div className="border-t border-white/5 bg-[#0a0a0f] p-4 relative overflow-hidden">
                                             <div className="absolute inset-0 bg-gradient-to-b from-brand-500/5 to-transparent pointer-events-none" />
-                                            <div className="relative z-10 grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                            <div className="relative z-10 grid grid-cols-1 lg:grid-cols-3 gap-4">
                                                 
                                                 <div className="space-y-6">
                                                     <div>

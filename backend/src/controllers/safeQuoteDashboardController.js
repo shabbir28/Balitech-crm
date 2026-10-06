@@ -2,7 +2,7 @@ const db = require("../config/db");
 
 const getStats = async (req, res) => {
   try {
-    const [totalsRes, statusRes, campaignRes, vendorRes, recentSessionsRes] = await Promise.all([
+    const [totalsRes, statusRes, campaignRes, vendorRes, refineCampaignRes, recentSessionsRes] = await Promise.all([
       db.query(`
         SELECT
           (SELECT COUNT(*)::int FROM safe_quote_data) AS total_contacts,
@@ -29,7 +29,12 @@ const getStats = async (req, res) => {
           (SELECT COUNT(*)::int FROM safe_quote_campaigns) AS total_campaigns,
           (SELECT COUNT(*)::int FROM safe_quote_campaigns WHERE status = 'Active') AS active_campaigns,
           (SELECT COUNT(*)::int FROM safe_quote_sessions) AS total_sessions,
-          (SELECT COUNT(*)::int FROM safe_quote_jobs) AS total_jobs
+          (SELECT COUNT(*)::int FROM safe_quote_jobs) AS total_jobs,
+          (SELECT COUNT(*)::int FROM safe_quote_refine_data) AS refine_total,
+          (SELECT COUNT(*)::int FROM safe_quote_refine_data WHERE status = 'available') AS refine_available,
+          (SELECT COALESCE(SUM(quantity), 0)::int FROM safe_quote_refine_download_logs) AS refine_downloaded,
+          (SELECT COUNT(*)::int FROM safe_quote_refine_data WHERE status = 'DNC') AS refine_dnc,
+          (SELECT COUNT(*)::int FROM safe_quote_refine_sessions) AS refine_sessions
       `),
       db.query(`
         SELECT COALESCE(NULLIF(TRIM(status), ''), 'unknown') AS status, COUNT(*)::int AS count
@@ -69,6 +74,16 @@ const getStats = async (req, res) => {
         LIMIT 12
       `),
       db.query(`
+        SELECT
+          COALESCE(NULLIF(TRIM(campaign_type), ''), 'Untagged') AS name,
+          COUNT(*)::int AS count,
+          COUNT(*) FILTER (WHERE status = 'available')::int AS available_count,
+          COUNT(*) FILTER (WHERE status = 'downloaded')::int AS downloaded_count
+        FROM safe_quote_refine_data
+        GROUP BY 1
+        ORDER BY available_count DESC, count DESC
+      `),
+      db.query(`
         SELECT s.id, s.created_at,
                COALESCE(v.name, 'Unknown vendor') AS vendor_name,
                COALESCE(c.name, NULLIF(TRIM(s.campaign_type), ''), 'No campaign') AS campaign_type,
@@ -91,6 +106,7 @@ const getStats = async (req, res) => {
       totals,
       leadStatusBreakdown: statusRes.rows,
       campaignStats: campaignRes.rows,
+      refineCampaignStats: refineCampaignRes.rows,
       vendorDistribution: vendorRes.rows,
       recentSessions: recentSessionsRes.rows,
     });

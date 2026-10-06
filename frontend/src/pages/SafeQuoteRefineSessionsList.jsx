@@ -1,13 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
+import { AuthContext } from '../context/AuthContext';
 import { Database, Search, Calendar, ChevronLeft, ChevronRight, ListFilter, AlertTriangle, Trash2, X, Activity, FileText, Files, BarChart3, TrendingUp, CheckCircle2, AlertCircle, Copy, Ban } from 'lucide-react';
 
 const ChevronDownIcon = ({ className }) => (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
 );
 
-const WcDbSessionsList = () => {
+const SafeQuoteRefineSessionsList = () => {
+    const { user } = useContext(AuthContext);
+    const canManage = user?.role === 'super_admin' || user?.role === 'admin';
     const [sessions, setSessions] = useState([]);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
@@ -27,13 +30,13 @@ const WcDbSessionsList = () => {
             const from = fromDate ? new Date(fromDate).toISOString() : '';
             const to = toDate ? new Date(`${toDate}T23:59:59`).toISOString() : '';
             const res = await api.get(
-                `/wc-db-sessions?page=${pageToFetch}&limit=${limit}&search=${encodeURIComponent(search)}&status=${encodeURIComponent(statusFilter)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+                `/safe-quote-refine-sessions?page=${pageToFetch}&limit=${limit}&search=${encodeURIComponent(search)}&status=${encodeURIComponent(statusFilter)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
             );
             setSessions(res.data.data);
             setTotal(res.data.total);
             setPage(res.data.page);
         } catch (err) {
-            console.error('Failed to fetch WC DB sessions', err);
+            console.error('Failed to fetch Safe Quote Refine sessions', err);
         } finally { setLoading(false); }
     };
 
@@ -51,11 +54,11 @@ const WcDbSessionsList = () => {
         if (!deleteModal.id) return;
         setDeleteModal(prev => ({ ...prev, isDeleting: true }));
         try {
-            await api.delete(`/wc-db-sessions/${deleteModal.id}`);
+            await api.delete(`/safe-quote-refine-sessions/${deleteModal.id}`);
             fetchSessions(page);
             setDeleteModal({ isOpen: false, id: null, isDeleting: false });
         } catch (err) {
-            console.error('Failed to delete WC DB session', err);
+            console.error('Failed to delete Safe Quote Refine session', err);
             setDeleteModal(prev => ({ ...prev, isDeleting: false }));
         }
     };
@@ -91,8 +94,8 @@ const WcDbSessionsList = () => {
                     <div className="bg-[#1e1e2d] border border-white/10 rounded-2xl w-full max-w-xl relative z-10 overflow-hidden shadow-2xl">
                         <div className="flex items-center justify-between p-5 border-b border-white/8 bg-black/20">
                             <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl bg-cyan-500/15 border border-cyan-500/25 flex items-center justify-center">
-                                    {selectedJobStats ? <BarChart3 className="w-4 h-4 text-cyan-400" /> : <Files className="w-4 h-4 text-cyan-400" />}
+                                <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center">
+                                    {selectedJobStats ? <BarChart3 className="w-4 h-4 text-amber-400" /> : <Files className="w-4 h-4 text-amber-400" />}
                                 </div>
                                 <div>
                                     <h3 className="text-white font-bold text-[15px]">{selectedJobStats ? 'File Processing Stats' : 'Uploaded Files'}</h3>
@@ -100,8 +103,8 @@ const WcDbSessionsList = () => {
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
-                                {!selectedJobStats && <span className="bg-cyan-500/15 border border-cyan-500/25 text-cyan-300 text-[11px] font-bold px-1.5 py-0.5 rounded-lg">{filesModal.files.length} {filesModal.files.length === 1 ? 'file' : 'files'}</span>}
-                                {selectedJobStats && <button onClick={() => setSelectedJobStats(null)} className="text-[12px] text-cyan-400 hover:text-cyan-300 font-semibold px-3 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20">← Back</button>}
+                                {!selectedJobStats && <span className="bg-amber-500/15 border border-amber-500/25 text-cyan-300 text-[11px] font-bold px-1.5 py-0.5 rounded-lg">{filesModal.files.length} {filesModal.files.length === 1 ? 'file' : 'files'}</span>}
+                                {selectedJobStats && <button onClick={() => setSelectedJobStats(null)} className="text-[12px] text-amber-400 hover:text-cyan-300 font-semibold px-3 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20">← Back</button>}
                                 <button onClick={() => { setFilesModal({ isOpen: false, files: [], jobsData: [], sessionId: null }); setSelectedJobStats(null); }} className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white flex items-center justify-center transition-colors"><X className="w-4 h-4" /></button>
                             </div>
                         </div>
@@ -114,13 +117,13 @@ const WcDbSessionsList = () => {
                                     const isCompleted = jobData?.status === 'Completed';
                                     return (
                                         <div key={idx} onClick={() => isCompleted && setSelectedJobStats(jobData)}
-                                            className={`flex items-center gap-3 bg-[#0a0a0f] border border-white/5 rounded-xl px-4 py-3 transition-all group ${isCompleted ? 'hover:border-cyan-500/40 hover:bg-cyan-500/5 cursor-pointer' : 'cursor-default opacity-80'}`}>
-                                            <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 font-bold text-[10px] border ${isExcel ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400'}`}>{ext}</div>
+                                            className={`flex items-center gap-3 bg-[#0a0a0f] border border-white/5 rounded-xl px-4 py-3 transition-all group ${isCompleted ? 'hover:border-amber-500/40 hover:bg-amber-500/5 cursor-pointer' : 'cursor-default opacity-80'}`}>
+                                            <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 font-bold text-[10px] border ${isExcel ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'}`}>{ext}</div>
                                             <div className="flex-1 min-w-0">
                                                 <p className={`text-[13px] font-medium truncate ${isCompleted ? 'text-white group-hover:text-cyan-300' : 'text-slate-400'}`} title={fileName}>{fileName}</p>
                                                 <p className="text-slate-600 text-[11px] mt-0.5 font-mono">File #{idx + 1}</p>
                                             </div>
-                                            {isCompleted ? <span className="text-[9px] bg-cyan-500/15 border border-cyan-500/25 text-cyan-400 px-1.5 py-0.5 rounded font-bold shrink-0">STATS →</span> : <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0 border ${jobData?.status === 'Failed' ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'}`}>{jobData?.status || '—'}</span>}
+                                            {isCompleted ? <span className="text-[9px] bg-amber-500/15 border border-amber-500/25 text-amber-400 px-1.5 py-0.5 rounded font-bold shrink-0">STATS →</span> : <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0 border ${jobData?.status === 'Failed' ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'}`}>{jobData?.status || '—'}</span>}
                                         </div>
                                     );
                                 })}
@@ -131,9 +134,9 @@ const WcDbSessionsList = () => {
                                     <div className="w-10 h-10 rounded-lg bg-slate-500/10 border border-slate-500/20 flex items-center justify-center shrink-0"><FileText className="w-5 h-5 text-slate-400" /></div>
                                     <div><p className="text-slate-500 text-[11px] uppercase tracking-widest font-bold">Total Valid Rows</p><p className="text-2xl font-extrabold text-white mt-0.5">{(selectedJobStats.total_rows || 0).toLocaleString()}</p></div>
                                 </div>
-                                <div className="bg-[#0a0a0f] rounded-xl border border-cyan-500/20 p-4 relative overflow-hidden">
-                                    <div className="absolute top-0 left-0 w-1 h-full bg-cyan-500" />
-                                    <div className="flex items-center gap-1.5 mb-2 ml-2"><TrendingUp className="w-3 h-3 text-cyan-400" /><p className="text-cyan-400 text-[10px] uppercase tracking-widest font-bold">Fresh</p></div>
+                                <div className="bg-[#0a0a0f] rounded-xl border border-amber-500/20 p-4 relative overflow-hidden">
+                                    <div className="absolute top-0 left-0 w-1 h-full bg-amber-500" />
+                                    <div className="flex items-center gap-1.5 mb-2 ml-2"><TrendingUp className="w-3 h-3 text-amber-400" /><p className="text-amber-400 text-[10px] uppercase tracking-widest font-bold">Fresh</p></div>
                                     <p className="text-2xl font-extrabold text-white ml-2">{(selectedJobStats.fresh_count || 0).toLocaleString()}</p>
                                 </div>
                                 <div className="bg-[#0a0a0f] rounded-xl border border-emerald-500/20 p-4 relative overflow-hidden">
@@ -143,7 +146,7 @@ const WcDbSessionsList = () => {
                                 </div>
                                 <div className="bg-[#0a0a0f] rounded-xl border border-amber-500/20 p-4 relative overflow-hidden">
                                     <div className="absolute top-0 left-0 w-1 h-full bg-amber-500" />
-                                    <div className="flex items-center gap-1.5 mb-2 ml-2"><AlertCircle className="w-3 h-3 text-amber-400" /><p className="text-amber-400 text-[10px] uppercase tracking-widest font-bold">Already Present</p></div>
+                                    <div className="flex items-center gap-1.5 mb-2 ml-2"><AlertCircle className="w-3 h-3 text-amber-400" /><p className="text-amber-400 text-[10px] uppercase tracking-widest font-bold">Lower Duration Skipped</p></div>
                                     <p className="text-2xl font-extrabold text-white ml-2">{(selectedJobStats.existing_count || 0).toLocaleString()}</p>
                                 </div>
                                 <div className="bg-[#0a0a0f] rounded-xl border border-orange-500/20 p-4 relative overflow-hidden">
@@ -153,11 +156,11 @@ const WcDbSessionsList = () => {
                                 </div>
                                 <div className="col-span-2 bg-[#0a0a0f] rounded-xl border border-purple-500/20 p-4 relative overflow-hidden">
                                     <div className="absolute top-0 left-0 w-1 h-full bg-purple-500" />
-                                    <div className="flex items-center gap-1.5 mb-3 ml-2"><Ban className="w-3 h-3 text-purple-400" /><p className="text-purple-400 text-[10px] uppercase tracking-widest font-bold">DNC / Dead Skipped</p></div>
+                                    <div className="flex items-center gap-1.5 mb-3 ml-2"><Ban className="w-3 h-3 text-purple-400" /><p className="text-purple-400 text-[10px] uppercase tracking-widest font-bold">Duration</p></div>
                                     <div className="ml-2 flex items-center gap-6">
-                                        <div><p className="text-slate-500 text-[10px] font-bold mb-0.5">DNC</p><p className="text-xl font-extrabold text-white">{(selectedJobStats.dnc_skipped || 0).toLocaleString()}</p></div>
+                                        <div><p className="text-slate-500 text-[10px] font-bold mb-0.5">LOWER SKIPPED</p><p className="text-xl font-extrabold text-white">{(selectedJobStats.duration_skipped || 0).toLocaleString()}</p></div>
                                         <div className="w-px h-8 bg-white/5" />
-                                        <div><p className="text-slate-500 text-[10px] font-bold mb-0.5">DEAD</p><p className="text-xl font-extrabold text-purple-300">{(selectedJobStats.dead_skipped || 0).toLocaleString()}</p></div>
+                                        <div><p className="text-slate-500 text-[10px] font-bold mb-0.5">UPDATED</p><p className="text-xl font-extrabold text-purple-300">{(selectedJobStats.updated_count || 0).toLocaleString()}</p></div>
                                     </div>
                                 </div>
                             </div>
@@ -172,15 +175,15 @@ const WcDbSessionsList = () => {
             {/* Header */}
             <div className="flex flex-col gap-3 mb-4 min-w-0 border-b border-white/5 pb-3">
                 <div className="shrink-0">
-                    <h1 className="text-2xl font-bold text-white tracking-tight">WC DB Session Monitoring</h1>
+                    <h1 className="text-2xl font-bold text-white tracking-tight">Safe Quote Refine Session Monitoring</h1>
                     <p className="text-sm text-slate-500 mt-1">
-                        Track all WC DB data upload processing sessions. ({total.toLocaleString()} total)
+                        Track all Safe Quote Refine data upload processing sessions. ({total.toLocaleString()} total)
                     </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 w-full min-w-0">
                     <Link 
-                        to="/wc-db-upload"
-                        className="bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2 rounded-xl font-bold text-[13px] transition-all shadow-lg shrink-0 flex items-center gap-2"
+                        to="/safe-quote-refine-upload"
+                        className="bg-amber-600 hover:bg-amber-500 text-white px-5 py-2 rounded-xl font-bold text-[13px] transition-all shadow-lg shrink-0 flex items-center gap-2"
                     >
                         Bulk Upload
                     </Link>
@@ -191,21 +194,21 @@ const WcDbSessionsList = () => {
                         <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="bg-transparent border-none text-slate-300 text-[12px] outline-none font-medium w-full sm:w-auto py-1" />
                     </div>
                     <div className="relative group w-full sm:w-auto flex-1 sm:flex-none min-w-[140px] max-w-[200px]">
-                        <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-cyan-400"><ListFilter className="w-4 h-4" /></div>
+                        <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-amber-400"><ListFilter className="w-4 h-4" /></div>
                         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-                            className={`bg-[#13151f] border hover:border-cyan-500/50 rounded-xl py-2 pl-10 pr-10 outline-none cursor-pointer w-full text-[13px] font-medium appearance-none shadow-inner ${statusFilter !== 'All' ? 'text-cyan-400 border-cyan-500/40' : 'text-slate-300 border-white/10'}`}>
+                            className={`bg-[#13151f] border hover:border-amber-500/50 rounded-xl py-2 pl-10 pr-10 outline-none cursor-pointer w-full text-[13px] font-medium appearance-none shadow-inner ${statusFilter !== 'All' ? 'text-amber-400 border-amber-500/40' : 'text-slate-300 border-white/10'}`}>
                             {['All', 'Pending', 'Processing', 'Completed', 'Failed'].map(s => <option key={s} value={s} className="bg-[#1e1e2d] text-white">{s}</option>)}
                         </select>
                         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500"><ChevronDownIcon className="w-4 h-4" /></div>
                     </div>
                     <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full sm:w-auto flex-1">
-                        <div className="flex items-center bg-[#13151f] border border-white/10 hover:border-cyan-500/50 rounded-xl px-4 py-2 w-full lg:w-64 transition-all focus-within:ring-2 focus-within:ring-cyan-500/30 focus-within:border-cyan-500 group shadow-inner">
-                            <Search className="w-4 h-4 text-slate-500 group-focus-within:text-cyan-400 transition-colors shrink-0" />
+                        <div className="flex items-center bg-[#13151f] border border-white/10 hover:border-amber-500/50 rounded-xl px-4 py-2 w-full lg:w-64 transition-all focus-within:ring-2 focus-within:ring-amber-500/30 focus-within:border-amber-500 group shadow-inner">
+                            <Search className="w-4 h-4 text-slate-500 group-focus-within:text-amber-400 transition-colors shrink-0" />
                             <input type="text" placeholder="Search by vendor, ID..." value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') fetchSessions(1); }}
                                 className="bg-transparent border-none text-white text-[13px] outline-none w-full ml-2 placeholder:text-slate-500 font-medium" />
                             {search && <button onClick={() => { setSearch(''); fetchSessions(1); }} className="text-slate-500 hover:text-white"><X className="w-3.5 h-3.5" /></button>}
                         </div>
-                        <button onClick={() => fetchSessions(1)} className="bg-cyan-500 hover:bg-cyan-400 text-white px-6 py-2 rounded-xl font-bold transition-all active:scale-95 text-[13px] w-full sm:w-auto shrink-0">Search</button>
+                        <button onClick={() => fetchSessions(1)} className="bg-amber-500 hover:bg-cyan-400 text-white px-6 py-2 rounded-xl font-bold transition-all active:scale-95 text-[13px] w-full sm:w-auto shrink-0">Search</button>
                     </div>
                 </div>
             </div>
@@ -219,14 +222,14 @@ const WcDbSessionsList = () => {
                         </div>
                         <div className="divide-y divide-white/5">
                             {loading ? (
-                                <div className="p-20 text-center flex flex-col items-center gap-4 text-cyan-400">
-                                    <span className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
-                                    <span className="font-medium text-sm tracking-widest uppercase animate-pulse">Loading WC DB Sessions...</span>
+                                <div className="p-20 text-center flex flex-col items-center gap-4 text-amber-400">
+                                    <span className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                                    <span className="font-medium text-sm tracking-widest uppercase animate-pulse">Loading Safe Quote Refine Session...</span>
                                 </div>
                             ) : sessions.length === 0 ? (
                                 <div className="p-24 text-center text-slate-500 flex flex-col items-center">
                                     <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4"><Database className="w-8 h-8 opacity-40 text-slate-400" /></div>
-                                    <p className="font-medium text-lg text-slate-300 mb-1">No WC DB sessions found</p>
+                                    <p className="font-medium text-lg text-slate-300 mb-1">No Safe Quote Refine sessions found</p>
                                     <p className="text-sm">We couldn't find anything matching your filters.</p>
                                 </div>
                             ) : sessions.map((s) => {
@@ -244,14 +247,14 @@ const WcDbSessionsList = () => {
                                         <div className="text-slate-300 text-[13px] pr-2 font-medium">
                                             {s.uploaded_files && s.uploaded_files.length > 0 ? (
                                                 <button onClick={() => { setSelectedJobStats(null); setFilesModal({ isOpen: true, files: s.uploaded_files, jobsData: s.jobs_data || [], sessionId: s.id }); }} className="flex items-center gap-1.5 min-w-0 w-full overflow-hidden group cursor-pointer hover:text-cyan-300 transition-colors text-left">
-                                                    <FileText className="w-3.5 h-3.5 text-slate-500 group-hover:text-cyan-400 shrink-0" />
+                                                    <FileText className="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400 shrink-0" />
                                                     <span className="truncate max-w-full">{s.uploaded_files[0]}</span>
-                                                    {s.uploaded_files.length > 1 && <span className="text-[10px] bg-cyan-500/15 border border-cyan-500/25 px-1.5 py-0.5 rounded text-cyan-400 font-bold shrink-0">+{s.uploaded_files.length - 1}</span>}
+                                                    {s.uploaded_files.length > 1 && <span className="text-[10px] bg-amber-500/15 border border-amber-500/25 px-1.5 py-0.5 rounded text-amber-400 font-bold shrink-0">+{s.uploaded_files.length - 1}</span>}
                                                 </button>
                                             ) : <span className="text-slate-600">—</span>}
                                         </div>
                                         <div className="flex items-center gap-1.5 min-w-0 text-slate-400 text-[12px]">
-                                            <div className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-[10px] uppercase">{(s.created_by_username?.[0] || 'U')}</div>
+                                            <div className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-[10px] uppercase">{(s.created_by_username?.[0] || 'U')}</div>
                                             <span className="truncate max-w-full">{s.created_by_username || '—'}</span>
                                         </div>
                                         <div className="text-slate-400 text-[12px] font-medium leading-tight">{formatDateTime(s.created_at)}</div>
@@ -264,15 +267,17 @@ const WcDbSessionsList = () => {
                                         <div className="w-full min-w-0 pr-1">
                                             <div className="flex justify-between items-center mb-1.5">
                                                 <span className="text-[10px] text-slate-400 font-mono">{processed.toLocaleString()} / <span className="text-slate-300">{totalRows.toLocaleString()}</span></span>
-                                                <span className={`text-[10px] font-bold font-mono ${status === 'Completed' ? 'text-emerald-400' : 'text-cyan-400'}`}>{progress}%</span>
+                                                <span className={`text-[10px] font-bold font-mono ${status === 'Completed' ? 'text-emerald-400' : 'text-amber-400'}`}>{progress}%</span>
                                             </div>
                                             <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden border border-white/5">
-                                                <div className={`h-full rounded-full transition-all duration-700 ${status === 'Completed' ? 'bg-emerald-500' : status === 'Failed' ? 'bg-red-500' : 'bg-cyan-500'}`} style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
+                                                <div className={`h-full rounded-full transition-all duration-700 ${status === 'Completed' ? 'bg-emerald-500' : status === 'Failed' ? 'bg-red-500' : 'bg-amber-500'}`} style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
                                             </div>
                                         </div>
                                         <div className="flex items-center justify-end gap-1 pr-1">
-                                            <Link to={`/wc-db-sessions/${s.id}`} className="bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95">View</Link>
-                                            <button onClick={() => confirmDelete(s.id)} className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-2.5 py-1.5 rounded-lg transition-all" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                                            <Link to={`/safe-quote-refine-sessions/${s.id}`} className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95">View</Link>
+                                            {canManage && (
+                                                <button onClick={() => confirmDelete(s.id)} className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-2.5 py-1.5 rounded-lg transition-all" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                                            )}
                                         </div>
                                     </div>
                                 );
@@ -293,4 +298,4 @@ const WcDbSessionsList = () => {
     );
 };
 
-export default WcDbSessionsList;
+export default SafeQuoteRefineSessionsList;

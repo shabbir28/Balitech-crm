@@ -39,9 +39,9 @@ const KpiCard = ({ icon: IconComponent, label, value, sub, color, index }) => (
         style={{
             background: 'linear-gradient(145deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))',
             border: '1px solid rgba(255,255,255,0.07)',
-            borderRadius: 22, padding: '24px 24px 20px',
+            borderRadius: 12, padding: '10px 12px',
             position: 'relative', overflow: 'hidden',
-            display: 'flex', flexDirection: 'column', gap: 18,
+            display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 10,
             transition: 'transform .3s ease, border-color .3s ease, box-shadow .3s ease',
             animation: `fadeUp .4s cubic-bezier(.16,1,.3,1) ${index * 70}ms both`,
         }}
@@ -49,14 +49,14 @@ const KpiCard = ({ icon: IconComponent, label, value, sub, color, index }) => (
         onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.borderColor='rgba(255,255,255,0.07)'; e.currentTarget.style.boxShadow=''; }}
     >
         <div style={{ position:'absolute', top:-40, right:-40, width:170, height:170, borderRadius:'50%', background: color, opacity:.07, filter:'blur(50px)', pointerEvents:'none' }} />
-        <div style={{ width:50, height:50, borderRadius:16, background:`${color}18`, border:`1px solid ${color}28`, display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <IconComponent size={22} color={color} strokeWidth={1.8} />
+        <div style={{ width:32, height:32, borderRadius:9, background:`${color}18`, border:`1px solid ${color}28`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            <IconComponent size={15} color={color} strokeWidth={1.8} />
         </div>
-        <div>
-            <div style={{ fontSize:34, fontWeight:800, color:'#fff', lineHeight:1, letterSpacing:'-0.03em', fontVariantNumeric:'tabular-nums', marginBottom: 6 }}>
+        <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize:18, fontWeight:700, color:'#fff', lineHeight:1.1, letterSpacing:'-0.03em', fontVariantNumeric:'tabular-nums', marginBottom: 2 }}>
                 {typeof value === 'number' ? value.toLocaleString() : (value ?? '—')}
             </div>
-            <div style={{ fontSize:12, fontWeight:700, color:'#6b7280', letterSpacing:'0.07em', textTransform:'uppercase' }}>{label}</div>
+            <div style={{ fontSize:11, fontWeight:700, color:'#6b7280', letterSpacing:'0.06em', textTransform:'uppercase' }}>{label}</div>
             {sub && <div style={{ fontSize:11, color:'#374151', marginTop:4, fontWeight:500 }}>{sub}</div>}
         </div>
     </div>
@@ -132,17 +132,17 @@ const Dashboard = () => {
             <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
             {/* Header */}
-            <div style={{ marginBottom:32, animation:'fadeUp .5s ease both' }}>
+            <div style={{ marginBottom:16, animation:'fadeUp .5s ease both' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:10 }}>
                     <Zap size={13} color="#f97316" />
                     <span style={{ fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.18em', color:'#f97316' }}>Live Dashboard</span>
                 </div>
-                <h1 style={{ fontSize:30, fontWeight:800, color:'#fff', letterSpacing:'-0.03em', lineHeight:1 }}>CRM Command Center</h1>
-                <p style={{ fontSize:14, color:'#4b5563', marginTop:8, fontWeight:500 }}>Live data across Leads, Vendors, Campaigns, DNC and Sessions.</p>
+                <h1 style={{ fontSize:20, fontWeight:700, color:'#fff', letterSpacing:'-0.02em', lineHeight:1.2 }}>CRM Command Center</h1>
+                <p style={{ fontSize:12, color:'#4b5563', marginTop:4, fontWeight:500 }}>Live data across Leads, Vendors, Campaigns, DNC and Sessions.</p>
             </div>
 
             {/* ── KPI Row ── */}
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))', gap:16, marginBottom:24 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(168px,1fr))', gap:10, marginBottom:16 }}>
                 <KpiCard index={0} icon={Database}  label="Total Leads"       value={+totals.total_contacts}  color="#3b82f6" sub="All uploaded records" />
                 <KpiCard index={1} icon={CheckCircle2} label="Available"       value={+totals.remaining_leads} color="#10b981" sub="Ready for calling" />
                 <KpiCard index={2} icon={Download}  label="Downloaded"         value={+totals.total_downloaded} color="#f97316" sub="Sent to agents" />
@@ -161,9 +161,9 @@ const Dashboard = () => {
                         <Target size={16} color="#06b6d4" />
                         <h2 style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', letterSpacing: '0.02em' }}>Uploaded Data by Campaign</h2>
                     </div>
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(168px,1fr))', gap:16 }}>
                         {campaignStats.map((camp, idx) => (
-                            <div key={camp.name} style={{ maxWidth: '300px' }}>
+                            <div key={camp.name} style={{ maxWidth: '220px' }}>
                                 <KpiCard 
                                     index={idx} 
                                     icon={Database} 
@@ -184,7 +184,7 @@ const Dashboard = () => {
                     <Layers size={16} color="#14b8a6" />
                     <h2 style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', letterSpacing: '0.02em' }}>Refine Data</h2>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(168px,1fr))', gap:16 }}>
                     <div style={{ maxWidth: '300px' }}>
                         <KpiCard index={0} icon={Database} label="Total Refine" value={+totals.total_refine_data} color="#14b8a6" sub="Refine module leads" />
                     </div>
@@ -215,7 +215,7 @@ const Dashboard = () => {
                     <Zap size={16} color="#eab308" />
                     <h2 style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', letterSpacing: '0.02em' }}>Premium Data</h2>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(168px,1fr))', gap:16 }}>
                     <div style={{ maxWidth: '300px' }}>
                         <KpiCard index={0} icon={Database} label="Total Premium Data" value={+(totals.total_premium_data || 0)} color="#eab308" sub="Premium module leads" />
                     </div>
@@ -246,7 +246,7 @@ const Dashboard = () => {
                     <Layers size={16} color="#8b5cf6" />
                     <h2 style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', letterSpacing: '0.02em' }}>Van Desk Data</h2>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(168px,1fr))', gap:16 }}>
                     <div style={{ maxWidth: '300px' }}>
                         <KpiCard index={0} icon={Database} label="Total van desk data" value={+(totals.total_van_data || 0)} color="#8b5cf6" sub="Van Desk leads" />
                     </div>
@@ -277,7 +277,7 @@ const Dashboard = () => {
                     <Database size={16} color="#06b6d4" />
                     <h2 style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', letterSpacing: '0.02em' }}>Separation Data</h2>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(168px,1fr))', gap:16 }}>
                     <div style={{ maxWidth: '300px' }}>
                         <KpiCard index={0} icon={Database} label="Total separation data" value={+(totals.total_separation_data || 0)} color="#06b6d4" sub="Separation leads" />
                     </div>
@@ -308,7 +308,7 @@ const Dashboard = () => {
                     <Layers size={16} color="#ec4899" />
                     <h2 style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', letterSpacing: '0.02em' }}>WC DB Data</h2>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(168px,1fr))', gap:16 }}>
                     <div style={{ maxWidth: '300px' }}>
                         <KpiCard index={0} icon={Database} label="Total WC DB Data" value={+(totals.total_wc_db_data || 0)} color="#ec4899" sub="WC DB leads" />
                     </div>

@@ -125,7 +125,7 @@ const Filters = () => {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative">
                 <div className="absolute -top-20 -left-20 w-64 h-64 bg-brand-500/10 blur-[100px] rounded-full pointer-events-none" />
                 <div className="relative z-10">
-                    <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-slate-400 flex items-center gap-4">
+                    <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-slate-400 flex items-center gap-4">
                         <div className="p-3 bg-brand-500/10 border border-brand-500/20 rounded-2xl shadow-[0_0_20px_rgba(59,130,246,0.15)]">
                             <Filter className="w-6 h-6 text-brand-400" />
                         </div>

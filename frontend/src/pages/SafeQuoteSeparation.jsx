@@ -68,7 +68,7 @@ const SafeQuoteSeparation = () => {
         <div className="max-w-5xl mx-auto pb-10 space-y-6">
             <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-500 mb-2">Safe Quote</p>
-                <h1 className="text-3xl font-black text-white flex items-center gap-3">
+                <h1 className="text-xl font-bold text-white flex items-center gap-3">
                     <Pickaxe className="text-amber-400" /> Safe Quote Separation
                 </h1>
                 <p className="text-slate-400 text-sm mt-2 max-w-2xl">

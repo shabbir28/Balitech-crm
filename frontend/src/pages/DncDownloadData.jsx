@@ -217,7 +217,7 @@ const DncDownloadData = () => {
                                         </div>
                                         <div className="relative z-10">
                                             <p className="text-sm font-semibold text-emerald-400/80 uppercase tracking-widest mb-2">Net Fresh Leads</p>
-                                            <p className="text-5xl font-black text-emerald-400 mb-2 drop-shadow-md">{fmtNum(analysisResult.newLeads)}</p>
+                                            <p className="text-2xl font-bold text-emerald-400 mb-2 drop-shadow-md">{fmtNum(analysisResult.newLeads)}</p>
                                             <p className="text-sm text-slate-400">Ready to be downloaded and imported into your campaigns.</p>
                                         </div>
                                     </div>
@@ -226,7 +226,7 @@ const DncDownloadData = () => {
                                     <div className="bg-[#13151f] rounded-2xl border border-white/10 p-6 flex flex-col shadow-inner">
                                         <div className="mb-4">
                                             <p className="text-sm font-semibold text-slate-500 uppercase tracking-widest mb-2">Already in DB</p>
-                                            <p className="text-3xl font-bold text-white">{fmtNum(analysisResult.existing)}</p>
+                                            <p className="text-xl font-bold text-white">{fmtNum(analysisResult.existing)}</p>
                                         </div>
 
                                         <div className="flex-1 flex flex-col mt-4">

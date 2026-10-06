@@ -838,19 +838,19 @@ const WcDbDownloadLeads = () => {
         <div className="min-h-screen" style={{ fontFamily: "'Inter', sans-serif" }}>
 
             {/* ── Page hero ─────────────────────────────────── */}
-            <div className="relative mb-8 overflow-hidden rounded-3xl bg-gradient-to-br from-[#120a2e] via-[#0d0a1c] to-[#0a0714] border border-white/5 p-8 shadow-2xl">
+            <div className="relative mb-4 overflow-hidden rounded-2xl bg-gradient-to-br from-[#120a2e] via-[#0d0a1c] to-[#0a0714] border border-white/5 p-5 shadow-xl">
                 {/* Decorative blobs */}
                 <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-cyan-600/10 rounded-full blur-[100px] pointer-events-none opacity-50 translate-x-1/3 -translate-y-1/3" />
                 <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-600/10 rounded-full blur-[100px] pointer-events-none opacity-40 -translate-x-1/3 translate-y-1/3" />
 
                 <div className="relative z-10 flex items-start justify-between flex-wrap gap-4">
                     <div className="flex items-center gap-5">
-                        <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-cyan-400/20 to-teal-600/20 border border-white/10 flex items-center justify-center shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl relative overflow-hidden group">
+                        <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-cyan-400/20 to-teal-600/20 border border-white/10 flex items-center justify-center shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl relative overflow-hidden group">
                             <div className="absolute inset-0 bg-gradient-to-br from-cyan-400 to-teal-600 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                            {isSuperAdmin ? <Download className="h-8 w-8 text-white relative z-10" /> : <Send className="h-8 w-8 text-white relative z-10" />}
+                            {isSuperAdmin ? <Download className="h-5 w-5 text-white relative z-10" /> : <Send className="h-5 w-5 text-white relative z-10" />}
                         </div>
                         <div>
-                            <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white via-white/90 to-white/50 tracking-tight">
+                            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white via-white/90 to-white/50 tracking-tight">
                                 {isSuperAdmin ? 'WC DB Export' : 'Download Request'}
                             </h1>
                             <p className="text-slate-400 text-sm mt-1 font-medium max-w-lg leading-relaxed">
@@ -1362,7 +1362,7 @@ const WcDbDownloadLeads = () => {
                         </div>
                     ) : myRequests.length === 0 ? (
                         <div className="bg-[#13151f] border border-white/[0.07] rounded-2xl p-14 text-center">
-                            <div className="h-16 w-16 rounded-2xl bg-white/[0.03] border border-white/8 flex items-center justify-center mx-auto mb-4">
+                            <div className="h-11 w-11 rounded-xl bg-white/[0.03] border border-white/8 flex items-center justify-center mx-auto mb-4">
                                 <Send className="h-7 w-7 text-slate-700" />
                             </div>
                             <p className="text-slate-400 font-bold">No requests yet</p>

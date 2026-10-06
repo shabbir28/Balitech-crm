@@ -234,14 +234,15 @@ const Layout = ({ children }) => {
         if (!isSuperAdmin) return;
         const fetchPendingCount = async () => {
             try {
-                const [res1, res2, res3, res4, res5] = await Promise.all([
+                const [res1, res2, res3, res4, res5, res6] = await Promise.all([
                     api.get('/download/requests').catch(() => ({ data: [] })),
                     api.get('/premium-download/requests').catch(() => ({ data: [] })),
                     api.get('/refine-download/requests').catch(() => ({ data: [] })),
                     api.get('/van-download/requests').catch(() => ({ data: [] })),
-                    api.get('/safe-quote-download/requests').catch(() => ({ data: [] }))
+                    api.get('/safe-quote-download/requests').catch(() => ({ data: [] })),
+                    api.get('/safe-quote-refine-download/requests').catch(() => ({ data: [] }))
                 ]);
-                const allReqs = [...(res1.data || []), ...(res2.data || []), ...(res3.data || []), ...(res4.data || []), ...(res5.data || [])];
+                const allReqs = [...(res1.data || []), ...(res2.data || []), ...(res3.data || []), ...(res4.data || []), ...(res5.data || []), ...(res6.data || [])];
                 setPendingCount(allReqs.filter(r => r.status?.toLowerCase() === 'pending').length);
             } catch { /* silent */ }
         };
@@ -261,6 +262,13 @@ const Layout = ({ children }) => {
         `group flex items-center pl-9 pr-3 py-2 text-[12px] font-medium rounded-lg transition-all duration-200 gap-2.5 mb-0.5 ${
             isActive
                 ? 'bg-brand-500/12 text-white border border-brand-500/20'
+                : 'text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent'
+        }`;
+
+    const getNestedClassName = ({ isActive }) =>
+        `group flex items-center pl-14 pr-3 py-1.5 text-[12px] font-medium rounded-lg transition-all duration-200 gap-2.5 mb-0.5 ${
+            isActive
+                ? 'bg-amber-500/15 text-white border border-amber-500/25'
                 : 'text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent'
         }`;
 
@@ -317,6 +325,12 @@ const Layout = ({ children }) => {
         { to: '/safe-quote-dnc', page: 'sq_dnc', icon: ShieldBan, label: 'DNC / SALE / Separation' },
     ].filter((item) => hasSafeQuotePage(item.page));
 
+    const SAFE_QUOTE_REFINE_NAV_ITEMS = [
+        { to: '/safe-quote-refine-upload', page: 'sq_refine_upload', icon: FolderUp, label: 'Refine Upload' },
+        { to: '/safe-quote-refine-download', page: 'sq_refine_download', icon: FolderDown, label: 'Refine Download' },
+        { to: '/safe-quote-refine-data', page: 'sq_refine_data', icon: FileStack, label: 'All Refine Data' },
+    ].filter((item) => hasSafeQuotePage(item.page));
+
     const MIXED_NAV_ITEMS = [
         { to: '/mixed-download', icon: FolderDown, label: 'Mixed Download' },
         { to: '/mixed-already-downloaded', icon: History, label: 'Already Downloaded' },
@@ -368,11 +382,16 @@ const Layout = ({ children }) => {
     }, [location.pathname]);
 
     const isSafeQuotePath = location.pathname.startsWith('/safe-quote');
+    const isSafeQuoteRefinePath = location.pathname.startsWith('/safe-quote-refine');
     const [safeQuoteMenuOpen, setSafeQuoteMenuOpen] = useState(isSafeQuotePath);
+    const [safeQuoteRefineMenuOpen, setSafeQuoteRefineMenuOpen] = useState(isSafeQuoteRefinePath);
 
     useEffect(() => {
         if (location.pathname.startsWith('/safe-quote')) {
             setSafeQuoteMenuOpen(true);
+        }
+        if (location.pathname.startsWith('/safe-quote-refine')) {
+            setSafeQuoteRefineMenuOpen(true);
         }
     }, [location.pathname]);
 
@@ -453,8 +472,11 @@ const Layout = ({ children }) => {
         { label: 'Safe Quote Vendor',           path: '/safe-quote-vendors',       roles: ['super_admin','admin','data_entry'], icon: <Database className="h-4 w-4" /> },
         { label: 'Safe Quote Campaigns',        path: '/safe-quote-campaigns',   roles: ['super_admin','admin'], icon: <Target className="h-4 w-4" /> },
         { label: 'Safe Quote Upload',           path: '/safe-quote-upload',      roles: ['super_admin','admin','data_entry'], icon: <FolderUp className="h-4 w-4" /> },
+        { label: 'Safe Quote Refine Upload',    path: '/safe-quote-refine-upload', roles: ['super_admin','admin','data_entry','dialer_agent'], icon: <FolderUp className="h-4 w-4" /> },
+        { label: 'Safe Quote Refine Download',  path: '/safe-quote-refine-download', roles: ['super_admin','admin','data_entry','dialer_agent'], icon: <FolderDown className="h-4 w-4" /> },
         { label: 'Safe Quote Session',          path: '/safe-quote-sessions',    roles: ['super_admin','admin','data_entry','dialer_agent'], icon: <Layers className="h-4 w-4" /> },
         { label: 'All Safe Quote Data',         path: '/safe-quote-data',        roles: ['super_admin','admin','data_entry','dialer_agent'], icon: <FileStack className="h-4 w-4" /> },
+        { label: 'All Safe Quote Refine Data',  path: '/safe-quote-refine-data', roles: ['super_admin','admin','data_entry','dialer_agent'], icon: <FileStack className="h-4 w-4" /> },
         { label: 'Download Safe Quote Data',    path: '/safe-quote-download',    roles: ['super_admin','admin'], icon: <FolderDown className="h-4 w-4" /> },
         { label: 'Safe Quote Data Downloaded',  path: '/safe-quote-already-downloaded', roles: ['super_admin','admin'], icon: <History className="h-4 w-4" /> },
         { label: 'Safe Quote DNC / SALE / Separation', path: '/safe-quote-dnc', roles: ['super_admin','admin'], icon: <ShieldBan className="h-4 w-4" /> },
@@ -910,7 +932,7 @@ const Layout = ({ children }) => {
                                 </div>
                             )}
 
-                            {hasModule('safe_quote') && SAFE_QUOTE_NAV_ITEMS.length > 0 && (
+                            {hasModule('safe_quote') && (SAFE_QUOTE_NAV_ITEMS.length > 0 || SAFE_QUOTE_REFINE_NAV_ITEMS.length > 0) && (
                                 <div>
                                     <p className="px-3 text-[10px] font-bold text-slate-600 uppercase tracking-[0.15em] mb-2">Safe Quote</p>
                                     <button
@@ -928,7 +950,7 @@ const Layout = ({ children }) => {
                                             className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${safeQuoteMenuOpen ? 'rotate-180' : ''}`}
                                         />
                                     </button>
-                                    <div className={`overflow-hidden transition-all duration-300 ease-out ${safeQuoteMenuOpen ? 'max-h-[760px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+                                    <div className={`overflow-hidden transition-all duration-300 ease-out ${safeQuoteMenuOpen ? 'max-h-[1200px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
                                         {SAFE_QUOTE_NAV_ITEMS.map((item) => {
                                             const ItemIcon = item.icon;
                                             return (
@@ -938,6 +960,34 @@ const Layout = ({ children }) => {
                                                 </NavLink>
                                             );
                                         })}
+                                        {SAFE_QUOTE_REFINE_NAV_ITEMS.length > 0 && (
+                                            <div className="mt-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSafeQuoteRefineMenuOpen((open) => !open)}
+                                                    className={`w-full flex items-center pl-9 pr-3 py-2 text-[12px] font-semibold rounded-lg transition-all duration-200 gap-2.5 mb-0.5 border ${
+                                                        isSafeQuoteRefinePath
+                                                            ? 'bg-amber-500/15 text-amber-200 border-amber-500/25'
+                                                            : 'text-slate-400 hover:text-white hover:bg-white/[0.04] border-transparent'
+                                                    }`}
+                                                >
+                                                    <Layers className="h-[14px] w-[14px] shrink-0 text-amber-400" />
+                                                    <span className="flex-1 text-left">Safe Quote Refine</span>
+                                                    <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform duration-200 ${safeQuoteRefineMenuOpen ? 'rotate-180' : ''}`} />
+                                                </button>
+                                                <div className={`overflow-hidden transition-all duration-300 ease-out ${safeQuoteRefineMenuOpen ? 'max-h-[240px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                                                    {SAFE_QUOTE_REFINE_NAV_ITEMS.map((item) => {
+                                                        const ItemIcon = item.icon;
+                                                        return (
+                                                            <NavLink key={item.to} to={item.to} className={getNestedClassName}>
+                                                                <ItemIcon className="h-[13px] w-[13px] shrink-0" />
+                                                                <span>{item.label}</span>
+                                                            </NavLink>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -1178,7 +1228,7 @@ const Layout = ({ children }) => {
                                 </div>
                             )}
 
-                            {hasModule('safe_quote') && SAFE_QUOTE_NAV_ITEMS.length > 0 && (
+                            {hasModule('safe_quote') && (SAFE_QUOTE_NAV_ITEMS.length > 0 || SAFE_QUOTE_REFINE_NAV_ITEMS.length > 0) && (
                                 <div className="mt-8 pt-4 border-t border-white/[0.06]">
                                     <p className="px-3 text-[10px] font-bold text-slate-600 uppercase tracking-[0.15em] mb-2">Safe Quote</p>
                                     <button
@@ -1196,7 +1246,7 @@ const Layout = ({ children }) => {
                                             className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${safeQuoteMenuOpen ? 'rotate-180' : ''}`}
                                         />
                                     </button>
-                                    <div className={`overflow-hidden transition-all duration-300 ease-out ${safeQuoteMenuOpen ? 'max-h-[760px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+                                    <div className={`overflow-hidden transition-all duration-300 ease-out ${safeQuoteMenuOpen ? 'max-h-[1200px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
                                         {SAFE_QUOTE_NAV_ITEMS.map((item) => {
                                             const ItemIcon = item.icon;
                                             return (
@@ -1206,6 +1256,34 @@ const Layout = ({ children }) => {
                                                 </NavLink>
                                             );
                                         })}
+                                        {SAFE_QUOTE_REFINE_NAV_ITEMS.length > 0 && (
+                                            <div className="mt-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSafeQuoteRefineMenuOpen((open) => !open)}
+                                                    className={`w-full flex items-center pl-9 pr-3 py-2 text-[12px] font-semibold rounded-lg transition-all duration-200 gap-2.5 mb-0.5 border ${
+                                                        isSafeQuoteRefinePath
+                                                            ? 'bg-amber-500/15 text-amber-200 border-amber-500/25'
+                                                            : 'text-slate-400 hover:text-white hover:bg-white/[0.04] border-transparent'
+                                                    }`}
+                                                >
+                                                    <Layers className="h-[14px] w-[14px] shrink-0 text-amber-400" />
+                                                    <span className="flex-1 text-left">Safe Quote Refine</span>
+                                                    <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform duration-200 ${safeQuoteRefineMenuOpen ? 'rotate-180' : ''}`} />
+                                                </button>
+                                                <div className={`overflow-hidden transition-all duration-300 ease-out ${safeQuoteRefineMenuOpen ? 'max-h-[240px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                                                    {SAFE_QUOTE_REFINE_NAV_ITEMS.map((item) => {
+                                                        const ItemIcon = item.icon;
+                                                        return (
+                                                            <NavLink key={item.to} to={item.to} className={getNestedClassName}>
+                                                                <ItemIcon className="h-[13px] w-[13px] shrink-0" />
+                                                                <span>{item.label}</span>
+                                                            </NavLink>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -1245,7 +1323,7 @@ const Layout = ({ children }) => {
             </aside>
 
             {/* ══════ MAIN AREA ══════════════════════════════════ */}
-            <div className="flex-1 flex flex-col min-h-screen md:ml-[260px]">
+            <div className="flex-1 flex flex-col min-h-screen min-w-0 md:ml-[260px]">
 
                 {/* ── Top Header ─────────────────────────────── */}
                 <header className="h-[60px] border-b border-white/[0.06] bg-[#13151f]/95 backdrop-blur-xl flex items-center px-4 md:px-6 justify-between sticky top-0 z-30">
@@ -1425,9 +1503,9 @@ const Layout = ({ children }) => {
                 </header>
 
                 {/* ── Page Content ───────────────────────────── */}
-                <main className="flex-1 p-4 md:p-8 bg-[#0f1117] relative">
+                <main className="flex-1 min-w-0 p-4 md:p-5 bg-[#0f1117] relative">
                     <div className="absolute top-0 left-0 w-full h-[400px] bg-gradient-to-b from-brand-500/[0.04] to-transparent pointer-events-none" />
-                    <div className="max-w-[1600px] mx-auto relative z-10">
+                    <div className="max-w-[1600px] mx-auto relative z-10 min-w-0">
                         {children}
                     </div>
                 </main>

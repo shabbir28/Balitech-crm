@@ -33,7 +33,7 @@ const Logs = () => {
             {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
                 <div>
-                    <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
+                    <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-3">
                         <Download className="w-8 h-8 text-brand-400" /> Download Logs
                     </h1>
                     <p className="text-slate-400 text-sm mt-2 font-medium">Audit trail of all data extraction and export activities.</p>

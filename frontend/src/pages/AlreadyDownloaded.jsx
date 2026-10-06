@@ -86,7 +86,7 @@ const AlreadyDownloaded = () => {
         <div className="max-w-[1600px] mx-auto space-y-6 font-sans pb-12">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
+                    <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-3">
                         <History className="w-8 h-8 text-brand-400" />
                         Already Downloaded
                     </h1>

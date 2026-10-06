@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { Database, Search, Calendar, ChevronLeft, ChevronRight, ListFilter, AlertTriangle, Trash2, X, Activity, FileText, Files, BarChart3, TrendingUp, CheckCircle2, AlertCircle, Copy, Ban } from 'lucide-react';
@@ -82,7 +82,7 @@ const VanSessionsList = () => {
     };
 
     return (
-        <div className="max-w-[1400px] mx-auto space-y-6 font-sans pb-12 relative">
+        <div className="w-full min-w-0 space-y-4 font-sans pb-8 relative">
             
             {/* Delete Confirmation Modal */}
             {deleteModal.isOpen && (
@@ -147,7 +147,7 @@ const VanSessionsList = () => {
                             </div>
                             <div className="flex items-center gap-2">
                                 {!selectedJobStats && (
-                                    <span className="bg-violet-500/15 border border-violet-500/25 text-violet-300 text-[11px] font-bold px-2.5 py-1 rounded-lg font-mono">
+                                    <span className="bg-violet-500/15 border border-violet-500/25 text-violet-300 text-[11px] font-bold px-1.5 py-0.5 rounded-lg font-mono">
                                         {filesModal.files.length} {filesModal.files.length === 1 ? 'file' : 'files'}
                                     </span>
                                 )}
@@ -272,9 +272,9 @@ const VanSessionsList = () => {
             )}
 
             {/* Header Area */}
-            <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between mb-8 gap-6 border-b border-white/5 pb-6">
+            <div className="flex flex-col gap-3 mb-4 min-w-0 border-b border-white/5 pb-3">
                 <div className="shrink-0">
-                    <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
+                    <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-3">
                         <div className="p-2.5 bg-violet-500/10 rounded-xl border border-violet-500/20">
                             <Activity className="w-7 h-7 text-violet-400" />
                         </div>
@@ -288,7 +288,7 @@ const VanSessionsList = () => {
                     </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto justify-start xl:justify-end">
+                <div className="flex flex-wrap items-center gap-2 w-full min-w-0">
                     
                     {/* Date Range Filters */}
                     <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-[#13151f] border border-white/10 rounded-xl px-4 py-1.5 w-full sm:w-auto shadow-inner hover:border-white/20 transition-colors">
@@ -361,10 +361,10 @@ const VanSessionsList = () => {
             <div className="bg-[#13151f] rounded-3xl border border-white/5 shadow-2xl relative">
                 
                 <div className="w-full overflow-x-auto custom-scrollbar rounded-3xl">
-                    <div className="min-w-[1500px]">
+                    <div className="min-w-[1280px]">
                         {/* Table Header */}
-                        <div className="grid grid-cols-[160px_100px_160px_160px_200px_140px_150px_150px_130px_180px_170px] p-4 items-center border-b border-white/10 bg-black/20 text-[11px] font-bold text-slate-400 uppercase tracking-widest sticky top-0 backdrop-blur-xl z-20">
-                            <div className="pl-4">Session ID</div>
+                        <div className="grid grid-cols-[82px_36px_minmax(80px,1fr)_minmax(56px,0.7fr)_minmax(100px,1.3fr)_minmax(72px,0.7fr)_100px_100px_92px_minmax(120px,0.9fr)_108px] gap-x-3 [&>*]:min-w-0 [&>*]:overflow-hidden p-4 items-center border-b border-white/10 bg-black/20 text-[10px] font-semibold text-slate-500 uppercase tracking-wide sticky top-0 backdrop-blur-xl z-20">
+                            <div className="pl-1">Session ID</div>
                             <div>Jobs</div>
                             <div>Vendor</div>
                             <div>Campaign</div>
@@ -401,18 +401,18 @@ const VanSessionsList = () => {
                                     const totalJobs = parseInt(s.total_jobs || 0, 10);
 
                                     return (
-                                        <div key={s.id} className="grid grid-cols-[160px_100px_160px_160px_200px_140px_150px_150px_130px_180px_170px] p-3 items-center hover:bg-white/[0.02] transition-colors group">
+                                        <div key={s.id} className="grid grid-cols-[82px_36px_minmax(80px,1fr)_minmax(56px,0.7fr)_minmax(100px,1.3fr)_minmax(72px,0.7fr)_100px_100px_92px_minmax(120px,0.9fr)_108px] gap-x-3 [&>*]:min-w-0 [&>*]:overflow-hidden p-3 items-center hover:bg-white/[0.02] transition-colors group">
                                             
                                             {/* Session ID */}
-                                            <div className="pl-4">
-                                                <span className="text-slate-400 font-mono text-[12px] bg-black/30 border border-white/5 px-2.5 py-1 rounded shadow-sm group-hover:text-violet-300 transition-colors" title={s.id}>
+                                            <div className="pl-1">
+                                                <span className="text-slate-400 font-mono text-[12px] bg-black/30 border border-white/5 px-1.5 py-0.5 rounded shadow-sm group-hover:text-violet-300 transition-colors" title={s.id}>
                                                     {formatShortId(s.id)}
                                                 </span>
                                             </div>
                                             
                                             {/* Jobs */}
                                             <div className="text-slate-300 font-mono text-[13px] font-bold">
-                                                <span className="bg-white/5 px-2.5 py-1 rounded-md text-slate-300 font-medium text-xs border border-white/5">{totalJobs}</span>
+                                                <span className="bg-white/5 px-1.5 py-0.5 rounded-md text-slate-300 font-medium text-xs border border-white/5">{totalJobs}</span>
                                             </div>
                                             
                                             {/* Vendor */}
@@ -431,11 +431,11 @@ const VanSessionsList = () => {
                                                     ? (
                                                         <button
                                                             onClick={() => { setSelectedJobStats(null); setFilesModal({ isOpen: true, files: s.uploaded_files, jobsData: s.jobs_data || [], sessionId: s.id }); }}
-                                                            className="flex items-center gap-1.5 group cursor-pointer hover:text-violet-300 transition-colors text-left"
+                                                            className="flex items-center gap-1.5 min-w-0 w-full overflow-hidden group cursor-pointer hover:text-violet-300 transition-colors text-left"
                                                             title={`Click to view all ${s.uploaded_files.length} file(s)`}
                                                         >
                                                             <FileText className="w-3.5 h-3.5 text-slate-500 group-hover:text-violet-400 shrink-0 transition-colors" />
-                                                            <span className="truncate max-w-[120px]">{s.uploaded_files[0]}</span>
+                                                            <span className="truncate max-w-full">{s.uploaded_files[0]}</span>
                                                             {s.uploaded_files.length > 1 && (
                                                                 <span className="text-[10px] bg-violet-500/15 border border-violet-500/25 px-1.5 py-0.5 rounded text-violet-400 font-bold shrink-0">
                                                                     +{s.uploaded_files.length - 1}
@@ -447,11 +447,11 @@ const VanSessionsList = () => {
                                             </div>
                                             
                                             {/* Created By */}
-                                            <div className="flex items-center gap-2 text-slate-400 text-[13px]">
+                                            <div className="flex items-center gap-1.5 min-w-0 text-slate-400 text-[12px]">
                                                 <div className="w-5 h-5 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center font-bold text-[10px] uppercase">
                                                     {(s.created_by_username?.[0] || 'U')}
                                                 </div>
-                                                <span className="truncate max-w-[90px]">{s.created_by_username || 'â€”'}</span>
+                                                <span className="truncate max-w-full">{s.created_by_username || 'â€”'}</span>
                                             </div>
                                             
                                             {/* Start Time */}
@@ -466,7 +466,7 @@ const VanSessionsList = () => {
                                             
                                             {/* Status */}
                                             <div>
-                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border shadow-sm ${
+                                                <span className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-normal border shadow-sm ${
                                                     status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
                                                     status === 'Processing' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 shadow-[0_0_10px_rgba(251,191,36,0.15)] animate-pulse' :
                                                     status === 'Failed' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
@@ -486,7 +486,7 @@ const VanSessionsList = () => {
                                             </div>
                                             
                                             {/* Progress */}
-                                            <div className="pr-6 w-[160px]">
+                                            <div className="w-full min-w-0 pr-1">
                                                 <div className="flex justify-between items-center mb-1.5">
                                                     <span className="text-[10px] text-slate-400 font-mono font-medium">{processed.toLocaleString()} / <span className="text-slate-300">{totalRows.toLocaleString()}</span></span>
                                                     <span className={`text-[10px] font-bold font-mono ${status === 'Completed' ? 'text-emerald-400' : 'text-violet-400'}`}>{progress}%</span>
@@ -504,7 +504,7 @@ const VanSessionsList = () => {
                                             </div>
                                             
                                             {/* Actions */}
-                                            <div className="flex items-center justify-end gap-2 pr-4">
+                                            <div className="flex items-center justify-end gap-1 pr-1">
                                                 <Link
                                                     to={`/Van-sessions/${s.id}`}
                                                     className="bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 border border-violet-500/20 px-3 py-1.5 rounded-lg text-[11px] font-bold tracking-wide transition-all flex items-center gap-1.5 active:scale-95"
@@ -528,7 +528,7 @@ const VanSessionsList = () => {
                 </div>
 
                 {/* Pagination */}
-                <div className="p-4 border-t border-white/5 flex items-center justify-between bg-black/20 rounded-b-3xl">
+                <div className="px-3 py-2.5 border-t border-white/5 flex flex-wrap items-center justify-between gap-2 bg-black/20">
                     <span className="text-slate-500 text-[12px] font-medium tracking-wide">
                         Showing <span className="text-white font-mono">{total === 0 ? 0 : (page - 1) * limit + 1}-{Math.min(page * limit, total)}</span> of <span className="text-white font-mono">{total}</span>
                     </span>

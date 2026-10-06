@@ -89,9 +89,14 @@ import SafeQuoteSessionsList from './pages/SafeQuoteSessionsList';
 import SafeQuoteSessionDetails from './pages/SafeQuoteSessionDetails';
 import SafeQuoteAddJob from './pages/SafeQuoteAddJob';
 import SafeQuoteLeadsTable from './pages/SafeQuoteLeadsTable';
+import SafeQuoteRefineLeadsTable from './pages/SafeQuoteRefineLeadsTable';
 import SafeQuoteDownloadLeads from './pages/SafeQuoteDownloadLeads';
 import SafeQuoteAlreadyDownloaded from './pages/SafeQuoteAlreadyDownloaded';
 import SafeQuoteDnc from './pages/SafeQuoteDnc';
+import SafeQuoteRefineUploadLeads from './pages/SafeQuoteRefineUploadLeads';
+import SafeQuoteRefineSessionDetails from './pages/SafeQuoteRefineSessionDetails';
+import SafeQuoteRefineAddJob from './pages/SafeQuoteRefineAddJob';
+import SafeQuoteRefineDownloadLeads from './pages/SafeQuoteRefineDownloadLeads';
 
 // Mixed Data Download
 import MixedDownloadLeads from './pages/MixedDownloadLeads';
@@ -117,7 +122,8 @@ const ProtectedRoute = ({ children, roles, module, page }) => {
 
     if (!isSuperAdmin) {
         if (page) {
-            hasModuleAccess = safeQuotePageAllowed(modules, page, false);
+            const pageIds = Array.isArray(page) ? page : [page];
+            hasModuleAccess = pageIds.some((pageId) => safeQuotePageAllowed(modules, pageId, false));
         } else if (module) {
             hasModuleAccess = modules.includes(module);
         }
@@ -268,10 +274,16 @@ const AppRoutes = () => {
             <Route path="/safe-quote-campaigns/add" element={<ProtectedRoute roles={['super_admin', 'admin']} module="safe_quote" page="sq_campaigns"><SafeQuoteAddCampaign /></ProtectedRoute>} />
             <Route path="/safe-quote-campaigns/edit/:id" element={<ProtectedRoute roles={['super_admin', 'admin']} module="safe_quote" page="sq_campaigns"><SafeQuoteAddCampaign editMode /></ProtectedRoute>} />
             <Route path="/safe-quote-upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_upload"><SafeQuoteUploadLeads /></ProtectedRoute>} />
+            <Route path="/safe-quote-refine-upload" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_refine_upload"><SafeQuoteRefineUploadLeads /></ProtectedRoute>} />
+            <Route path="/safe-quote-refine-sessions" element={<Navigate to="/safe-quote-sessions" replace />} />
+            <Route path="/safe-quote-refine-sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page={['sq_sessions', 'sq_refine_upload']}><SafeQuoteRefineSessionDetails /></ProtectedRoute>} />
+            <Route path="/safe-quote-refine-sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page={['sq_sessions', 'sq_refine_upload']}><SafeQuoteRefineAddJob /></ProtectedRoute>} />
+            <Route path="/safe-quote-refine-download" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_refine_download"><SafeQuoteRefineDownloadLeads /></ProtectedRoute>} />
             <Route path="/safe-quote-sessions" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_sessions"><SafeQuoteSessionsList /></ProtectedRoute>} />
             <Route path="/safe-quote-sessions/:id" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_sessions"><SafeQuoteSessionDetails /></ProtectedRoute>} />
             <Route path="/safe-quote-sessions/:id/add-job" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_sessions"><SafeQuoteAddJob /></ProtectedRoute>} />
             <Route path="/safe-quote-data" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_data"><SafeQuoteLeadsTable /></ProtectedRoute>} />
+            <Route path="/safe-quote-refine-data" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_refine_data"><SafeQuoteRefineLeadsTable /></ProtectedRoute>} />
             <Route path="/safe-quote-download" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_download"><SafeQuoteDownloadLeads /></ProtectedRoute>} />
             <Route path="/safe-quote-already-downloaded" element={<ProtectedRoute roles={['super_admin', 'admin', 'data_entry', 'dialer_agent']} module="safe_quote" page="sq_downloaded"><SafeQuoteAlreadyDownloaded /></ProtectedRoute>} />
             <Route path="/safe-quote-dnc" element={<ProtectedRoute roles={['super_admin', 'admin']} module="safe_quote" page="sq_dnc"><SafeQuoteDnc /></ProtectedRoute>} />

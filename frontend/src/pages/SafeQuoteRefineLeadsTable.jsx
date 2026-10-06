@@ -3,7 +3,7 @@ import api from '../services/api';
 import { getAreaCodeState } from '../utils/areaCodes';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, Database, ListFilter } from 'lucide-react';
 
-const RefineLeadsTable = () => {
+const SafeQuoteRefineLeadsTable = () => {
     const [leads, setLeads] = useState([]);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
@@ -19,7 +19,7 @@ const RefineLeadsTable = () => {
         try {
             const disp = customOptions.disposition !== undefined ? customOptions.disposition : filterDisposition;
             const qual = customOptions.quality !== undefined ? customOptions.quality : filterQuality;
-            const res = await api.get(`/refine-data?page=${pageToFetch}&limit=${limit}&search=${encodeURIComponent(search)}&disposition=${encodeURIComponent(disp)}&quality=${encodeURIComponent(qual)}`);
+            const res = await api.get(`/safe-quote-refine-data?page=${pageToFetch}&limit=${limit}&search=${encodeURIComponent(search)}&disposition=${encodeURIComponent(disp)}&quality=${encodeURIComponent(qual)}`);
             setLeads(res.data.data);
             setTotal(res.data.total);
             setPage(res.data.page);
@@ -67,94 +67,71 @@ const RefineLeadsTable = () => {
     };
 
     return (
-        <div className="max-w-[1400px] mx-auto space-y-6 font-sans pb-12">
-            {/* Header */}
-            <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between mb-8 flex-wrap gap-6 border-b border-white/5 pb-6">
-                <div>
-                    <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-3">
-                        <Database className="w-8 h-8 text-brand-400" /> All Data
-                    </h1>
-                    <p className="text-slate-400 text-sm mt-2 font-medium">
-                        Browse and filter through all uploaded data records <span className="text-white font-mono bg-white/5 px-2 py-0.5 rounded-md ml-1 border border-white/10">{total.toLocaleString()} total</span>
-                    </p>
+        <div className="w-full min-w-0 space-y-4 font-sans pb-8">
+            <div className="min-w-0 border-b border-white/5 pb-4">
+                <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                    <Database className="w-5 h-5 text-brand-400 shrink-0" /> All Safe Quote Refine Data
+                </h1>
+                <p className="text-slate-500 text-xs mt-1">
+                    Safe Quote Refine records
+                    <span className="text-white font-mono bg-white/5 px-1.5 py-0.5 rounded ml-1.5 border border-white/10">{total.toLocaleString()} total</span>
+                </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
+                <div className="flex items-center bg-[#0a0a0f] border border-white/10 hover:border-brand-500/50 rounded-lg px-3 py-2 min-w-0 flex-1 basis-[220px] max-w-md focus-within:ring-2 focus-within:ring-brand-500/20 focus-within:border-brand-500">
+                    <Search className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                    <input
+                        type="text"
+                        placeholder="Search state, name, or phone..."
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        onKeyDown={handleSearch}
+                        className="bg-transparent border-none text-white text-xs outline-none w-full min-w-0 ml-2 placeholder:text-slate-600"
+                    />
                 </div>
-
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full xl:w-auto">
-                    {/* Search Field */}
-                    <div className="flex items-center bg-[#0a0a0f] border border-white/10 hover:border-brand-500/50 rounded-xl px-4 py-2.5 w-full sm:w-80 transition-all focus-within:ring-2 focus-within:ring-brand-500/20 focus-within:border-brand-500 group shadow-inner">
-                        <Search className="w-4 h-4 text-slate-500 group-focus-within:text-brand-400 transition-colors" />
-                        <input 
-                            type="text" 
-                            placeholder="Search state, name, or phone..."
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                            onKeyDown={handleSearch}
-                            className="bg-transparent border-none text-white text-[13px] outline-none w-full ml-3 placeholder:text-slate-600 font-medium"
-                        />
-                    </div>
-                    
-                    {/* Filters Wrapper */}
-                    <div className="flex items-center gap-4 w-full sm:w-auto">
-                        <div className="relative group flex-1 sm:flex-none">
-                            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-brand-400">
-                                <ListFilter className="w-4 h-4" />
-                            </div>
-                            <select
-                                value={filterDisposition}
-                                onChange={e => {
-                                    setFilterDisposition(e.target.value);
-                                    fetchLeads(1, { disposition: e.target.value });
-                                }}
-                                className={`bg-[#0a0a0f] border border-white/10 hover:border-brand-500/50 rounded-xl py-2.5 pl-10 pr-10 outline-none cursor-pointer transition-all appearance-none text-[13px] font-medium w-full shadow-inner focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 ${filterDisposition ? 'text-brand-400 border-brand-500/30' : 'text-slate-400'}`}
-                            >
-                                <option value="">All Dispositions</option>
-                                {['PDROP', 'AB', 'ADC', 'A', 'AA', 'RAXFER', 'NP', 'DC', 'DNQ', 'N', 'BN', 'LRERR', 'NI', 'NA', 'LH', 'R1', 'BDNC', 'CALLBK'].map(d => (
-                                    <option key={d} value={d} className="bg-[#1e1e2d] text-white py-2">{d}</option>
-                                ))}
-                            </select>
-                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 group-hover:text-brand-400">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                            </div>
-                        </div>
-
-                        <div className="relative group flex-1 sm:flex-none">
-                            <select
-                                value={filterQuality}
-                                onChange={e => {
-                                    setFilterQuality(e.target.value);
-                                    fetchLeads(1, { quality: e.target.value });
-                                }}
-                                className={`bg-[#0a0a0f] border border-white/10 hover:border-brand-500/50 rounded-xl py-2.5 pl-4 pr-10 outline-none cursor-pointer transition-all appearance-none text-[13px] font-medium w-full shadow-inner focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 ${filterQuality ? 'text-brand-400 border-brand-500/30' : 'text-slate-400'}`}
-                            >
-                                <option value="">All Quality</option>
-                                <option value="Good" className="bg-[#1e1e2d] text-white py-2">Good</option>
-                                <option value="Bad" className="bg-[#1e1e2d] text-white py-2">Bad</option>
-                            </select>
-                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 group-hover:text-brand-400">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                            </div>
-                        </div>
-
-                        <button 
-                            onClick={() => fetchLeads(1)}
-                            className="bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white px-6 py-2.5 rounded-xl font-bold transition-all shadow-[0_4px_14px_rgba(59,130,246,0.3)] active:scale-[0.98] text-[13px] whitespace-nowrap"
-                        >
-                            Search
-                        </button>
-                    </div>
+                <div className="relative">
+                    <ListFilter className="w-3.5 h-3.5 text-brand-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <select
+                        value={filterDisposition}
+                        onChange={e => {
+                            setFilterDisposition(e.target.value);
+                            fetchLeads(1, { disposition: e.target.value });
+                        }}
+                        className="bg-[#0a0a0f] border border-white/10 rounded-lg py-2 pl-8 pr-7 outline-none cursor-pointer appearance-none text-xs w-[148px] text-slate-300"
+                    >
+                        <option value="">All Dispositions</option>
+                        {['PDROP', 'AB', 'ADC', 'A', 'AA', 'RAXFER', 'NP', 'DC', 'DNQ', 'N', 'BN', 'LRERR', 'NI', 'NA', 'LH', 'R1', 'BDNC', 'CALLBK'].map(d => (
+                            <option key={d} value={d}>{d}</option>
+                        ))}
+                    </select>
                 </div>
+                <select
+                    value={filterQuality}
+                    onChange={e => {
+                        setFilterQuality(e.target.value);
+                        fetchLeads(1, { quality: e.target.value });
+                    }}
+                    className="bg-[#0a0a0f] border border-white/10 rounded-lg py-2 px-3 outline-none cursor-pointer text-xs w-[112px] text-slate-300"
+                >
+                    <option value="">All Quality</option>
+                    <option value="Good">Good</option>
+                    <option value="Bad">Bad</option>
+                </select>
+                <button
+                    onClick={() => fetchLeads(1)}
+                    className="bg-brand-600 hover:bg-brand-500 text-white px-3.5 py-2 rounded-lg font-semibold text-xs whitespace-nowrap"
+                >
+                    Search
+                </button>
             </div>
 
             {/* Table Container */}
-            <div className="bg-[#1e1e2d] rounded-[2rem] border border-white/5 overflow-x-auto shadow-2xl relative">
-                {/* Decorative glow */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-brand-500/5 rounded-full blur-[120px] pointer-events-none z-0"></div>
-
-                <div className="min-w-[1000px] relative z-10">
-                    {/* Table Header */}
-                    <div className="grid grid-cols-[minmax(180px,1.5fr)_130px_minmax(150px,1.2fr)_80px_80px_80px_100px_90px_70px_100px_80px_100px_140px_100px] p-5 border-b border-white/10 bg-[#0a0a0f]/80 backdrop-blur-md sticky top-0">
-                        {['Name', 'Phone', 'Email', 'Age', 'Area', 'State', 'Disposition', 'Quality', 'Call Count', 'Call Date', 'Time', 'Length in Sec', 'Campaigns', 'Status'].map(h => (
-                            <span key={h} className="text-slate-400 text-[11px] font-bold uppercase tracking-widest pl-2">
+            <div className="w-full min-w-0 bg-[#1e1e2d] rounded-2xl border border-white/5 overflow-x-auto shadow-2xl relative">
+                <div className="min-w-[1080px] relative z-10">
+                    <div className="grid grid-cols-[minmax(140px,1.3fr)_108px_minmax(120px,1fr)_48px_52px_52px_84px_68px_52px_84px_60px_72px_100px_84px] px-3 py-2.5 border-b border-white/10 bg-[#0a0a0f]/80">
+                        {['Name', 'Phone', 'Email', 'Age', 'Area', 'State', 'Disposition', 'Quality', 'Calls', 'Call Date', 'Time', 'Length', 'Campaign', 'Status'].map(h => (
+                            <span key={h} className="text-slate-500 text-[10px] font-semibold uppercase tracking-wide pl-1">
                                 {h}
                             </span>
                         ))}
@@ -167,42 +144,27 @@ const RefineLeadsTable = () => {
                         ) : leads.length === 0 ? (
                             <div className="p-16 text-center text-slate-500">
                                 <Database className="w-12 h-12 mb-4 opacity-20 mx-auto" strokeWidth={1.5} />
-                                <p className="font-medium text-[15px] mb-2 text-slate-400">No records found matching your criteria</p>
-                                <p className="text-xs">Try adjusting your search terms or disposition filter.</p>
+                                <p className="font-medium text-[15px] mb-2 text-slate-400">No Safe Quote Refine records yet</p>
+                                <p className="text-xs">This list only shows files uploaded from Safe Quote Refine Upload.</p>
                             </div>
                         ) : (
                             leads.map((lead) => (
-                                <div key={lead.id} className="grid grid-cols-[minmax(180px,1.5fr)_130px_minmax(150px,1.2fr)_80px_80px_80px_100px_90px_70px_100px_80px_100px_140px_100px] p-4 items-center hover:bg-white/5 transition-colors group cursor-default">
-                                    {/* Name */}
-                                    <div className="flex items-center gap-3 pr-4 pl-2">
-                                        <div className="w-9 h-9 rounded-full shrink-0 bg-brand-500/10 border border-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-xs shadow-inner group-hover:scale-110 transition-transform">
+                                <div key={lead.id} className="grid grid-cols-[minmax(140px,1.3fr)_108px_minmax(120px,1fr)_48px_52px_52px_84px_68px_52px_84px_60px_72px_100px_84px] px-3 py-2 items-center hover:bg-white/5 transition-colors group">
+                                    <div className="flex items-center gap-2 pr-2 pl-1 min-w-0">
+                                        <div className="w-6 h-6 rounded-full shrink-0 bg-brand-500/10 border border-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-[10px]">
                                             {getInitials(lead.name)}
                                         </div>
-                                        <div className="overflow-hidden">
-                                            <p className={`font-bold text-[14px] truncate mb-0.5 transition-colors ${lead.name ? 'text-white group-hover:text-brand-300' : 'text-slate-500 font-medium'}`}>
-                                                {lead.name || '—'}
-                                            </p>
-                                        </div>
+                                        <p className={`font-medium text-xs truncate ${lead.name ? 'text-white' : 'text-slate-500'}`}>
+                                            {lead.name || '—'}
+                                        </p>
                                     </div>
-                                    
-                                    {/* Phone */}
-                                    <div className="text-slate-300 text-[13px] font-mono tracking-wide">
-                                        {lead.phone}
-                                    </div>
-                                    
-                                    {/* Email */}
-                                    <div className="text-slate-500 text-[13px] pr-4 truncate font-medium">
-                                        {lead.email || '—'}
-                                    </div>
-                                    
-                                    {/* Age */}
-                                    <div className="text-white text-[13px] font-bold">
-                                        {lead.age !== null && lead.age !== undefined ? lead.age : '—'}
-                                    </div>
+                                    <div className="text-slate-300 text-[11px] font-mono">{lead.phone}</div>
+                                    <div className="text-slate-500 text-[11px] pr-2 truncate">{lead.email || '—'}</div>
+                                    <div className="text-white text-[11px]">{lead.age !== null && lead.age !== undefined ? lead.age : '—'}</div>
 
                                     {/* Area Code */}
                                     <div>
-                                        <span className="inline-flex px-2.5 py-1 rounded-md text-[11px] font-bold bg-[#0a0a0f] text-slate-400 border border-white/10 font-mono shadow-sm">
+                                        <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[#0a0a0f] text-slate-400 border border-white/10 font-mono">
                                             {(() => {
                                                 if (lead.area_code && lead.area_code !== 'Unknown') return lead.area_code;
                                                 const clean = lead.phone.replace(/\D/g, '');
@@ -215,7 +177,7 @@ const RefineLeadsTable = () => {
 
                                     {/* State */}
                                     <div>
-                                        <span className="inline-flex px-3 py-1 rounded-md text-[10px] font-bold tracking-widest uppercase bg-purple-500/10 text-purple-400 border border-purple-500/20 shadow-sm">
+                                        <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase bg-purple-500/10 text-purple-400 border border-purple-500/20">
                                             {(() => {
                                                 let code = lead.area_code;
                                                 if (!code || code === 'Unknown') {
@@ -223,6 +185,7 @@ const RefineLeadsTable = () => {
                                                     if (clean.length === 11 && clean.startsWith('1')) code = clean.substring(1, 4);
                                                     else if (clean.length === 10) code = clean.substring(0, 3);
                                                 }
+                                                if (lead.state) return lead.state;
                                                 return getAreaCodeState(code);
                                             })()}
                                         </span>
@@ -230,44 +193,44 @@ const RefineLeadsTable = () => {
 
                                     {/* Disposition */}
                                     <div>
-                                        <span className="inline-flex px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                                        <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase text-slate-300">
                                             {lead.disposition || '—'}
                                         </span>
                                     </div>
 
                                     {/* Quality */}
                                     <div>
-                                        <span className={`inline-flex px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider shadow-sm ${lead.quality === 'Bad' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
+                                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${lead.quality === 'Bad' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
                                             {lead.quality || 'Good'}
                                         </span>
                                     </div>
 
                                     {/* Calls */}
                                     <div>
-                                        <span className="inline-flex px-2 py-1 rounded-md text-[11px] font-bold bg-[#0a0a0f] text-brand-400 border border-brand-500/20 shadow-sm">
+                                        <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[#0a0a0f] text-brand-400 border border-brand-500/20">
                                             {lead.call_count || 1}
                                         </span>
                                     </div>
 
                                     {/* Call Date */}
-                                    <div className="text-slate-300 text-[12px]">
+                                    <div className="text-slate-300 text-[11px]">
                                         {lead.call_date ? new Date(lead.call_date).toLocaleDateString() : '—'}
                                     </div>
 
                                     {/* Time */}
-                                    <div className="text-slate-400 text-[12px]">
+                                    <div className="text-slate-400 text-[11px]">
                                         {lead.call_date ? new Date(lead.call_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
                                     </div>
 
                                     {/* Length in Sec */}
-                                    <div className="text-slate-300 text-[12px] font-mono">
+                                    <div className="text-slate-300 text-[11px] font-mono">
                                         {lead.duration !== null && lead.duration !== undefined ? lead.duration : '—'}
                                     </div>
 
                                     {/* Campaigns */}
                                     <div className="flex flex-wrap gap-1 pr-2">
                                         {lead.campaign_type ? lead.campaign_type.split(',').map((camp, idx) => (
-                                            <span key={idx} className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/20 whitespace-nowrap">
+                                            <span key={idx} className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20 whitespace-nowrap">
                                                 {camp.trim()}
                                             </span>
                                         )) : <span className="text-slate-500 text-[11px]">—</span>}
@@ -275,7 +238,7 @@ const RefineLeadsTable = () => {
 
                                     {/* Status */}
                                     <div>
-                                        <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border shadow-sm ${
+                                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase border ${
                                             lead.status === 'available' 
                                                 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
                                                 : 'bg-[#0a0a0f] text-slate-500 border-white/5'
@@ -377,4 +340,4 @@ const RefineLeadsTable = () => {
     );
 };
 
-export default RefineLeadsTable;
+export default SafeQuoteRefineLeadsTable;

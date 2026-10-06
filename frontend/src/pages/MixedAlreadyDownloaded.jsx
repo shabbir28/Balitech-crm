@@ -75,7 +75,7 @@ const MixedAlreadyDownloaded = () => {
     return (
         <div className="min-h-screen" style={{ fontFamily: "'Inter', sans-serif" }}>
             {/* Header */}
-            <div className="relative mb-8 overflow-hidden rounded-3xl bg-gradient-to-br from-[#120a2e] via-[#0d0a1c] to-[#0a0714] border border-white/5 p-8 shadow-2xl">
+            <div className="relative mb-4 overflow-hidden rounded-2xl bg-gradient-to-br from-[#120a2e] via-[#0d0a1c] to-[#0a0714] border border-white/5 p-5 shadow-xl">
                 <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-violet-500/10 rounded-full blur-[100px] pointer-events-none translate-x-1/3 -translate-y-1/3" />
                 <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-brand-500/10 rounded-full blur-[80px] pointer-events-none -translate-x-1/2 translate-y-1/2" />
                 
@@ -88,7 +88,7 @@ const MixedAlreadyDownloaded = () => {
                             </div>
                         </div>
                         <div>
-                            <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-white/60 tracking-tight">
+                            <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-white/60 tracking-tight">
                                 Mixed Already Downloaded
                             </h1>
                             <p className="text-sm text-slate-400 mt-2 font-medium max-w-xl leading-relaxed">
