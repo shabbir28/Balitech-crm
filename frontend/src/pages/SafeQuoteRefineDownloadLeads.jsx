@@ -144,6 +144,19 @@ const SelectInput = ({ value, onChange, disabled, required, children }) => (
 
 const inputClass = 'w-full bg-[#0a0c14]/50 backdrop-blur-md border border-white/10 hover:border-amber-500/30 focus:border-amber-500/60 focus:ring-2 focus:ring-amber-500/20 text-white rounded-xl py-3.5 px-4 outline-none transition-all text-sm font-mono shadow-inner';
 
+const presetStateList = (raw) => {
+    if (Array.isArray(raw)) return raw.filter(Boolean);
+    if (typeof raw === 'string') {
+        try {
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+        } catch {
+            return [];
+        }
+    }
+    return [];
+};
+
 const SafeQuoteRefineDownloadLeads = () => {
     const { user } = useContext(AuthContext);
     const isSuperAdmin = user?.role === 'super_admin';
@@ -157,6 +170,9 @@ const SafeQuoteRefineDownloadLeads = () => {
     const [maxDuration, setMaxDuration] = useState('');
     const [includeDownloaded, setIncludeDownloaded] = useState(false);
     const [states, setStates] = useState([]);
+    const [filters, setFilters] = useState([]);
+    const [loadingFilters, setLoadingFilters] = useState(true);
+    const [selectedFilterId, setSelectedFilterId] = useState('');
     const [stateOpen, setStateOpen] = useState(false);
     const stateRef = useRef(null);
     const [loadingOptions, setLoadingOptions] = useState(true);
@@ -190,6 +206,10 @@ const SafeQuoteRefineDownloadLeads = () => {
 
     useEffect(() => {
         loadOptions();
+        api.get('/filters')
+            .then((res) => setFilters(res.data || []))
+            .catch(() => setFilters([]))
+            .finally(() => setLoadingFilters(false));
     }, []);
 
     useEffect(() => {
@@ -378,6 +398,23 @@ const SafeQuoteRefineDownloadLeads = () => {
                             </Field>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                <Field label="Data Filter Preset" hint="Auto-selects states for you">
+                                    <SelectInput
+                                        value={selectedFilterId}
+                                        disabled={loadingFilters}
+                                        onChange={(e) => {
+                                            const filterId = e.target.value;
+                                            setSelectedFilterId(filterId);
+                                            const selected = filters.find((f) => String(f.id) === String(filterId));
+                                            setStates(presetStateList(selected?.states));
+                                        }}
+                                    >
+                                        <option value="" disabled>{loadingFilters ? 'Loading filters...' : 'Choose a preset...'}</option>
+                                        {filters.map((f) => (
+                                            <option key={f.id} value={f.id}>{f.name} ({presetStateList(f.states).length} states)</option>
+                                        ))}
+                                    </SelectInput>
+                                </Field>
                                 <Field label="State Filter" hint="Leave empty for all states">
                                     <div className="relative" ref={stateRef}>
                                         <button
@@ -410,14 +447,14 @@ const SafeQuoteRefineDownloadLeads = () => {
                                         )}
                                     </div>
                                 </Field>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <Field label="Min Duration" hint="Seconds">
-                                        <input type="number" min="0" value={minDuration} onChange={(e) => setMinDuration(e.target.value)} className={inputClass} placeholder="10" />
-                                    </Field>
-                                    <Field label="Max Duration" hint="Seconds">
-                                        <input type="number" min="0" value={maxDuration} onChange={(e) => setMaxDuration(e.target.value)} className={inputClass} placeholder="60" />
-                                    </Field>
-                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <Field label="Min Duration" hint="Seconds">
+                                    <input type="number" min="0" value={minDuration} onChange={(e) => setMinDuration(e.target.value)} className={inputClass} placeholder="10" />
+                                </Field>
+                                <Field label="Max Duration" hint="Seconds">
+                                    <input type="number" min="0" value={maxDuration} onChange={(e) => setMaxDuration(e.target.value)} className={inputClass} placeholder="60" />
+                                </Field>
                             </div>
 
                             <Field label="Quantity" required hint="Max 100,000 per request">
