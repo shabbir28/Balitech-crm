@@ -185,6 +185,7 @@ const SafeQuoteRefineDownloadLeads = () => {
     const [summaryData, setSummaryData] = useState(null);
     const [requesting, setRequesting] = useState(false);
     const [myRequests, setMyRequests] = useState([]);
+    const [downloadingId, setDownloadingId] = useState(null);
 
     const loadOptions = async (campaignName = '') => {
         setLoadingOptions(true);
@@ -315,12 +316,21 @@ const SafeQuoteRefineDownloadLeads = () => {
     };
 
     const downloadApproved = async (id) => {
+        setDownloadingId(id);
+        setError('');
         try {
             const res = await api.get(`/safe-quote-refine-download/requests/${id}/file`, { timeout: 10 * 60 * 1000 });
-            setSummaryData(res.data);
+            const goodCsv = res.data?.goodCsv || res.data?.csv;
+            if (!goodCsv) {
+                setError('Approved file has no good numbers to download.');
+                return;
+            }
+            downloadBlob(goodCsv, res.data?.summary?.fileName || res.data?.fileName || `safe_quote_refine_request_${id}.csv`);
             setCountsTick((n) => n + 1);
         } catch (err) {
-            setError(err.response?.data?.message || 'Could not open the approved file');
+            setError(err.response?.data?.message || 'Could not download the approved file');
+        } finally {
+            setDownloadingId(null);
         }
     };
 
@@ -504,7 +514,15 @@ const SafeQuoteRefineDownloadLeads = () => {
                                                 <p className="text-[11px] text-slate-500 capitalize">{req.status}</p>
                                             </div>
                                             {req.status === 'accepted' && (
-                                                <button type="button" onClick={() => downloadApproved(req.id)} className="text-[11px] font-bold text-emerald-300 shrink-0">Open summary</button>
+                                                <button
+                                                    type="button"
+                                                    disabled={downloadingId === req.id}
+                                                    onClick={() => downloadApproved(req.id)}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-[11px] font-bold text-emerald-300 shrink-0 disabled:opacity-60"
+                                                >
+                                                    <FileDown className="h-3.5 w-3.5" />
+                                                    {downloadingId === req.id ? 'Downloading...' : 'Download CSV'}
+                                                </button>
                                             )}
                                         </div>
                                     ))}

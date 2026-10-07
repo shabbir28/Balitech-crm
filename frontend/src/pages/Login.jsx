@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { Lock, User, ArrowRight, ShieldCheck } from 'lucide-react';
 import ReCAPTCHA from 'react-google-recaptcha';
 
+const captchaEnabled = import.meta.env.VITE_DISABLE_CAPTCHA !== 'true';
+
 const Login = () => {
     const { login } = useContext(AuthContext);
     const navigate = useNavigate();
@@ -16,7 +18,7 @@ const Login = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        if (!captchaToken) {
+        if (captchaEnabled && !captchaToken) {
             setError('Please complete the reCAPTCHA');
             return;
         }
@@ -28,8 +30,10 @@ const Login = () => {
             navigate('/');
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to login');
-            recaptchaRef.current?.reset();
-            setCaptchaToken(null);
+            if (captchaEnabled) {
+                recaptchaRef.current?.reset();
+                setCaptchaToken(null);
+            }
         } finally {
             setLoading(false);
         }
@@ -108,14 +112,16 @@ const Login = () => {
                                 </div>
                             </div>
 
-                            <div className="flex justify-center pt-2">
-                                <ReCAPTCHA
-                                    ref={recaptchaRef}
-                                    sitekey="6LeLzwctAAAAAIRVXWG_PUJcMegb1k1B-o_s4q1w"
-                                    onChange={(token) => setCaptchaToken(token)}
-                                    theme="dark"
-                                />
-                            </div>
+                            {captchaEnabled && (
+                                <div className="flex justify-center pt-2">
+                                    <ReCAPTCHA
+                                        ref={recaptchaRef}
+                                        sitekey="6LeLzwctAAAAAIRVXWG_PUJcMegb1k1B-o_s4q1w"
+                                        onChange={(token) => setCaptchaToken(token)}
+                                        theme="dark"
+                                    />
+                                </div>
+                            )}
 
                             <div className="pt-2">
                                 <button
